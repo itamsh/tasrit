@@ -793,7 +793,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
         <input type="file" multiple accept=".shp,.dbf,.shx,.prj,.cpg,.zip" onchange="handleFilesAuto(this.files)">
         <div class="dz-icon">🗂️</div>
         <h3>קבצי SHP</h3>
-        <p>בחרו / גררו את כל הקבצים<br>מתיקיית SHP של התוכנית<br><small>ניתן גם לגרור קובץ ZIP</small></p>
+        <p>בחרו / גררו את כל הקבצים<br>מתיקיית SHP של התוכנית<br><small>ניתן גם לגרור את התיקייה כולה או קובץ ZIP</small></p>
         <div class="dz-filename" id="fn-shp"></div>
       </div>
 
@@ -1545,15 +1545,15 @@ function onDragOver(e){e.preventDefault();e.currentTarget.classList.add('drag-ov
 function onDragLeave(e){e.currentTarget.classList.remove('drag-over')}
 function handleDrop(e,zone){
   e.preventDefault();e.currentTarget.classList.remove('drag-over');
-  if(zone==='shp') handleFilesAuto(e.dataTransfer.files);
-  else handleFilesZone(e.dataTransfer.files,zone);
+  // Any drop (any zone) is auto-classified — folders are expanded too
+  _filesFromDrop(e).then(files=>handleFilesAuto(files));
 }
 
 // Global page drop — smart router
 function onPageDrop(e){
   e.preventDefault();
   document.getElementById('upload-page').classList.remove('page-drag');
-  handleFilesAuto(e.dataTransfer.files);
+  _filesFromDrop(e).then(files=>handleFilesAuto(files));
 }
 function onPageDragOver(e){
   e.preventDefault();
@@ -1574,6 +1574,39 @@ function loadJSZip(){
     document.head.appendChild(s);
   });
 }
+// Recursively collect all File objects inside a dropped directory entry
+function _readEntry(entry){
+  return new Promise(resolve=>{
+    if(!entry){resolve([]);return;}
+    if(entry.isFile){ entry.file(f=>resolve([f]),()=>resolve([])); return; }
+    if(entry.isDirectory){
+      const reader=entry.createReader(); const collected=[];
+      const readBatch=()=>reader.readEntries(entries=>{
+        if(!entries.length){ Promise.all(collected.map(_readEntry)).then(a=>resolve(a.flat())); }
+        else { collected.push(...entries); readBatch(); } // readEntries returns in batches
+      },()=>resolve([]));
+      readBatch(); return;
+    }
+    resolve([]);
+  });
+}
+// Get File[] from a drop event, expanding any dropped (unzipped) folders.
+// Entries must be grabbed synchronously while the drop event is still live.
+async function _filesFromDrop(e){
+  const dt=e.dataTransfer; if(!dt) return [];
+  const entries=[];
+  const items=dt.items;
+  if(items&&items.length&&items[0]&&items[0].webkitGetAsEntry){
+    for(const it of items){ const en=it.webkitGetAsEntry&&it.webkitGetAsEntry(); if(en) entries.push(en); }
+  }
+  if(entries.length){
+    const arrs=await Promise.all(entries.map(_readEntry));
+    const files=arrs.flat();
+    if(files.length) return files;
+  }
+  return [...(dt.files||[])];
+}
+
 async function extractZip(zipFile){
   await loadJSZip();
   const zip=await JSZip.loadAsync(zipFile);
@@ -1589,22 +1622,30 @@ async function extractZip(zipFile){
   return result;
 }
 
+// Smart router: classify a mixed set of dropped files into the right zones.
 async function handleFilesAuto(fileList){
-  if(!fileList||!fileList.length) return;
-  const shpFiles=[];let wordFile=null;
-  for(const f of fileList){
-    const ext=f.name.split('.').pop().toLowerCase();
+  const files=[...(fileList||[])];
+  if(!files.length) return;
+  const shpFiles=[];let wordFile=null,t5File=null,progFile=null;
+  for(const f of files){
+    const ext=(f.name||'').split('.').pop().toLowerCase();
     if(ext==='zip'){
       try{const extracted=await extractZip(f);shpFiles.push(...extracted);}
       catch(e){alert('שגיאה בפתיחת ZIP:\n'+e.message);}
     } else if(SHP_EXTS.has(ext)){
       shpFiles.push(f);
-    } else if(ext==='docx'||ext==='doc'){
+    } else if(ext==='doc'||ext==='docx'){
       wordFile=f;
+    } else if(ext==='xls'||ext==='xlsx'||ext==='htm'||ext==='html'){
+      t5File=f;
+    } else if(ext==='pdf'||ext==='json'){
+      progFile=f;
     }
   }
   if(shpFiles.length){state.files.shp=shpFiles;markZone('shp',shpFiles);}
   if(wordFile){state.files.word=[wordFile];markZone('word',[wordFile]);}
+  if(t5File){state.files.t5=[t5File];markZone('t5',[t5File]);}
+  if(progFile){state.files.prog=[progFile];markZone('prog',[progFile]);}
   checkReady();
 }
 
