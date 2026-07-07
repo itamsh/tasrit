@@ -938,7 +938,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
         </div>
         <div class="rn-divider"></div>
         <div class="rep-toolbar-row" style="margin-bottom:4px">
-          <button class="rep-btn active" id="rep-btn-sel" onclick="setRETool('select')" title="בחירה וגרירה">☛ בחירה</button>
+          <button class="rep-btn active" id="rep-btn-sel" onclick="setRETool('select')" title="בחירה — גרירה על שטח ריק = ריבוע בחירה · Shift+גרירה = הזזת מפה">☛ בחירה</button>
           <button class="rep-btn" id="rep-btn-addnode" onclick="setRETool('addnode')" title="הוסף צומת">⊕ צומת</button>
           <button class="rep-btn" id="rep-btn-draw" onclick="setRETool('draw')" title="ציור קו (קליק ימני = שבירה)">✏ קו</button>
         </div>
@@ -4946,17 +4946,15 @@ function _reMouseDown(e){
       return;
     }
     if(e.shiftKey){
-      // Shift+drag on empty: start rubber-band selection
-      RE.lasso={x0:sx,y0:sy,x1:sx,y1:sy};
+      // Shift+drag on empty: pan the map
+      dragging=true;dragStart={x:e.clientX,y:e.clientY};viewStart={x:viewX,y:viewY};
+      wrap.classList.add('grabbing');
       return;
     }
-    RE.selNodes.clear();
-    const eg=_nearestEdge(sx,sy);
-    if(eg){RE.sel={type:'edge',id:eg.id};redraw();return;}
-    RE.sel=null;
-    // Fall through to pan
-    dragging=true;dragStart={x:e.clientX,y:e.clientY};viewStart={x:viewX,y:viewY};
-    wrap.classList.add('grabbing');
+    // Plain drag on empty: start rubber-band marquee selection.
+    // A tiny drag (i.e. a click) is treated as edge-select / clear on mouseup.
+    RE.lasso={x0:sx,y0:sy,x1:sx,y1:sy};
+    return;
   }
   if(RE.tool==='draw'){
     // Allow pan when not starting on a node
@@ -4988,17 +4986,24 @@ function _reMouseUp(e){
   const rect=canvas.getBoundingClientRect();
   const sx=e.clientX-rect.left,sy=e.clientY-rect.top;
   if(RE.lasso){
-    // Commit rubber-band: select all nodes inside the rect
     const{x0,y0,x1,y1}=RE.lasso;
     const minX=Math.min(x0,x1),maxX=Math.max(x0,x1);
     const minY=Math.min(y0,y1),maxY=Math.max(y0,y1);
-    if(Math.abs(maxX-minX)>4||Math.abs(maxY-minY)>4){ // ignore tiny accidental drags
+    if(Math.abs(maxX-minX)>4||Math.abs(maxY-minY)>4){
+      // Real marquee drag: select all nodes inside the rect
+      RE.selNodes.clear();
       for(const n of RE.nodes){
         const[nx,ny]=dc(n.x,n.y);
         if(nx>=minX&&nx<=maxX&&ny>=minY&&ny<=maxY) RE.selNodes.add(n.id);
       }
+      RE.sel=null;
+    } else {
+      // Tiny drag = a click on empty space: select nearest edge, else clear
+      RE.selNodes.clear();
+      const eg=_nearestEdge(sx,sy);
+      RE.sel=eg?{type:'edge',id:eg.id}:null;
     }
-    RE.lasso=null;RE.sel=null;redraw();return;
+    RE.lasso=null;redraw();return;
   }
   if(RE.tool==='select'){
     if(RE.dragNodeId!==null){RE.dragNodeId=null;return;}
