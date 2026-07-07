@@ -14,8 +14,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#1a2230;color:#eee;direc
 #upload-page .subtitle{font-size:14px;color:#8899aa;text-align:center}
 .drop-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;width:100%;max-width:760px}
 .drop-grid-main,.drop-grid-sec{direction:rtl}
-.drop-main{width:100%;max-width:788px;border:2px solid #3a6a9a;border-radius:16px;padding:16px 14px 14px;position:relative;background:#16283c40}
-.drop-main-lbl{position:absolute;top:-11px;right:20px;background:#152233;color:#7ecfff;font-size:12px;font-weight:700;padding:1px 12px;border-radius:8px;letter-spacing:.5px}
+.drop-main{width:100%;max-width:788px;border:2px solid #3a6a9a;border-radius:16px;padding:14px;position:relative;background:#16283c40}
 .drop-grid-main{max-width:none}
 .drop-grid-sec{max-width:520px;margin-top:4px}
 .drop-zone.small{min-height:104px;padding:14px 14px;gap:5px}
@@ -26,7 +25,6 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#1a2230;color:#eee;direc
 .dz-optional-tag{font-size:10px;color:#5599aa;background:#1a2e40;border:1px solid #3a5070;border-radius:10px;padding:1px 8px;margin-top:2px;display:inline-block}
 .dz-rec-tag{font-size:10px;color:#3fbf7a;background:#12301f;border:1px solid #2a7a4a;border-radius:10px;padding:1px 8px;margin-top:2px;display:inline-block}
 body.theme-light .drop-main{background:#e8f0fa;border-color:#7aa8d0}
-body.theme-light .drop-main-lbl{background:#dfeaf6;color:#1a5590}
 body.theme-light .dz-rec-tag{color:#1a7a44;background:#dcf3e6;border-color:#8fcfa8}
 .drop-zone{background:#1f2e42;border:2px dashed #3a5070;border-radius:12px;padding:28px 20px;text-align:center;cursor:pointer;transition:all .25s;position:relative;min-height:160px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
 .drop-zone:hover,.drop-zone.drag-over{border-color:#7ecfff;background:#24384f}
@@ -788,7 +786,6 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 
   <!-- Main frame: the two primary inputs -->
   <div class="drop-main">
-    <div class="drop-main-lbl">החלק העיקרי</div>
     <div class="drop-grid drop-grid-main">
       <!-- Zone 1: SHP -->
       <div class="drop-zone" id="dz-shp" ondrop="handleDrop(event,'shp')" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)">
