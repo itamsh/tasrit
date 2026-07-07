@@ -1644,6 +1644,7 @@ function resetZones(){
     document.getElementById('fn-'+z).textContent='';
   }
   document.getElementById('launch-btn').textContent='הצג תשריט ←';
+  _projClearAllInputs(); // wipe road-net / TAMA / program so the next plan loads clean
   checkReady();
 }
 
@@ -1663,13 +1664,10 @@ async function launchMap(){
     if(state.progData||state.progFile){const pb=document.getElementById('btn-prog');pb.style.background='';pb.style.borderColor='#44aa77';}
     resize();
     setTimeout(resetView,80);
-    // Restore road network panel if a finalized network was previously saved
-    if(_loadRoadFromStorage()&&RE.finalized){
-      _enterRoadVis();
-      _rnShowPanel('view');
-      _updateRoadNetLegend();
-      setTimeout(_calcShowAvgDist,100);
-    }
+    // Road network / TAMA / program inputs are owned by the active project
+    // (applied via _projApplyInputs on project load). We intentionally do NOT
+    // auto-load the legacy global road-net key here — that leaked old nets into
+    // unrelated plans.
     _projAfterLaunch(); // create/reconcile the active project (no-op during project load)
   }catch(ex){
     alert('שגיאה בטעינת הקבצים:\n'+ex.message);
@@ -9517,6 +9515,36 @@ let _projLastHash='';
 function _projActiveId(){try{return localStorage.getItem(_PROJ_ACTIVE_KEY)||null}catch(e){return null}}
 function _projSetActive(id){try{id?localStorage.setItem(_PROJ_ACTIVE_KEY,id):localStorage.removeItem(_PROJ_ACTIVE_KEY)}catch(e){}}
 
+// Reset ALL user-input state to defaults so a new/loaded plan starts clean —
+// prevents road nets / TAMA / program entries from a previous plan leaking in.
+function _projClearAllInputs(){
+  // Road network
+  RE.nodes=[];RE.edges=[];RE.pendingEdges=[];RE.nId=0;RE.eId=0;RE.phase=0;
+  RE.active=false;RE.finalized=false;RE.visible=true;
+  RE.nodesVisible=true;RE.edgesVisible=true;RE.edgeDistVisible=true;
+  RE.tool='select';RE.drawFrom=null;RE.curveWpts=[];RE.sel=null;RE.dragNodeId=null;
+  RE.lasso=null;RE.pendingAddnode=false;RE.activeNodeType=null;RE.dirty=false;
+  RE.history=[];
+  if(RE.selNodes&&RE.selNodes.clear) RE.selNodes.clear();
+  CALC.savedPoly=null;CALC.polyMode=false;CALC.polyPts=[];
+  try{closeRoadNetPanel();}catch(e){}
+  const rnb=document.getElementById('btn-road-net'); if(rnb) rnb.classList.remove('active','loaded');
+  // TAMA + NORM → defaults
+  TAMA.model=0;TAMA.npdReg=3.2;TAMA.npdSpec=1.5;TAMA.normM2=null;TAMA.intensive=false;
+  TAMA.densMode=1;TAMA.deduction=0;TAMA.spreadDenom='norm';TAMA.pct80=0;
+  NORM.incFeat=null;NORM.codeOrder=null;NORM.polyRing=null;NORM.showOutline=true;
+  // Program
+  _flowInputs={models:{},builtin:{},mixed:{},mixedEntries:{}};
+  _sensOvr={hs:null,cPct:null,modelYes:null,modelAl:null,mixedMode:false,perInstModels:{}};
+  Object.assign(T5_PARAMS,{serviceMarkami:15,serviceMigdali:25,ahuzMode:'ahuz'});
+  // Grid overlay
+  state.gridAngle=0;
+  // Close any open analysis panels so stale content isn't shown
+  try{if(document.getElementById('tama-panel')&&document.getElementById('tama-panel').classList.contains('vis'))closeTamaView();}catch(e){}
+  try{if(document.getElementById('t5-panel')&&document.getElementById('t5-panel').classList.contains('vis'))closeTable5View();}catch(e){}
+  try{if(document.getElementById('prog-panel')&&document.getElementById('prog-panel').classList.contains('vis'))closeProgView();}catch(e){}
+}
+
 // ── Serialize / apply all user inputs ──
 function _projCollectInputs(){
   return {
@@ -9643,6 +9671,7 @@ async function loadProjectById(id){
   if(!obj){alert('הפרויקט לא נמצא');return;}
   _projLoading=true;
   try{
+    _projClearAllInputs(); // start from a clean slate before applying this project's inputs
     state.files={shp:null,t5:null,word:null,prog:null};
     for(const[z,arr] of Object.entries(obj.files||{})){
       if(!arr||!arr.length) continue;
