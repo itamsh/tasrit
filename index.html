@@ -2893,23 +2893,40 @@ function _calcBuildEnvArea(zoneFeat){
   if(!state.layers.arc||!state.spanMeters) return null;
   const pts=[],tol=0.5;
   function addPt(x,y){for(const q of pts)if(Math.hypot(q[0]-x,q[1]-y)<tol)return;pts.push([x,y]);}
-  // Pre-compute zone bbox for quick rejection
   const zc=zoneFeat.geometry.coordinates;
   const zrings=Array.isArray(zc[0][0][0])?zc.flat(1):zc;
   let zx0=Infinity,zx1=-Infinity,zy0=Infinity,zy1=-Infinity;
   for(const ring of zrings)for(const [x,y] of ring){
     if(x<zx0)zx0=x;if(x>zx1)zx1=x;if(y<zy0)zy0=y;if(y>zy1)zy1=y;
   }
+  // Returns true if (x,y) lies on the zone boundary (within tol)
+  function onBoundary(x,y){
+    for(const ring of zrings){
+      for(let i=0;i<ring.length-1;i++){
+        const ax=ring[i][0],ay=ring[i][1],bx=ring[i+1][0],by=ring[i+1][1];
+        const dx=bx-ax,dy=by-ay,len2=dx*dx+dy*dy;
+        if(len2<0.001) continue;
+        const t=Math.max(0,Math.min(1,((x-ax)*dx+(y-ay)*dy)/len2));
+        if(Math.hypot(x-(ax+t*dx),y-(ay+t*dy))<1.5) return true;
+      }
+    }
+    return false;
+  }
   for(const af of state.layers.arc.features){
     if(Number(af.properties.MAVAT_CODE)!==21010||!af.geometry) continue;
     const coords=af.geometry.type==='LineString'?af.geometry.coordinates:af.geometry.coordinates.flat();
     for(let i=0;i<coords.length-1;i++){
       const p1=coords[i],p2=coords[i+1];
-      // Bbox rejection: skip segments clearly outside zone bbox
       if(Math.max(p1[0],p2[0])<zx0||Math.min(p1[0],p2[0])>zx1) continue;
       if(Math.max(p1[1],p2[1])<zy0||Math.min(p1[1],p2[1])>zy1) continue;
-      // Clip to all interior spans (handles non-convex zones and multi-crossing segments)
-      for(const [a,b] of _segClipAllPts(p1,p2,zoneFeat)){addPt(a[0],a[1]);addPt(b[0],b[1]);}
+      for(const [a,b] of _segClipAllPts(p1,p2,zoneFeat)){
+        // Discard near-degenerate segments and those whose midpoint lies ON the
+        // zone boundary — those belong to adjacent/inner zones, not this zone
+        if(Math.hypot(b[0]-a[0],b[1]-a[1])<1.0) continue;
+        const mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2;
+        if(onBoundary(mx,my)) continue;
+        addPt(a[0],a[1]);addPt(b[0],b[1]);
+      }
     }
   }
   if(pts.length<3) return null;
@@ -2918,10 +2935,7 @@ function _calcBuildEnvArea(zoneFeat){
   let area=0;
   for(let i=0,j=hull.length-1;i<hull.length;j=i++) area+=hull[j][0]*hull[i][1]-hull[i][0]*hull[j][1];
   const mpu=state.spanMeters/DATA_SIZE;
-  const rawArea=Math.abs(area)/2*mpu*mpu;
-  // Convex hull can slightly overshoot zone boundary due to floating-point — cap at zone area
-  const zoneArea=_featureAreaM2(zoneFeat);
-  return zoneArea>0?Math.min(rawArea,zoneArea):rawArea;
+  return Math.abs(area)/2*mpu*mpu;
 }
 
 function drawRoadWidth(polyCoords,span){
@@ -3586,7 +3600,7 @@ function showInfo(feat){
   // ── שטח פוליגון קו בניין ──
   const envArea=_calcBuildEnvArea(feat);
   if(envArea!=null)
-    html+=`<div class="inf-area">שטח קו בניין — <strong>${(envArea/1000).toFixed(2)}</strong> ד' <span style="color:#888;font-size:11px">(${Math.round(envArea).toLocaleString('he-IL')} מ"ר)</span></div>`;
+    html+=`<div class="inf-area">שטח קו בניין — <strong>${(envArea/1000).toFixed(1)}</strong> ד' <span style="color:#888;font-size:11px">(${Math.round(envArea).toLocaleString('he-IL')} מ"ר)</span></div>`;
 
   // ── טבלה 5 ──
   let calcHtml='';
