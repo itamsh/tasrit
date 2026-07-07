@@ -5731,10 +5731,18 @@ function _renderT5Panel(){
     const yc=_yiudColor(groupYiud);
     tbody+=`<tr${rowCls?' class="'+rowCls+'"':''}>`;
     const numStyle=yc?` style="background:${yc.bg};color:${yc.text}"`:'';
-    tbody+=`<td class="t5v-num"${numStyle}>${isFirst?num:''}</td>`;
+    // תא / יעוד / גודל מגרש are identical for every row of a cell group → merge with rowspan
+    if(isFirst) tbody+=`<td class="t5v-num" rowspan="${groupLen}"${numStyle}>${num}</td>`;
     for(const c of COL_DEFS){
-      const v=row[c.k]||'';
-      tbody+=`<td>${v?fmtN(v):''}</td>`;
+      if(c.k==='yiud'||c.k==='magras'){
+        if(isFirst){
+          const gv=c.k==='yiud'?(groupYiud||row[c.k]||''):(t5[num].find(r=>r.magras)?.magras||'');
+          tbody+=`<td rowspan="${groupLen}">${gv?fmtN(gv):''}</td>`;
+        }
+      } else {
+        const v=row[c.k]||'';
+        tbody+=`<td>${v?fmtN(v):''}</td>`;
+      }
     }
     // divider + calc columns (rowspan — show once per cell group)
     if(isFirst){
