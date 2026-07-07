@@ -9506,6 +9506,7 @@ function _escAttr(s){if(!s)return '';return String(s).replace(/&/g,'&amp;').repl
 // 18. PROJECTS — multi-plan save/switch (IndexedDB, per-project)
 // ============================================================
 const _PROJ_ACTIVE_KEY='tasrit_active_project';
+const _PROJ_WORKING='__working__'; // hidden slot for the current unsaved plan (autosave/refresh safety)
 let _projLoading=false;
 let _projLastHash='';
 // One-time cleanup: the legacy global road-net key leaked nets across plans.
@@ -9690,32 +9691,34 @@ async function loadProjectById(id){
   _projRenderList(); _projClosePanel();
 }
 
-// After launchMap from a fresh file drag: create or reconcile the active project
+// After launchMap from a fresh file drag: keep the plan in the hidden working slot.
+// A visible project is created ONLY when the user explicitly saves + names it.
 async function _projAfterLaunch(){
-  if(_projLoading) return;
-  const activeId=_projActiveId();
+  if(_projLoading) return; // a project load already set the active project
   const curShp=(state.files.shp&&state.files.shp[0]&&state.files.shp[0].name)||'';
-  if(!activeId){ await _projCreateFromCurrent(); _projRenderList(); return; }
-  const act=await _projGet(activeId);
-  if(!act){ await _projCreateFromCurrent(); _projRenderList(); return; }
-  const actShp=(act.files&&act.files.shp&&act.files.shp[0]&&act.files.shp[0].name)||'';
-  if(actShp&&curShp&&actShp!==curShp){
-    const asNew=confirm('טענת תוכנית חדשה.\n\n"אישור" — שמור כפרויקט חדש (הפרויקט הקודם יישמר).\n"ביטול" — החלף את הפרויקט הנוכחי.');
-    if(asNew){ await _projCreateFromCurrent(); }
-    else{
-      act.files=await _projCollectFiles(); act.inputs=_projCollectInputs();
-      act.progData=state.progData||null; act.name=_projDefaultName(); act.planNumber=_projPlanNumber();
-      act.updatedAt=Date.now(); await _projPut(act);
+  const activeId=_projActiveId();
+  // If a NAMED project is active and this is the same plan (e.g. a refresh), keep it.
+  if(activeId&&activeId!==_PROJ_WORKING){
+    const act=await _projGet(activeId);
+    const actShp=(act&&act.files&&act.files.shp&&act.files.shp[0]&&act.files.shp[0].name)||'';
+    if(act&&actShp&&curShp&&actShp===curShp){
+      act.files=await _projCollectFiles(); act.updatedAt=Date.now(); await _projPut(act);
+      _projRenderList(); return;
     }
-  }else{
-    act.files=await _projCollectFiles(); act.updatedAt=Date.now(); await _projPut(act);
   }
+  // Otherwise: an unsaved working plan. Store it in the single hidden working slot.
+  // It does NOT appear in the projects list until the user saves it with a name.
+  const obj={ id:_PROJ_WORKING, name:'(עבודה לא שמורה)', unnamed:true,
+    planNumber:_projPlanNumber(), createdAt:Date.now(), updatedAt:Date.now(),
+    files:await _projCollectFiles(), inputs:_projCollectInputs(), progData:state.progData||null };
+  await _projPut(obj); _projSetActive(_PROJ_WORKING); _projLastHash='';
   _projRenderList();
 }
 
 async function switchToProject(id){
   const active=_projActiveId();
-  if(active&&active!==id){
+  // Only offer to back up a NAMED project (not the transient working slot)
+  if(active&&active!==id&&active!==_PROJ_WORKING){
     if(confirm('לפני המעבר — לייצא את הפרויקט הנוכחי לקובץ גיבוי?')) await exportProjectById(active);
   }
   await loadProjectById(id);
@@ -9783,7 +9786,8 @@ async function importProjectFromInput(inputEl){
 
 // ── UI ──
 async function _projRenderList(){
-  const projs=(await _projAll()).sort((a,b)=>b.updatedAt-a.updatedAt);
+  const all=(await _projAll());
+  const projs=all.filter(p=>!p.unnamed&&p.id!==_PROJ_WORKING).sort((a,b)=>b.updatedAt-a.updatedAt);
   const active=_projActiveId();
   const html=projs.length?projs.map(p=>`
     <div class="proj-item${p.id===active?' active':''}">
@@ -9797,12 +9801,12 @@ async function _projRenderList(){
         <button title="ייצא לקובץ" onclick="exportProjectById('${p.id}')">⬇</button>
         <button title="מחק" onclick="deleteProjectUI('${p.id}')">🗑</button>
       </div>
-    </div>`).join(''):'<div class="proj-empty">אין פרויקטים שמורים עדיין. טען תוכנית — והיא תישמר אוטומטית כפרויקט.</div>';
+    </div>`).join(''):'<div class="proj-empty">אין פרויקטים שמורים עדיין.<br>טען תוכנית ולחץ "➕ שמור כפרויקט חדש" כדי לשמור אותה בשם.</div>';
   for(const cid of['proj-list-upload','proj-list-toolbar']){
     const el=document.getElementById(cid); if(el) el.innerHTML=html;
   }
   const nm=document.getElementById('proj-current-name');
-  if(nm){const a=projs.find(p=>p.id===active);nm.textContent=a?a.name:'—';}
+  if(nm){const a=all.find(p=>p.id===active);nm.textContent=a?(a.unnamed?'(עבודה לא שמורה)':a.name):'—';}
 }
 function _projTogglePanel(){
   const p=document.getElementById('proj-panel'); if(!p) return;
@@ -9829,7 +9833,8 @@ function _projResetIdle(){
   _projIdlePrompted=false;
   clearTimeout(_projIdleTimer);
   _projIdleTimer=setTimeout(()=>{
-    if(_projActiveId()&&document.getElementById('map-page').style.display!=='none'&&!_projIdlePrompted){
+    const aid=_projActiveId();
+    if(aid&&aid!==_PROJ_WORKING&&document.getElementById('map-page').style.display!=='none'&&!_projIdlePrompted){
       _projIdlePrompted=true;
       if(confirm('לא זוהתה פעילות במשך 5 דקות.\nלייצא את הפרויקט לקובץ גיבוי?')) exportActiveProject();
     }
