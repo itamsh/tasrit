@@ -467,6 +467,33 @@ body.theme-light .fv2-cell{border-color:#c8d8ea}
 .gas-knob{position:absolute;width:12px;height:12px;background:#3a7acc;border:2px solid #5a9aee;border-radius:50%;top:50%;transform:translate(-50%,-50%);cursor:grab;transition:background .1s}
 .gas-knob:active,.gas-knob.dragging{cursor:grabbing;background:#5a9aee}
 .gas-lbl{font-size:10px;color:#7ecfff;min-width:30px;text-align:center;font-family:monospace;user-select:none}
+/* ── Projects ── */
+#proj-panel{position:fixed;top:52px;left:10px;z-index:320;width:340px;max-height:70vh;overflow-y:auto;background:#101a28;border:1px solid #2d4060;border-radius:10px;box-shadow:0 8px 26px rgba(0,0,0,.55);padding:12px;display:none;direction:rtl}
+#proj-panel.vis{display:block}
+.proj-panel-hdr{display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:700;color:#7ecfff;margin-bottom:8px}
+.proj-x{background:none;border:none;color:#8aa;cursor:pointer;font-size:14px}
+.proj-current{font-size:12px;color:#8aa;margin-bottom:8px}
+.proj-current strong{color:#cde}
+.proj-actions{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.proj-actions button,.proj-import-btn{background:#1a2a3a;border:1px solid #2d4060;color:#9cf;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit}
+.proj-actions button:hover,.proj-import-btn:hover{background:#22354a}
+.proj-list{display:flex;flex-direction:column;gap:6px}
+.proj-item{display:flex;justify-content:space-between;align-items:center;gap:8px;background:#0c1622;border:1px solid #1e3048;border-radius:7px;padding:8px 10px}
+.proj-item.active{border-color:#3a7acc;background:#0e1e30}
+.proj-item-main{min-width:0;flex:1}
+.proj-item-name{font-size:13px;font-weight:600;color:#cde;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.proj-item-meta{font-size:10px;color:#6a8296;margin-top:2px}
+.proj-item-btns{display:flex;gap:3px;flex-shrink:0}
+.proj-item-btns button{background:#16283c;border:1px solid #2a4058;color:#8bb;border-radius:5px;padding:3px 7px;font-size:11px;cursor:pointer;font-family:inherit}
+.proj-item-btns button:hover{background:#22384f;color:#bdf}
+.proj-badge{font-size:10px;color:#6acc8a;background:#0a2416;border:1px solid #1e5a38;border-radius:5px;padding:3px 8px;align-self:center}
+.proj-empty{font-size:12px;color:#6a8296;padding:10px;text-align:center;line-height:1.6}
+#proj-upload-box{width:100%;max-width:760px;margin-top:6px;background:#16233480;border:1px solid #2a3f58;border-radius:10px;padding:12px}
+.proj-upload-hdr{display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:700;color:#8ab6d8;margin-bottom:8px}
+body.theme-light #proj-panel{background:#fff;border-color:#c4d4e6}
+body.theme-light .proj-item{background:#f2f6fc;border-color:#d8e2ef}
+body.theme-light .proj-item-name{color:#1a2535}
+body.theme-light #proj-upload-box{background:#eef3fa;border-color:#c8d8ea}
 .prog-mixed-btn{padding:3px 9px;background:#1a2a3a;border:1px solid #2d4060;color:#6a9aaa;border-radius:4px;cursor:pointer;font-size:11px}
 .prog-mixed-btn.active{background:#1a3a5a;border-color:#4a7aaa;color:#88ccff;font-weight:bold}
 body.theme-light .flow-alloc-split .flow-nd-land,.body.theme-light .flow-alloc-split .flow-nd-built{min-width:74px}
@@ -793,6 +820,17 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
     <button id="launch-btn" onclick="launchMap()">הצג תשריט ←</button>
     <button id="reset-btn" onclick="resetZones()">🗑 נקה קבצים</button>
   </div>
+
+  <!-- Saved projects on the upload page -->
+  <div id="proj-upload-box">
+    <div class="proj-upload-hdr">
+      <span>📁 פרויקטים שמורים</span>
+      <label class="proj-import-btn">⬆ ייבא מקובץ
+        <input type="file" accept=".json,.tasrit.json" onchange="importProjectFromInput(this)" style="display:none">
+      </label>
+    </div>
+    <div class="proj-list" id="proj-list-upload"></div>
+  </div>
 </div>
 
 <!-- ===== MAP PAGE ===== -->
@@ -823,9 +861,28 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
     <button class="tb-btn" id="btn-tama" onclick="openTamaView()" title="בדיקת תאימות תמ״א 35/4">📐 תמ״א 35/4</button>
     <button class="tb-btn" id="btn-prog" onclick="openProgView()" title="פרוגרמה לצורכי ציבור">📊 פרוגרמה</button>
     <div class="tb-sep"></div>
+    <button class="tb-btn" id="btn-projects" onclick="_projTogglePanel()" title="פרויקטים — מעבר בין תוכניות שמורות">📁 פרויקטים</button>
+    <div class="tb-sep"></div>
     <button id="btn-theme" onclick="toggleTheme()" title="החלפה בין תצוגה בהירה לכהה">
       <span id="theme-icon">🌙</span><span id="theme-lbl">כהה</span>
     </button>
+  </div>
+
+  <!-- Projects panel (floating) -->
+  <div id="proj-panel">
+    <div class="proj-panel-hdr">
+      <span>📁 פרויקטים</span>
+      <button class="proj-x" onclick="_projClosePanel()">✕</button>
+    </div>
+    <div class="proj-current">פרויקט פעיל: <strong id="proj-current-name">—</strong></div>
+    <div class="proj-actions">
+      <button onclick="saveCurrentAsNewProject()">➕ שמור כפרויקט חדש</button>
+      <button onclick="exportActiveProject()">⬇ ייצא נוכחי</button>
+      <label class="proj-import-btn">⬆ ייבא מקובץ
+        <input type="file" accept=".json,.tasrit.json" onchange="importProjectFromInput(this)" style="display:none">
+      </label>
+    </div>
+    <div class="proj-list" id="proj-list-toolbar"></div>
   </div>
 
   <!-- Grid angle strip -->
@@ -1597,6 +1654,7 @@ async function launchMap(){
       _updateRoadNetLegend();
       setTimeout(_calcShowAvgDist,100);
     }
+    _projAfterLaunch(); // create/reconcile the active project (no-op during project load)
   }catch(ex){
     alert('שגיאה בטעינת הקבצים:\n'+ex.message);
     document.getElementById('launch-btn').textContent='הצג תשריט ←';
@@ -5371,8 +5429,12 @@ window.addEventListener('resize',resize);
 const CACHE_DB='tashrit_cache_v1';
 function openCacheDB(){
   return new Promise((res,rej)=>{
-    const req=indexedDB.open(CACHE_DB,1);
-    req.onupgradeneeded=e=>e.target.result.createObjectStore('files');
+    const req=indexedDB.open(CACHE_DB,2);
+    req.onupgradeneeded=e=>{
+      const db=e.target.result;
+      if(!db.objectStoreNames.contains('files')) db.createObjectStore('files');
+      if(!db.objectStoreNames.contains('projects')) db.createObjectStore('projects');
+    };
     req.onsuccess=e=>res(e.target.result);
     req.onerror=e=>rej(e.target.error);
   });
@@ -9429,11 +9491,324 @@ function _closeProgDrilldown(){
 function _esc(s){if(!s&&s!==0)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function _escAttr(s){if(!s)return '';return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
-// Auto-restore from last session on page load
+// ============================================================
+// 18. PROJECTS — multi-plan save/switch (IndexedDB, per-project)
+// ============================================================
+const _PROJ_ACTIVE_KEY='tasrit_active_project';
+let _projLoading=false;
+let _projLastHash='';
+
+function _projActiveId(){try{return localStorage.getItem(_PROJ_ACTIVE_KEY)||null}catch(e){return null}}
+function _projSetActive(id){try{id?localStorage.setItem(_PROJ_ACTIVE_KEY,id):localStorage.removeItem(_PROJ_ACTIVE_KEY)}catch(e){}}
+
+// ── Serialize / apply all user inputs ──
+function _projCollectInputs(){
+  return {
+    roadNet:(RE.nodes&&RE.nodes.length)?{
+      nodes:RE.nodes,edges:RE.edges,pendingEdges:RE.pendingEdges,
+      phase:RE.phase,nId:RE.nId,eId:RE.eId,finalized:RE.finalized,visible:RE.visible,
+      nodesVisible:RE.nodesVisible,edgesVisible:RE.edgesVisible,edgeDistVisible:RE.edgeDistVisible
+    }:null,
+    tama:{
+      model:TAMA.model,npdReg:TAMA.npdReg,npdSpec:TAMA.npdSpec,intensive:TAMA.intensive,
+      densMode:TAMA.densMode,deduction:TAMA.deduction,spreadDenom:TAMA.spreadDenom,pct80:TAMA.pct80,
+      normM2:TAMA.normM2,normIncFeat:NORM.incFeat?[...NORM.incFeat]:null,normPolyRing:NORM.polyRing||null
+    },
+    program:{flowInputs:_flowInputs,sensOvr:_sensOvr,t5params:T5_PARAMS},
+    gridAngle:state.gridAngle||0
+  };
+}
+function _projApplyInputs(inp){
+  if(!inp) return;
+  // Road network
+  const rn=inp.roadNet;
+  if(rn&&rn.nodes&&rn.nodes.length){
+    RE.nodes=rn.nodes;RE.edges=rn.edges||[];RE.pendingEdges=rn.pendingEdges||[];
+    RE.phase=rn.phase||1;RE.nId=rn.nId||(Math.max(-1,...RE.nodes.map(n=>n.id))+1);
+    RE.eId=rn.eId||(RE.edges.length?Math.max(-1,...RE.edges.map(e=>e.id))+1:0);
+    RE.finalized=rn.finalized||false;RE.visible=rn.visible!==false;
+    RE.nodesVisible=rn.nodesVisible!==false;RE.edgesVisible=rn.edgesVisible!==false;
+    RE.edgeDistVisible=rn.edgeDistVisible!==false;RE.dirty=false;
+    if(RE.finalized&&document.getElementById('rn-panel').style.display==='none'){
+      try{_enterRoadVis();_rnShowPanel('view');_updateRoadNetLegend();setTimeout(_calcShowAvgDist,100);}catch(e){}
+    }
+  }else{
+    RE.nodes=[];RE.edges=[];RE.pendingEdges=[];RE.nId=0;RE.eId=0;RE.finalized=false;
+  }
+  // TAMA + NORM
+  const s=inp.tama;
+  if(s){
+    if(s.model!=null)TAMA.model=s.model; if(s.npdReg!=null)TAMA.npdReg=s.npdReg;
+    if(s.npdSpec!=null)TAMA.npdSpec=s.npdSpec; if(s.intensive!=null)TAMA.intensive=s.intensive;
+    if(s.densMode!=null)TAMA.densMode=s.densMode; if(s.deduction!=null)TAMA.deduction=s.deduction;
+    if(s.spreadDenom!=null)TAMA.spreadDenom=s.spreadDenom; if(s.pct80!=null)TAMA.pct80=s.pct80;
+    if(s.normM2!=null)TAMA.normM2=s.normM2;
+    NORM.incFeat=s.normIncFeat?new Set(s.normIncFeat):NORM.incFeat;
+    if(s.normPolyRing)NORM.polyRing=s.normPolyRing; else NORM.polyRing=null;
+  }
+  // Program
+  if(inp.program){
+    if(inp.program.flowInputs)_flowInputs=inp.program.flowInputs;
+    if(inp.program.sensOvr)_sensOvr=inp.program.sensOvr;
+    if(inp.program.t5params)Object.assign(T5_PARAMS,inp.program.t5params);
+  }
+  if(inp.gridAngle!=null)state.gridAngle=inp.gridAngle;
+  try{redraw();}catch(e){}
+}
+async function _projCollectFiles(){
+  const data={};
+  for(const z of['shp','t5','word','prog']){
+    const files=state.files[z]; if(!files) continue;
+    const arr=[];
+    for(const f of files) arr.push({name:f.name,type:f.type,buf:await f.arrayBuffer()});
+    data[z]=arr;
+  }
+  return data;
+}
+function _projDefaultName(){
+  const tb=state.progData&&state.progData.title_block;
+  if(tb){const s=[tb.plan_number,tb.plan_name].filter(Boolean).join(' — ');if(s)return s;}
+  const shp=state.files.shp&&state.files.shp[0];
+  if(shp) return shp.name.replace(/\.[^.]+$/,'');
+  return 'תוכנית '+new Date().toLocaleDateString('he-IL');
+}
+function _projPlanNumber(){const tb=state.progData&&state.progData.title_block;return(tb&&tb.plan_number)||'';}
+
+// ── IndexedDB ops on the 'projects' store ──
+async function _projPut(obj){
+  const db=await openCacheDB();
+  const tx=db.transaction('projects','readwrite');
+  tx.objectStore('projects').put(obj,obj.id);
+  return new Promise((res,rej)=>{tx.oncomplete=res;tx.onerror=e=>rej(e.target.error);});
+}
+async function _projGet(id){
+  const db=await openCacheDB();
+  return new Promise(res=>{
+    const r=db.transaction('projects','readonly').objectStore('projects').get(id);
+    r.onsuccess=e=>res(e.target.result||null);r.onerror=()=>res(null);
+  });
+}
+async function _projAll(){
+  const db=await openCacheDB();
+  return new Promise(res=>{
+    const r=db.transaction('projects','readonly').objectStore('projects').getAll();
+    r.onsuccess=e=>res(e.target.result||[]);r.onerror=()=>res([]);
+  });
+}
+async function _projDelete(id){
+  const db=await openCacheDB();
+  const tx=db.transaction('projects','readwrite');
+  tx.objectStore('projects').delete(id);
+  return new Promise(res=>{tx.oncomplete=res;tx.onerror=res;});
+}
+
+async function _projCreateFromCurrent(name){
+  const id='p_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+  const obj={
+    id,name:name||_projDefaultName(),planNumber:_projPlanNumber(),
+    createdAt:Date.now(),updatedAt:Date.now(),
+    files:await _projCollectFiles(),inputs:_projCollectInputs(),progData:state.progData||null
+  };
+  await _projPut(obj); _projSetActive(id); _projLastHash='';
+  return id;
+}
+async function _projSaveInputs(){
+  const id=_projActiveId(); if(!id||_projLoading) return;
+  const obj=await _projGet(id); if(!obj) return;
+  obj.inputs=_projCollectInputs();
+  obj.progData=state.progData||obj.progData||null;
+  obj.name=obj.name||_projDefaultName(); obj.planNumber=obj.planNumber||_projPlanNumber();
+  obj.updatedAt=Date.now();
+  await _projPut(obj);
+}
+
+async function loadProjectById(id){
+  const obj=await _projGet(id);
+  if(!obj){alert('הפרויקט לא נמצא');return;}
+  _projLoading=true;
+  try{
+    state.files={shp:null,t5:null,word:null,prog:null};
+    for(const[z,arr] of Object.entries(obj.files||{})){
+      if(!arr||!arr.length) continue;
+      state.files[z]=arr.map(({name,type,buf})=>new File([buf],name,{type}));
+      markZone(z,state.files[z]);
+    }
+    checkReady();
+    state.progData=obj.progData||null;
+    await launchMap();
+    _projApplyInputs(obj.inputs);
+    const pb=document.getElementById('btn-prog');
+    if(state.progData&&pb){pb.style.background='';pb.style.borderColor='#44aa77';}
+    _projSetActive(id); _projLastHash='';
+  }catch(e){alert('שגיאה בטעינת הפרויקט:\n'+e.message);console.error(e);}
+  finally{_projLoading=false;}
+  _projRenderList(); _projClosePanel();
+}
+
+// After launchMap from a fresh file drag: create or reconcile the active project
+async function _projAfterLaunch(){
+  if(_projLoading) return;
+  const activeId=_projActiveId();
+  const curShp=(state.files.shp&&state.files.shp[0]&&state.files.shp[0].name)||'';
+  if(!activeId){ await _projCreateFromCurrent(); _projRenderList(); return; }
+  const act=await _projGet(activeId);
+  if(!act){ await _projCreateFromCurrent(); _projRenderList(); return; }
+  const actShp=(act.files&&act.files.shp&&act.files.shp[0]&&act.files.shp[0].name)||'';
+  if(actShp&&curShp&&actShp!==curShp){
+    const asNew=confirm('טענת תוכנית חדשה.\n\n"אישור" — שמור כפרויקט חדש (הפרויקט הקודם יישמר).\n"ביטול" — החלף את הפרויקט הנוכחי.');
+    if(asNew){ await _projCreateFromCurrent(); }
+    else{
+      act.files=await _projCollectFiles(); act.inputs=_projCollectInputs();
+      act.progData=state.progData||null; act.name=_projDefaultName(); act.planNumber=_projPlanNumber();
+      act.updatedAt=Date.now(); await _projPut(act);
+    }
+  }else{
+    act.files=await _projCollectFiles(); act.updatedAt=Date.now(); await _projPut(act);
+  }
+  _projRenderList();
+}
+
+async function switchToProject(id){
+  const active=_projActiveId();
+  if(active&&active!==id){
+    if(confirm('לפני המעבר — לייצא את הפרויקט הנוכחי לקובץ גיבוי?')) await exportProjectById(active);
+  }
+  await loadProjectById(id);
+}
+async function saveCurrentAsNewProject(){
+  if(!state.files.shp){alert('אין תוכנית טעונה לשמירה');return;}
+  const nm=prompt('שם הפרויקט החדש:',_projDefaultName()); if(nm==null) return;
+  await _projCreateFromCurrent(nm.trim()||_projDefaultName());
+  _projRenderList(); try{_showToast('נשמר כפרויקט חדש ✓');}catch(e){}
+}
+async function renameProject(id){
+  const obj=await _projGet(id); if(!obj) return;
+  const nm=prompt('שם הפרויקט:',obj.name||''); if(nm==null) return;
+  obj.name=nm.trim()||obj.name; obj.updatedAt=Date.now(); await _projPut(obj); _projRenderList();
+}
+async function deleteProjectUI(id){
+  if(!confirm('למחוק את הפרויקט לצמיתות?')) return;
+  await _projDelete(id);
+  if(_projActiveId()===id) _projSetActive(null);
+  _projRenderList();
+}
+
+// ── Export / import to a .tasrit.json file ──
+function _ab2b64(buf){
+  let bin='';const bytes=new Uint8Array(buf);const chunk=0x8000;
+  for(let i=0;i<bytes.length;i+=chunk) bin+=String.fromCharCode.apply(null,bytes.subarray(i,i+chunk));
+  return btoa(bin);
+}
+function _b642ab(b64){
+  const bin=atob(b64);const bytes=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+  return bytes.buffer;
+}
+async function exportProjectById(id){
+  const obj=await _projGet(id); if(!obj){alert('הפרויקט לא נמצא');return;}
+  const enc={id:obj.id,name:obj.name,planNumber:obj.planNumber,createdAt:obj.createdAt,
+    updatedAt:obj.updatedAt,inputs:obj.inputs,progData:obj.progData,files:{}};
+  for(const[z,arr] of Object.entries(obj.files||{}))
+    enc.files[z]=arr.map(f=>({name:f.name,type:f.type,b64:_ab2b64(f.buf)}));
+  const blob=new Blob([JSON.stringify(enc)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=(obj.name||'project').replace(/[^\w֐-׿-]+/g,'_')+'.tasrit.json';
+  a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+}
+async function exportActiveProject(){
+  const id=_projActiveId(); if(!id){alert('אין פרויקט פעיל לייצוא');return;}
+  await _projSaveInputs(); return exportProjectById(id);
+}
+async function importProjectFromInput(inputEl){
+  const file=inputEl.files&&inputEl.files[0]; if(!file) return;
+  inputEl.value='';
+  try{
+    const enc=JSON.parse(await file.text());
+    const obj={id:'p_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
+      name:enc.name||'פרויקט מיובא',planNumber:enc.planNumber||'',
+      createdAt:enc.createdAt||Date.now(),updatedAt:Date.now(),
+      inputs:enc.inputs||{},progData:enc.progData||null,files:{}};
+    for(const[z,arr] of Object.entries(enc.files||{}))
+      obj.files[z]=arr.map(f=>({name:f.name,type:f.type,buf:_b642ab(f.b64)}));
+    await _projPut(obj); _projRenderList();
+    if(confirm('הפרויקט יובא בהצלחה.\nלפתוח אותו כעת?')) loadProjectById(obj.id);
+  }catch(e){alert('שגיאה בייבוא הקובץ:\n'+e.message);}
+}
+
+// ── UI ──
+async function _projRenderList(){
+  const projs=(await _projAll()).sort((a,b)=>b.updatedAt-a.updatedAt);
+  const active=_projActiveId();
+  const html=projs.length?projs.map(p=>`
+    <div class="proj-item${p.id===active?' active':''}">
+      <div class="proj-item-main">
+        <div class="proj-item-name">${_escAttr(p.name||'ללא שם')}</div>
+        <div class="proj-item-meta">${p.planNumber?('תכנית '+_escAttr(p.planNumber)+' · '):''}${new Date(p.updatedAt).toLocaleString('he-IL')}</div>
+      </div>
+      <div class="proj-item-btns">
+        ${p.id===active?'<span class="proj-badge">פעיל</span>':`<button title="טען" onclick="switchToProject('${p.id}')">טען ←</button>`}
+        <button title="שנה שם" onclick="renameProject('${p.id}')">✏</button>
+        <button title="ייצא לקובץ" onclick="exportProjectById('${p.id}')">⬇</button>
+        <button title="מחק" onclick="deleteProjectUI('${p.id}')">🗑</button>
+      </div>
+    </div>`).join(''):'<div class="proj-empty">אין פרויקטים שמורים עדיין. טען תוכנית — והיא תישמר אוטומטית כפרויקט.</div>';
+  for(const cid of['proj-list-upload','proj-list-toolbar']){
+    const el=document.getElementById(cid); if(el) el.innerHTML=html;
+  }
+  const nm=document.getElementById('proj-current-name');
+  if(nm){const a=projs.find(p=>p.id===active);nm.textContent=a?a.name:'—';}
+}
+function _projTogglePanel(){
+  const p=document.getElementById('proj-panel'); if(!p) return;
+  const vis=p.classList.toggle('vis');
+  if(vis) _projRenderList();
+}
+function _projClosePanel(){const p=document.getElementById('proj-panel');if(p)p.classList.remove('vis');}
+
+// ── Auto-save loop (every 4s, only when inputs changed) ──
+setInterval(async()=>{
+  if(_projLoading) return;
+  if(!_projActiveId()) return;
+  if(document.getElementById('map-page').style.display==='none') return;
+  const h=JSON.stringify({i:_projCollectInputs(),
+    p:state.progData?(state.progData.title_block&&state.progData.title_block.plan_number||1):0});
+  if(h===_projLastHash) return;
+  _projLastHash=h;
+  try{await _projSaveInputs();}catch(e){}
+},4000);
+
+// ── Idle prompt: after 5 min inactivity, offer to export ──
+let _projIdleTimer=null,_projIdlePrompted=false;
+function _projResetIdle(){
+  _projIdlePrompted=false;
+  clearTimeout(_projIdleTimer);
+  _projIdleTimer=setTimeout(()=>{
+    if(_projActiveId()&&document.getElementById('map-page').style.display!=='none'&&!_projIdlePrompted){
+      _projIdlePrompted=true;
+      if(confirm('לא זוהתה פעילות במשך 5 דקות.\nלייצא את הפרויקט לקובץ גיבוי?')) exportActiveProject();
+    }
+  },5*60*1000);
+}
+['mousemove','keydown','click','wheel','touchstart'].forEach(ev=>window.addEventListener(ev,_projResetIdle,{passive:true}));
+_projResetIdle();
+
+// ============================================================
+// Auto-restore on page load: prefer active project, else legacy 'last'
+// ============================================================
 (async()=>{
+  const activeId=_projActiveId();
+  if(activeId){
+    const obj=await _projGet(activeId);
+    if(obj&&obj.files&&obj.files.shp){
+      await loadProjectById(activeId);
+      _projRenderList();
+      return;
+    }
+  }
+  // Legacy fallback: restore last raw file set
   const data=await loadFromCache();
-  if(!data||!data.shp) return;
-  // Reconstruct File objects from stored buffers
+  if(!data||!data.shp){ _projRenderList(); return; }
   for(const[z,arr] of Object.entries(data)){
     if(!arr||!arr.length) continue;
     state.files[z]=arr.map(({name,type,buf})=>new File([buf],name,{type}));
@@ -9450,11 +9825,11 @@ function _escAttr(s){if(!s)return '';return String(s).replace(/&/g,'&amp;').repl
     const fileKey=prog?`${prog.name}|${prog.size}`:'__json__';
     if(pd.fileKey===fileKey){
       state.progData=pd.data;
-      // Update the prog button tint to show data is ready
       const pb=document.getElementById('btn-prog');
       if(pb){pb.style.background='';pb.style.borderColor='#44aa77';}
     }
   }
+  _projRenderList();
 })();
 
 // ===== THEME TOGGLE =====
