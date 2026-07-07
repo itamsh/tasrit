@@ -5589,6 +5589,22 @@ function _yiudColor(y){
   return null;
 }
 
+// Columns that genuinely vary between the different uses of a plot → stay split.
+// Everything else is a plot-level attribute and gets merged (rowspan) across the
+// cell group when its non-empty values agree.
+const T5_SPLIT_KEYS=new Set(['shimush','kollMal','ikariMal','sherutMal','yihud']);
+// Returns {ok:true,val} if all non-empty values for key k across the group agree
+// (val = the shared value, '' if all blank); {ok:false} if they conflict.
+function _t5GroupVal(rowsArr,k){
+  let val=null;
+  for(const r of rowsArr){
+    const v=(r[k]==null?'':String(r[k])).trim();
+    if(v==='') continue;
+    if(val===null) val=v; else if(v!==val) return {ok:false,val:''};
+  }
+  return {ok:true,val:val==null?'':val};
+}
+
 function _renderT5Panel(){
   const t5=state.table5;
   if(!t5) return '';
@@ -5734,11 +5750,16 @@ function _renderT5Panel(){
     // תא / יעוד / גודל מגרש are identical for every row of a cell group → merge with rowspan
     if(isFirst) tbody+=`<td class="t5v-num" rowspan="${groupLen}"${numStyle}>${num}</td>`;
     for(const c of COL_DEFS){
-      if(c.k==='yiud'||c.k==='magras'){
-        if(isFirst){
-          const gv=c.k==='yiud'?(groupYiud||row[c.k]||''):(t5[num].find(r=>r.magras)?.magras||'');
-          tbody+=`<td rowspan="${groupLen}">${gv?fmtN(gv):''}</td>`;
-        }
+      // Split columns render per-row; the rest merge across the cell group when
+      // their values agree (conflicting values fall back to per-row — never hidden).
+      if(T5_SPLIT_KEYS.has(c.k)){
+        const v=row[c.k]||'';
+        tbody+=`<td>${v?fmtN(v):''}</td>`;
+        continue;
+      }
+      const mv=_t5GroupVal(t5[num],c.k);
+      if(mv.ok){
+        if(isFirst) tbody+=`<td rowspan="${groupLen}">${mv.val?fmtN(mv.val):''}</td>`;
       } else {
         const v=row[c.k]||'';
         tbody+=`<td>${v?fmtN(v):''}</td>`;
