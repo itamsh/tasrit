@@ -2918,7 +2918,10 @@ function _calcBuildEnvArea(zoneFeat){
   let area=0;
   for(let i=0,j=hull.length-1;i<hull.length;j=i++) area+=hull[j][0]*hull[i][1]-hull[i][0]*hull[j][1];
   const mpu=state.spanMeters/DATA_SIZE;
-  return Math.abs(area)/2*mpu*mpu;
+  const rawArea=Math.abs(area)/2*mpu*mpu;
+  // Convex hull can slightly overshoot zone boundary due to floating-point — cap at zone area
+  const zoneArea=_featureAreaM2(zoneFeat);
+  return zoneArea>0?Math.min(rawArea,zoneArea):rawArea;
 }
 
 function drawRoadWidth(polyCoords,span){
