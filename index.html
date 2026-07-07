@@ -9856,22 +9856,6 @@ setInterval(async()=>{
   try{await _projSaveInputs();}catch(e){}
 },4000);
 
-// ── Idle prompt: after 5 min inactivity, offer to export ──
-let _projIdleTimer=null,_projIdlePrompted=false;
-function _projResetIdle(){
-  _projIdlePrompted=false;
-  clearTimeout(_projIdleTimer);
-  _projIdleTimer=setTimeout(()=>{
-    const aid=_projActiveId();
-    if(aid&&aid!==_PROJ_WORKING&&document.getElementById('map-page').style.display!=='none'&&!_projIdlePrompted){
-      _projIdlePrompted=true;
-      if(confirm('לא זוהתה פעילות במשך 5 דקות.\nלייצא את הפרויקט לקובץ גיבוי?')) exportActiveProject();
-    }
-  },5*60*1000);
-}
-['mousemove','keydown','click','wheel','touchstart'].forEach(ev=>window.addEventListener(ev,_projResetIdle,{passive:true}));
-_projResetIdle();
-
 // ============================================================
 // Auto-restore on page load: prefer active project, else legacy 'last'
 // ============================================================
