@@ -1,0 +1,77 @@
+{
+  "$schema_note": "School-model land-area standards (טיפוסי בתי ספר A/B/C + דגמים קומפקטיים 1/2), extracted VERBATIM from the national guide. Base values (A/B/C) from 08/2018 edition page 49. Compact models (דגם 1, דגם 2) added in the 03/2025 update ('עדכון פרק בתי ספר במגרשים קומפקטיים'), pages 11-12. Values are dunam-per-class. This is the missing piece for Layer-1 land-area checking (alongside guide_standards.json which covers class-count). GROUND TRUTH — do not substitute approximate values.",
+  "version": "0.2",
+  "version_history": [
+    {"version": "0.1", "note": "Initial extraction from 2018 guide (A/B/C only)."},
+    {"version": "0.2", "note": "Added compact models דגם 1 + דגם 2 from 03/2025 update."}
+  ],
+  "source": {
+    "guide": "המדריך להקצאת שטחים לצורכי ציבור, מינהל התכנון",
+    "base_edition": {
+      "date": "08/2018",
+      "page": 49,
+      "table": "מאפייני הטיפוסים השונים של בתי הספר",
+      "covers": "טיפוסים A, B, C"
+    },
+    "update_edition": {
+      "date": "03/2025",
+      "title": "עדכון פרק בתי ספר במגרשים קומפקטיים",
+      "approved_by": "המועצה הארצית לתכנון ובניה, ישיבה 731, 11.03.2025",
+      "pages": "11-12, 20-25",
+      "covers": "דגם 1, דגם 2 (מגרשים קומפקטיים)"
+    }
+  },
+
+  "model_determination": {
+    "_note": "כיצד נקבע הטיפוס. בדרך כלל נגזר מאפיון היישוב; אם הנספח מציין טיפוס מפורשות (model_type ב-InstitutionRow) — העדף את מה שכתוב בנספח.",
+    "A": "יישוב כפרי או קהילתי",
+    "B": "יישוב עירוני, מתחם חדש",
+    "C": "יישוב עירוני, מרקם בנוי (התחדשות עירונית)",
+    "model_1": "מגרש קומפקטי — חל באזורים מוגדרים בלבד (מטרו, מתע\"ן, אזורי ביקוש). הוסף בעדכון 03/2025.",
+    "model_2": "מגרש קומפקטי במרקם בנוי בתחום מטרו. הוסף בעדכון 03/2025.",
+    "mapping_hint": {
+      "_comment": "מיפוי מנחה מ-assumptions לטיפוס. אינו מוחלט — הנספח גובר אם ציין במפורש. דגם 1/2 לעולם לא ייקבעו מאוטומציה — חייבים להופיע במפורש בנספח.",
+      "development_type=התחדשות עירונית": "C",
+      "development_type=מתחם חדש + יישוב עירוני": "B",
+      "development_type=מתחם חדש + יישוב כפרי/קהילתי": "A",
+      "development_type=TOD": "C (צפיפות עירונית גבוהה)"
+    },
+    "compact_models_note": "דגם 1 ודגם 2 חלים רק במחוזות מרכז, תל אביב, חיפה, ירושלים והעיר באר שבע, ובכפוף לתנאי לוח התכנון המרחבי (קרבה למטרו/מתע\"ן וכו'). הכלי אינו בודק זכאות מרחבית — הוא מקבל את הדגם כפי שהוצהר בנספח."
+  },
+
+  "dunam_per_class": {
+    "_note": "דונם לכיתה. ערך רגיל; בסוגריים ערך חינוך חרדי בנים (25 תלמידים לכיתה במקום הסטנדרט). דגם 1 ודגם 2 אינם חלים על חינוך חרדי בנים — בעדכון 03/2025 הם מופיעים רק לחינוך הכללי וחרדי בנות.",
+    "בית ספר יסודי": {
+      "A": { "regular": 0.5,  "haredi_boys": 0.3 },
+      "B": { "regular": 0.4,  "haredi_boys": 0.25 },
+      "C": { "regular": 0.3,  "haredi_boys": 0.2 },
+      "model_1": { "regular": 0.25, "haredi_boys": null },
+      "model_2": { "regular": 0.20, "haredi_boys": null }
+    },
+    "בית ספר על-יסודי": {
+      "A": { "regular": 0.75, "haredi_boys": 0.5 },
+      "B": { "regular": 0.5,  "haredi_boys": 0.35 },
+      "C": { "regular": 0.4,  "haredi_boys": 0.3 },
+      "model_1": { "regular": 0.25, "haredi_boys": null },
+      "model_2": { "regular": 0.22, "haredi_boys": null }
+    }
+  },
+
+  "model_attributes": {
+    "_note": "מאפיינים נוספים לכל טיפוס — לתצוגה בפאנל התחקור.",
+    "A": { "typical_floors": "עד 2",  "yard_ratio_pct": 60,  "context": "כפרי/קהילתי" },
+    "B": { "typical_floors": "3-4",   "yard_ratio_pct": 80,  "context": "עירוני, מתחם חדש" },
+    "C": { "typical_floors": "4-5",   "yard_ratio_pct": 100, "context": "עירוני, מרקם קיים/התחדשות" },
+    "model_1": { "typical_floors": "4-5", "yard_ratio_pct": 120, "context": "מגרש קומפקטי — מטרו / מתע\"ן / יישוב צפוף (עדכון 03/2025)" },
+    "model_2": { "typical_floors": "4-5", "yard_ratio_pct": 130, "context": "מגרש קומפקטי במרקם בנוי בתחום מטרו (עדכון 03/2025)" }
+  },
+
+  "computation_example": {
+    "_note": "כיצד מחשבים שטח קרקע צפוי לפי דגם.",
+    "formula": "expected_land_dunam = class_count × dunam_per_class[institution][model][stream]",
+    "worked": "בי\"ס יסודי, 35 כיתות, טיפוס B, רגיל: 35 × 0.4 = 14.0 דונם. השוואה לשטח שבנספח → ✓/⚠/✗.",
+    "worked_compact": "בי\"ס יסודי, 18 כיתות, דגם 1, רגיל: 18 × 0.25 = 4.5 דונם.",
+    "note_on_class_count_vs_size": "הטבלה היא דונם-לכיתה ליניארי. בתדריך יש גם טבלאות שטח מלא לפי גודל בי\"ס (עמ' 54-58 במדריך 2018, עמ' 20-25 בעדכון 2025) שאינן ליניאריות לחלוטין (יש מינימום וכד'); לרוב הקירוב הליניארי דונם×כיתות מספיק לבדיקת התאמה. אם תרצה דיוק מלא לגדלים ספציפיים — יש לחלץ את טבלאות השטח בנפרד.",
+    "note_on_built_area": "קובץ זה עוסק רק בשטח קרקע (דונם). שטח בנוי (מ\"ר) אינו מטופל בכלי זה."
+  }
+}
