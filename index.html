@@ -13,8 +13,21 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#1a2230;color:#eee;direc
 #upload-page h1{font-size:26px;font-weight:300;letter-spacing:1px;color:#7ecfff}
 #upload-page .subtitle{font-size:14px;color:#8899aa;text-align:center}
 .drop-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;width:100%;max-width:760px}
+.drop-grid-main,.drop-grid-sec{direction:rtl}
+.drop-main{width:100%;max-width:788px;border:2px solid #3a6a9a;border-radius:16px;padding:16px 14px 14px;position:relative;background:#16283c40}
+.drop-main-lbl{position:absolute;top:-11px;right:20px;background:#152233;color:#7ecfff;font-size:12px;font-weight:700;padding:1px 12px;border-radius:8px;letter-spacing:.5px}
+.drop-grid-main{max-width:none}
+.drop-grid-sec{max-width:520px;margin-top:4px}
+.drop-zone.small{min-height:104px;padding:14px 14px;gap:5px}
+.drop-zone.small .dz-icon{font-size:24px}
+.drop-zone.small h3{font-size:12px}
+.drop-zone.small p{font-size:10px}
 .drop-zone.optional{border-style:dashed;opacity:.8}
 .dz-optional-tag{font-size:10px;color:#5599aa;background:#1a2e40;border:1px solid #3a5070;border-radius:10px;padding:1px 8px;margin-top:2px;display:inline-block}
+.dz-rec-tag{font-size:10px;color:#3fbf7a;background:#12301f;border:1px solid #2a7a4a;border-radius:10px;padding:1px 8px;margin-top:2px;display:inline-block}
+body.theme-light .drop-main{background:#e8f0fa;border-color:#7aa8d0}
+body.theme-light .drop-main-lbl{background:#dfeaf6;color:#1a5590}
+body.theme-light .dz-rec-tag{color:#1a7a44;background:#dcf3e6;border-color:#8fcfa8}
 .drop-zone{background:#1f2e42;border:2px dashed #3a5070;border-radius:12px;padding:28px 20px;text-align:center;cursor:pointer;transition:all .25s;position:relative;min-height:160px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
 .drop-zone:hover,.drop-zone.drag-over{border-color:#7ecfff;background:#24384f}
 .drop-zone.loaded{border-color:#2ecc71;border-style:solid;background:#1a3a28}
@@ -773,46 +786,52 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
   <h1>📐 תצוגת תשריטים | מבא"ת</h1>
   <p class="subtitle">גררו קבצים לכאן — הממשק יזהה אוטומטית מה הוא קיבל<br>ניתן לגרור ZIP של SHP, אקסל טבלה 5 ו-PDF ביחד בפעם אחת</p>
 
-  <div class="drop-grid">
-    <!-- Zone 1: SHP -->
-    <div class="drop-zone" id="dz-shp" ondrop="handleDrop(event,'shp')" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)">
-      <div class="dz-check">✓</div>
-      <input type="file" multiple accept=".shp,.dbf,.shx,.prj,.cpg,.zip" onchange="handleFilesAuto(this.files)">
-      <div class="dz-icon">🗂️</div>
-      <h3>קבצי SHP</h3>
-      <p>בחרו / גררו את כל הקבצים<br>מתיקיית SHP של התוכנית<br><small>(.shp .dbf .shx .prj .cpg)</small></p>
-      <div class="dz-filename" id="fn-shp"></div>
+  <!-- Main frame: the two primary inputs -->
+  <div class="drop-main">
+    <div class="drop-main-lbl">החלק העיקרי</div>
+    <div class="drop-grid drop-grid-main">
+      <!-- Zone 1: SHP -->
+      <div class="drop-zone" id="dz-shp" ondrop="handleDrop(event,'shp')" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)">
+        <div class="dz-check">✓</div>
+        <input type="file" multiple accept=".shp,.dbf,.shx,.prj,.cpg,.zip" onchange="handleFilesAuto(this.files)">
+        <div class="dz-icon">🗂️</div>
+        <h3>קבצי SHP</h3>
+        <p>בחרו / גררו את כל הקבצים<br>מתיקיית SHP של התוכנית<br><small>ניתן גם לגרור קובץ ZIP</small></p>
+        <div class="dz-filename" id="fn-shp"></div>
+      </div>
+
+      <!-- Zone 2: Table 5 (accepted but not processed) -->
+      <div class="drop-zone optional" id="dz-t5" ondrop="handleDrop(event,'t5')" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)">
+        <div class="dz-check">✓</div>
+        <input type="file" accept=".xls,.html,.htm" onchange="handleFiles(this.files,'t5')">
+        <div class="dz-icon">📋</div>
+        <h3>טבלה 5 — זכויות בניה <span class="dz-rec-tag">מומלץ</span></h3>
+        <p>קובץ XLS "זכויות והוראות בניה"<br>או קובץ <strong>sheet001.htm</strong></p>
+        <div class="dz-filename" id="fn-t5"></div>
+      </div>
     </div>
+  </div>
 
-
-    <!-- Zone 2: Table 5 (accepted but not processed) -->
-    <div class="drop-zone optional" id="dz-t5" ondrop="handleDrop(event,'t5')" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)">
-      <div class="dz-check">✓</div>
-      <input type="file" accept=".xls,.html,.htm" onchange="handleFiles(this.files,'t5')">
-      <div class="dz-icon">📋</div>
-      <h3>טבלה 5 — זכויות בניה <span class="dz-optional-tag">אופציונלי</span></h3>
-      <p>קובץ XLS "זכויות והוראות בניה"<br>או קובץ <strong>sheet001.htm</strong></p>
-      <div class="dz-filename" id="fn-t5"></div>
-    </div>
-
-    <!-- Zone 3: Word תקנון (optional) -->
-    <div class="drop-zone optional" id="dz-word" ondrop="handleDrop(event,'word')" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)">
-      <div class="dz-check">✓</div>
-      <input type="file" accept=".doc,.docx" onchange="handleFiles(this.files,'word')">
-      <div class="dz-icon">📝</div>
-      <h3>תקנון Word <span class="dz-optional-tag">אופציונלי</span></h3>
-      <p>מסמך Word (.doc / .docx) של התקנון<br><small>(לחילוץ טבלה 5 אוטומטי)</small></p>
-      <div class="dz-filename" id="fn-word"></div>
-    </div>
-
-    <!-- Zone 4: Program PDF (optional) -->
-    <div class="drop-zone optional" id="dz-prog" ondrop="handleDrop(event,'prog')" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)">
+  <!-- Secondary (smaller) inputs: פרוגרמה מימין, תקנון משמאל -->
+  <div class="drop-grid drop-grid-sec">
+    <!-- Zone 4: Program PDF (optional) — right -->
+    <div class="drop-zone optional small" id="dz-prog" ondrop="handleDrop(event,'prog')" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)">
       <div class="dz-check">✓</div>
       <input type="file" accept=".json,.pdf" onchange="handleFiles(this.files,'prog')">
       <div class="dz-icon">📊</div>
       <h3>נספח פרוגרמה <span class="dz-optional-tag">אופציונלי</span></h3>
       <p>PDF נספח פרוגרמה לצורכי ציבור<br><small>(ינותח אוטומטית)</small></p>
       <div class="dz-filename" id="fn-prog"></div>
+    </div>
+
+    <!-- Zone 3: Word תקנון (optional) — left -->
+    <div class="drop-zone optional small" id="dz-word" ondrop="handleDrop(event,'word')" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)">
+      <div class="dz-check">✓</div>
+      <input type="file" accept=".doc,.docx" onchange="handleFiles(this.files,'word')">
+      <div class="dz-icon">📝</div>
+      <h3>תקנון Word <span class="dz-optional-tag">אופציונלי</span></h3>
+      <p>מסמך Word (.doc / .docx) של התקנון<br><small>(לחילוץ טבלה 5 אוטומטי)</small></p>
+      <div class="dz-filename" id="fn-word"></div>
     </div>
   </div>
 
