@@ -4196,7 +4196,8 @@ function _rnHidePanel(){
 
 function enterRoadEdit(){
   if(!state.layers.plan) return;
-  if(RE.nodes.length===0&&RE.edges.length===0) _loadRoadFromStorage();
+  // Road network is owned by the active project (loaded via _projApplyInputs).
+  // Do NOT reload from the legacy global key — it leaked nets across plans.
   RE.active=true;RE.finalized=false;
   RE.drawFrom=null;RE.curveWpts=[];RE.sel=null;RE.dragNodeId=null;
   document.getElementById('btn-road-net').classList.remove('active');
@@ -4685,18 +4686,13 @@ function _routePath(x1,y1,x2,y2,verts,adj){
 const _RE_STORE='tasrit_road_net';
 function saveRoadNetwork(){
   try{
-    localStorage.setItem(_RE_STORE,JSON.stringify({
-      nodes:RE.nodes,edges:RE.edges,pendingEdges:RE.pendingEdges,
-      phase:RE.phase,nId:RE.nId,eId:RE.eId,finalized:RE.finalized,visible:RE.visible,
-      nodesVisible:RE.nodesVisible,edgesVisible:RE.edgesVisible,edgeDistVisible:RE.edgeDistVisible,
-    }));
     RE.dirty=false;
+    _projSaveInputs(); // persist to the active project (per-plan), not a shared global key
     _showToast('הרשת נשמרה ✓');
   }catch(e){alert('שגיאה בשמירה: '+e);}
 }
 function deleteRoadNetwork(){
   if(!confirm('למחוק את רשת הדרכים השמורה?')) return;
-  try{localStorage.removeItem(_RE_STORE);}catch(e){}
   RE.nodes=[];RE.edges=[];RE.pendingEdges=[];
   RE.nId=0;RE.eId=0;RE.finalized=false;RE.active=false;RE.visible=true;
   RE.nodesVisible=true;RE.edgesVisible=true;RE.edgeDistVisible=true;
@@ -4705,6 +4701,7 @@ function deleteRoadNetwork(){
   _restoreVis();
   document.getElementById('btn-road-net').classList.remove('active');
   _rnHidePanel();
+  _projSaveInputs(); // persist the cleared net to the active project
   redraw();
 }
 
@@ -9511,6 +9508,9 @@ function _escAttr(s){if(!s)return '';return String(s).replace(/&/g,'&amp;').repl
 const _PROJ_ACTIVE_KEY='tasrit_active_project';
 let _projLoading=false;
 let _projLastHash='';
+// One-time cleanup: the legacy global road-net key leaked nets across plans.
+// Road networks are now stored per-project; drop the shared key for good.
+try{localStorage.removeItem('tasrit_road_net');}catch(e){}
 
 function _projActiveId(){try{return localStorage.getItem(_PROJ_ACTIVE_KEY)||null}catch(e){return null}}
 function _projSetActive(id){try{id?localStorage.setItem(_PROJ_ACTIVE_KEY,id):localStorage.removeItem(_PROJ_ACTIVE_KEY)}catch(e){}}
