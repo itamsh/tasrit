@@ -2889,29 +2889,24 @@ function _convexHull(pts){
   h.pop();
   return h.length>=3?h:null;
 }
+// Building-envelope area via grid flood-fill.
+// A convex hull of the setback-line points overshoots for concave (L/C-shaped)
+// parcels because it fills in the courtyard. Instead we rasterize the zone
+// interior, treat the קו-בניין lines as walls, flood the buildable interior from
+// its deepest point, and count the cells the flood reaches. This measures the
+// TRUE buildable area for any parcel shape.
 function _calcBuildEnvArea(zoneFeat){
-  if(!state.layers.arc||!state.spanMeters) return null;
-  const pts=[],tol=0.5;
-  function addPt(x,y){for(const q of pts)if(Math.hypot(q[0]-x,q[1]-y)<tol)return;pts.push([x,y]);}
+  if(!state.layers.arc||!state.spanMeters||!zoneFeat.geometry) return null;
   const zc=zoneFeat.geometry.coordinates;
   const zrings=Array.isArray(zc[0][0][0])?zc.flat(1):zc;
   let zx0=Infinity,zx1=-Infinity,zy0=Infinity,zy1=-Infinity;
   for(const ring of zrings)for(const [x,y] of ring){
     if(x<zx0)zx0=x;if(x>zx1)zx1=x;if(y<zy0)zy0=y;if(y>zy1)zy1=y;
   }
-  // Returns true if (x,y) lies on the zone boundary (within tol)
-  function onBoundary(x,y){
-    for(const ring of zrings){
-      for(let i=0;i<ring.length-1;i++){
-        const ax=ring[i][0],ay=ring[i][1],bx=ring[i+1][0],by=ring[i+1][1];
-        const dx=bx-ax,dy=by-ay,len2=dx*dx+dy*dy;
-        if(len2<0.001) continue;
-        const t=Math.max(0,Math.min(1,((x-ax)*dx+(y-ay)*dy)/len2));
-        if(Math.hypot(x-(ax+t*dx),y-(ay+t*dy))<1.5) return true;
-      }
-    }
-    return false;
-  }
+  if(!isFinite(zx0)||zx1<=zx0||zy1<=zy0) return null;
+
+  // ── Collect this zone's setback-line segments (clipped to the interior) ──
+  const segs=[];
   for(const af of state.layers.arc.features){
     if(Number(af.properties.MAVAT_CODE)!==21010||!af.geometry) continue;
     const coords=af.geometry.type==='LineString'?af.geometry.coordinates:af.geometry.coordinates.flat();
@@ -2919,23 +2914,103 @@ function _calcBuildEnvArea(zoneFeat){
       const p1=coords[i],p2=coords[i+1];
       if(Math.max(p1[0],p2[0])<zx0||Math.min(p1[0],p2[0])>zx1) continue;
       if(Math.max(p1[1],p2[1])<zy0||Math.min(p1[1],p2[1])>zy1) continue;
-      for(const [a,b] of _segClipAllPts(p1,p2,zoneFeat)){
-        // Discard near-degenerate segments and those whose midpoint lies ON the
-        // zone boundary — those belong to adjacent/inner zones, not this zone
-        if(Math.hypot(b[0]-a[0],b[1]-a[1])<1.0) continue;
-        const mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2;
-        if(onBoundary(mx,my)) continue;
-        addPt(a[0],a[1]);addPt(b[0],b[1]);
-      }
+      for(const [a,b] of _segClipAllPts(p1,p2,zoneFeat)) segs.push([a,b]);
     }
   }
-  if(pts.length<3) return null;
-  const hull=_convexHull(pts);
-  if(!hull) return null;
-  let area=0;
-  for(let i=0,j=hull.length-1;i<hull.length;j=i++) area+=hull[j][0]*hull[i][1]-hull[i][0]*hull[j][1];
+  if(!segs.length) return null;
+
+  // ── Build grid (target ~0.6 m cells, capped so it stays fast) ──
   const mpu=state.spanMeters/DATA_SIZE;
-  return Math.abs(area)/2*mpu*mpu;
+  const bw=zx1-zx0, bh=zy1-zy0;
+  let h=0.6/mpu;                       // 0.6 m in data units
+  const MAX_CELLS=200000;
+  let nx=Math.ceil(bw/h)+3, ny=Math.ceil(bh/h)+3;
+  if(nx*ny>MAX_CELLS){
+    h*=Math.sqrt(nx*ny/MAX_CELLS);
+    nx=Math.ceil(bw/h)+3; ny=Math.ceil(bh/h)+3;
+  }
+  const ox=zx0-h, oy=zy0-h;
+  const N=nx*ny;
+  const inside=new Uint8Array(N);
+  const wall=new Uint8Array(N);
+  const ci=(ix,iy)=>iy*nx+ix;
+
+  // Mark interior cells
+  for(let iy=0;iy<ny;iy++){
+    const cy=oy+(iy+0.5)*h;
+    for(let ix=0;ix<nx;ix++){
+      const cx=ox+(ix+0.5)*h;
+      if(_pipFeat(cx,cy,zoneFeat)) inside[ci(ix,iy)]=1;
+    }
+  }
+
+  // Rasterize setback lines as walls (dense sampling → 8-connected barrier)
+  for(const [a,b] of segs){
+    const dx=b[0]-a[0],dy=b[1]-a[1];
+    const len=Math.hypot(dx,dy);
+    const steps=Math.max(1,Math.ceil(len/(h*0.4)));
+    for(let s=0;s<=steps;s++){
+      const t=s/steps;
+      const ix=Math.floor((a[0]+dx*t-ox)/h);
+      const iy=Math.floor((a[1]+dy*t-oy)/h);
+      if(ix>=0&&ix<nx&&iy>=0&&iy<ny) wall[ci(ix,iy)]=1;
+    }
+  }
+
+  // ── Find seed = interior cell deepest inside the zone (guaranteed buildable) ──
+  // Multi-source BFS of "distance from boundary", ignoring walls.
+  const dist=new Int32Array(N).fill(-1);
+  let head=0, tail=0;
+  const q=new Int32Array(N);
+  for(let iy=0;iy<ny;iy++)for(let ix=0;ix<nx;ix++){
+    const k=ci(ix,iy);
+    if(!inside[k]){ dist[k]=0; q[tail++]=k; }
+  }
+  let seed=-1, seedDist=-1;
+  while(head<tail){
+    const k=q[head++]; const d=dist[k];
+    const ix=k%nx, iy=(k-ix)/nx;
+    if(inside[k]&&!wall[k]&&d>seedDist){ seedDist=d; seed=k; }
+    const nb=[[ix-1,iy],[ix+1,iy],[ix,iy-1],[ix,iy+1]];
+    for(const [jx,jy] of nb){
+      if(jx<0||jx>=nx||jy<0||jy>=ny) continue;
+      const kk=ci(jx,jy);
+      if(dist[kk]<0){ dist[kk]=d+1; q[tail++]=kk; }
+    }
+  }
+  if(seed<0) return null;
+
+  // ── Flood buildable region from seed, blocked by walls and zone boundary ──
+  const seen=new Uint8Array(N);
+  head=0; tail=0;
+  q[tail++]=seed; seen[seed]=1;
+  let count=0;
+  while(head<tail){
+    const k=q[head++];
+    count++;
+    const ix=k%nx, iy=(k-ix)/nx;
+    const nb=[[ix-1,iy],[ix+1,iy],[ix,iy-1],[ix,iy+1]];
+    for(const [jx,jy] of nb){
+      if(jx<0||jx>=nx||jy<0||jy>=ny) continue;
+      const kk=ci(jx,jy);
+      if(seen[kk]||!inside[kk]||wall[kk]) continue;
+      seen[kk]=1; q[tail++]=kk;
+    }
+  }
+
+  // Add half the bordering wall cells so the setback-line thickness isn't lost
+  let wallEdge=0;
+  for(let k=0;k<N;k++){
+    if(!wall[k]||!inside[k]) continue;
+    const ix=k%nx, iy=(k-ix)/nx;
+    const nb=[[ix-1,iy],[ix+1,iy],[ix,iy-1],[ix,iy+1]];
+    for(const [jx,jy] of nb){
+      if(jx<0||jx>=nx||jy<0||jy>=ny) continue;
+      if(seen[ci(jx,jy)]){ wallEdge++; break; }
+    }
+  }
+  const cells=count+wallEdge*0.5;
+  return cells*h*h*mpu*mpu;
 }
 
 function drawRoadWidth(polyCoords,span){
