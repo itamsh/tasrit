@@ -478,6 +478,21 @@ body.theme-light .fv2-cell{border-color:#c8d8ea}
 .gas-knob{position:absolute;width:12px;height:12px;background:#3a7acc;border:2px solid #5a9aee;border-radius:50%;top:50%;transform:translate(-50%,-50%);cursor:grab;transition:background .1s}
 .gas-knob:active,.gas-knob.dragging{cursor:grabbing;background:#5a9aee}
 .gas-lbl{font-size:10px;color:#7ecfff;min-width:30px;text-align:center;font-family:monospace;user-select:none}
+/* ── Basemap picker ── */
+#bm-panel{position:fixed;top:52px;left:10px;z-index:320;width:212px;background:#101a28;border:1px solid #2d4060;border-radius:10px;box-shadow:0 8px 22px rgba(0,0,0,.5);padding:11px;display:none;direction:rtl}
+#bm-panel.vis{display:block}
+.bm-hdr{display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:700;color:#7ecfff;margin-bottom:9px}
+.bm-x{background:none;border:none;color:#8aa;cursor:pointer;font-size:13px}
+.bm-opts{display:flex;flex-direction:column;gap:5px}
+.bm-opt{background:#16283c;border:1px solid #2a4058;color:#9cc;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;text-align:right}
+.bm-opt:hover{background:#1e3a52}
+.bm-opt.on{background:#1a3a5a;border-color:#4a8acc;color:#bfe6ff;font-weight:600}
+#bm-opacity-wrap{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:11px;color:#8aa}
+#bm-opacity{flex:1}
+.bm-note{font-size:9.5px;color:#5a7288;margin-top:8px;line-height:1.4}
+body.theme-light #bm-panel{background:#fff;border-color:#c4d4e6}
+body.theme-light .bm-opt{background:#eef3fa;border-color:#d0dcec;color:#25517a}
+body.theme-light .bm-opt.on{background:#d8ebfb;border-color:#5a9adc;color:#154a78}
 /* ── Projects ── */
 #proj-panel{position:fixed;top:52px;left:10px;z-index:320;width:340px;max-height:70vh;overflow-y:auto;background:#101a28;border:1px solid #2d4060;border-radius:10px;box-shadow:0 8px 26px rgba(0,0,0,.55);padding:12px;display:none;direction:rtl}
 #proj-panel.vis{display:block}
@@ -861,6 +876,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
     <div class="tb-sep t5-hide"></div>
     <button class="tb-btn active t5-hide" id="btn-labels" onclick="toggleLabels()" title="הצג/הסתר תגיות תאי שטח">🏷 תגיות</button>
     <button class="tb-btn t5-hide" id="btn-grid" onclick="toggleGrid()" title="הצג/הסתר רשת 10מ׳ × 100מ׳">⊞ גריד</button>
+    <button class="tb-btn t5-hide" id="btn-basemap" onclick="_bmTogglePanel()" title="הצג מפת רקע גאוגרפית (תצלום אוויר / רחובות)">🌍 רקע</button>
     <button class="tb-btn t5-hide" id="btn-rachak" onclick="toggleRachakMode()" title="הצג מפת רח״ק לפי טבלה 5">🏢 רח״ק</button>
     <button class="tb-btn t5-hide" id="btn-density" onclick="toggleDensityMode()" title="הצג מפת צפיפות יח״ד/דונם לפי טבלה 5">🏘 צפיפות</button>
     <div class="tb-sep t5-hide"></div>
@@ -899,6 +915,22 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
       </label>
     </div>
     <div class="proj-list" id="proj-list-toolbar"></div>
+  </div>
+
+  <!-- Basemap picker -->
+  <div id="bm-panel">
+    <div class="bm-hdr">🌍 מפת רקע<button class="bm-x" onclick="_bmTogglePanel()">✕</button></div>
+    <div class="bm-opts">
+      <button class="bm-opt on" data-mode="off" onclick="setBasemap('off')">כבוי</button>
+      <button class="bm-opt" data-mode="aerial" onclick="setBasemap('aerial')">🛰 תצלום אוויר</button>
+      <button class="bm-opt" data-mode="streets" onclick="setBasemap('streets')">🗺 רחובות</button>
+    </div>
+    <div id="bm-opacity-wrap" style="display:none">
+      <span>שקיפות</span>
+      <input type="range" id="bm-opacity" min="0.15" max="1" step="0.05" value="0.75"
+             oninput="setBasemapOpacity(this.value)">
+    </div>
+    <div class="bm-note">מבוסס על קואורדינטות רשת ישראל (ITM) של התוכנית</div>
   </div>
 
   <!-- Grid angle strip -->
@@ -1518,6 +1550,8 @@ progParsing:false,
   roadNetworkVisible: false,
   gridVisible: false,
   gridAngle: 0,
+  basemap: 'off',      // 'off' | 'aerial' | 'streets' — georeferenced background map
+  basemapOpacity: 0.75,
   rachakMode: false,
   rachakFixed: false,   // false = dynamic (plan max), true = fixed 1–12
   densityMode: false,
@@ -2358,6 +2392,11 @@ function normalizeAll(){
   }
   const span=Math.max(maxX-minX,maxY-minY)||1;
   state.spanMeters=span;
+  // Geographic anchor (ITM / EPSG:2039): lets us map the normalized draw-space
+  // back to real-world coordinates for a georeferenced basemap. Only meaningful
+  // when the source is real ITM data (SHP / Xplan). normalized→ITM:
+  //   itmX = nx/DATA_SIZE*span + minX ;  itmY = ny/DATA_SIZE*span + minY
+  state.geoAnchor={minX,minY,span,plausibleITM:(minX>120000&&minX<320000&&minY>380000&&minY<820000)};
   // Store GVUL/reference bounds in normalized data-space for resetView()
   state.gvulBounds={
     minX:0, minY:0,
@@ -2426,6 +2465,76 @@ function zoomAt(mx,my,f){
 }
 
 // ============================================================
+// GEOREFERENCED BASEMAP (Level 1 — aligned background image)
+// ============================================================
+const BASEMAP_SRC={
+  aerial:{url:'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export',format:'jpg'},
+  streets:{url:'https://ags.iplan.gov.il/arcgisiplan/rest/services/PlanningPublic/xplan_background/MapServer/export',format:'png'}
+};
+let _bm={img:null,box:null,key:'',loading:false};
+let _bmTimer=null;
+try{const s=localStorage.getItem('tasrit_basemap'); if(s==='aerial'||s==='streets') state.basemap=s;}catch(e){}
+
+function _normToITM(nx,ny){
+  const a=state.geoAnchor; if(!a) return [0,0];
+  return [nx/DATA_SIZE*a.span+a.minX, ny/DATA_SIZE*a.span+a.minY];
+}
+function _canvasITMBox(){
+  if(!state.geoAnchor) return null;
+  const corners=[cd(0,0),cd(canvas.width,0),cd(0,canvas.height),cd(canvas.width,canvas.height)];
+  let xmin=Infinity,ymin=Infinity,xmax=-Infinity,ymax=-Infinity;
+  for(const [nx,ny] of corners){
+    const [ix,iy]=_normToITM(nx,ny);
+    if(ix<xmin)xmin=ix; if(ix>xmax)xmax=ix; if(iy<ymin)ymin=iy; if(iy>ymax)ymax=iy;
+  }
+  return {xmin,ymin,xmax,ymax};
+}
+// Draw the cached image, positioned by its stored ITM box → stays aligned while panning/zooming
+function _drawBasemap(){
+  if(state.basemap==='off'||!_bm.img||!_bm.box||!state.geoAnchor) return;
+  const b=_bm.box,a=state.geoAnchor;
+  const [sx0,sy0]=dc((b.xmin-a.minX)/a.span*DATA_SIZE,(b.ymax-a.minY)/a.span*DATA_SIZE);
+  const [sx1,sy1]=dc((b.xmax-a.minX)/a.span*DATA_SIZE,(b.ymin-a.minY)/a.span*DATA_SIZE);
+  ctx.save(); ctx.globalAlpha=state.basemapOpacity;
+  try{ctx.drawImage(_bm.img,sx0,sy0,sx1-sx0,sy1-sy0);}catch(e){}
+  ctx.restore();
+}
+function _scheduleBasemap(){
+  if(state.basemap==='off'||!state.geoAnchor||!state.geoAnchor.plausibleITM) return;
+  clearTimeout(_bmTimer);
+  _bmTimer=setTimeout(()=>{
+    const box=_canvasITMBox(); if(!box) return;
+    const src=BASEMAP_SRC[state.basemap]; if(!src) return;
+    let W=canvas.width,H=canvas.height;
+    const sc=Math.min(1,1600/Math.max(W,H)); W=Math.max(1,Math.round(W*sc)); H=Math.max(1,Math.round(H*sc));
+    const key=`${state.basemap}|${box.xmin.toFixed(0)},${box.ymin.toFixed(0)},${box.xmax.toFixed(0)},${box.ymax.toFixed(0)}|${W}x${H}`;
+    if(key===_bm.key&&_bm.img) return;
+    const url=`${src.url}?bbox=${box.xmin},${box.ymin},${box.xmax},${box.ymax}&bboxSR=2039&imageSR=2039&size=${W},${H}&format=${src.format}&f=image`;
+    const img=new Image(); img.crossOrigin='anonymous';
+    img.onload=()=>{_bm.img=img;_bm.box=box;_bm.key=key;_bm.loading=false;redraw();};
+    img.onerror=()=>{_bm.loading=false;};
+    _bm.loading=true; img.src=url;
+  },260);
+}
+function setBasemap(mode){
+  state.basemap=mode;
+  try{localStorage.setItem('tasrit_basemap',mode);}catch(e){}
+  _bmSyncUI();
+  if(mode==='off'){_bm.img=null;_bm.box=null;_bm.key='';}
+  else _scheduleBasemap();
+  redraw();
+}
+function setBasemapOpacity(v){ state.basemapOpacity=Math.max(0,Math.min(1,parseFloat(v)||0)); redraw(); }
+function _bmTogglePanel(){ const p=document.getElementById('bm-panel'); if(p) p.classList.toggle('vis'); }
+function _bmSyncUI(){
+  document.querySelectorAll('.bm-opt').forEach(b=>b.classList.toggle('on',b.dataset.mode===state.basemap));
+  const ow=document.getElementById('bm-opacity-wrap'); if(ow) ow.style.display=(state.basemap==='off')?'none':'flex';
+  const os=document.getElementById('bm-opacity'); if(os) os.value=state.basemapOpacity;
+  const btn=document.getElementById('btn-basemap'); if(btn) btn.classList.toggle('active',state.basemap!=='off');
+}
+_bmSyncUI(); // reflect any restored basemap preference in the toolbar UI
+
+// ============================================================
 // 11. RENDERING
 // ============================================================
 function getStyle(code){
@@ -2467,6 +2576,10 @@ function redraw(){
   dimItems=[];
   ctx.clearRect(0,0,canvas.width,canvas.height);
   const sp=state.spanMeters;
+
+  // 0. Georeferenced basemap (drawn underneath everything); refresh for current view
+  _drawBasemap();
+  _scheduleBasemap();
 
   // 1. Plan boundary
   if(state.layers.gvul&&state.gvulVisible){
