@@ -491,6 +491,18 @@ body.theme-light .fv2-cell{border-color:#c8d8ea}
 #bm-opacity-wrap{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:11px;color:#8aa}
 #bm-opacity{flex:1}
 .bm-note{font-size:9.5px;color:#5a7288;margin-top:8px;line-height:1.4}
+/* ── Layer opacity controls ── */
+.op-btn{background:none;border:1px solid #3a5070;color:#9bd;border-radius:5px;padding:0 5px;font-size:12px;line-height:1.5;cursor:pointer}
+.op-btn:hover{background:#22354a;border-color:#4a7aaa}
+.leg-opacity-row{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:#8ab;padding:4px 4px 8px;margin-bottom:4px;border-bottom:1px solid #1f2e42}
+#opacity-strip{position:fixed;z-index:330;background:#141e2e;border:1px solid #2d4060;border-radius:8px;padding:7px 11px;display:none;align-items:center;gap:9px;box-shadow:0 4px 14px rgba(0,0,0,.55);direction:rtl}
+#opacity-strip.vis{display:flex}
+#op-label{font-size:11px;color:#7ecfff;white-space:nowrap;user-select:none}
+#op-range{width:150px}
+#op-pct{font-size:11px;color:#9bd;min-width:38px;text-align:center;font-family:monospace;user-select:none}
+body.theme-light .op-btn{border-color:#bcd;color:#3a6a9a}
+body.theme-light .leg-opacity-row{color:#456;border-bottom-color:#dde5ef}
+body.theme-light #opacity-strip{background:#fff;border-color:#c4d4e6}
 #map-credit{position:fixed;bottom:6px;left:8px;z-index:150;font-size:10px;color:#8aa;background:rgba(10,18,28,.6);padding:2px 8px;border-radius:5px;pointer-events:none;user-select:none;direction:rtl}
 body.theme-light #map-credit{color:#456;background:rgba(255,255,255,.7)}
 body.theme-light #bm-panel{background:#fff;border-color:#c4d4e6}
@@ -945,6 +957,14 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
     <span class="gas-lbl" id="gas-lbl">0°</span>
   </div>
 
+  <!-- Layer opacity strip -->
+  <div id="opacity-strip">
+    <span id="op-label">שקיפות</span>
+    <input type="range" id="op-range" min="0" max="1" step="0.02" value="1"
+           oninput="_setLayerOpacity(this.value)">
+    <span id="op-pct">100%</span>
+  </div>
+
   <!-- Data-source attribution -->
   <div id="map-credit">מקור נתונים: מינהל התכנון (iplan)</div>
 
@@ -959,6 +979,10 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 
   <div id="main-area">
     <div id="legend">
+      <div class="leg-opacity-row">
+        <span>שקיפות שכבות (כללי)</span>
+        <button class="op-btn" title="שליטה בשקיפות כל השכבות" onclick="_openOpacity('global',this)">🎚</button>
+      </div>
       <h3 style="display:flex;align-items:center;justify-content:space-between">
         <span>גבול תוכנית (GVUL)</span>
         <input type="checkbox" id="chk-gvul" checked title="הצג/הסתר גבול תוכנית"
@@ -973,17 +997,23 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
       </div>
       <h3 style="display:flex;align-items:center;justify-content:space-between">
         <span>ייעודי קרקע (PLAN)</span>
-        <input type="checkbox" id="chk-plan" checked title="הצג/הסתר ייעודי קרקע"
-               style="cursor:pointer;accent-color:#2980b9;flex-shrink:0"
-               onchange="togglePlanMaster(this.checked)">
+        <span style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+          <button class="op-btn" title="שקיפות ייעודי קרקע" onclick="_openOpacity('plan',this)">🎚</button>
+          <input type="checkbox" id="chk-plan" checked title="הצג/הסתר ייעודי קרקע"
+                 style="cursor:pointer;accent-color:#2980b9"
+                 onchange="togglePlanMaster(this.checked)">
+        </span>
       </h3>
       <div id="leg-zones"></div>
       <div id="leg-pol-hdr" style="display:none">
         <h3 style="display:flex;align-items:center;justify-content:space-between">
           <span>פוליגונים (POL)</span>
-          <input type="checkbox" id="chk-pol" checked title="הצג/הסתר שכבת POL"
-                 style="cursor:pointer;accent-color:#2980b9;flex-shrink:0"
-                 onchange="togglePolMaster(this.checked)">
+          <span style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+            <button class="op-btn" title="שקיפות פוליגונים" onclick="_openOpacity('pol',this)">🎚</button>
+            <input type="checkbox" id="chk-pol" checked title="הצג/הסתר שכבת POL"
+                   style="cursor:pointer;accent-color:#2980b9"
+                   onchange="togglePolMaster(this.checked)">
+          </span>
         </h3>
       </div>
       <div id="leg-pol"></div>
@@ -1558,6 +1588,7 @@ progParsing:false,
   gridAngle: 0,
   basemap: 'off',      // 'off' | 'aerial' | 'streets' — georeferenced background map
   basemapOpacity: 0.75,
+  opacity: {global:1, plan:1, pol:1}, // per-layer opacity multipliers (0..1)
   rachakMode: false,
   rachakFixed: false,   // false = dynamic (plan max), true = fixed 1–12
   densityMode: false,
@@ -2549,6 +2580,35 @@ function _bmSyncUI(){
 }
 _bmSyncUI(); // reflect any restored basemap preference in the toolbar UI
 
+// ── Layer opacity controls (global / plan / pol) ──
+let _opacityTarget=null;
+const _OP_LABELS={global:'כללי',plan:'ייעודי קרקע',pol:'פוליגונים'};
+function _openOpacity(target,btn){
+  const strip=document.getElementById('opacity-strip'); if(!strip) return;
+  if(_opacityTarget===target&&strip.classList.contains('vis')){ _closeOpacity(); return; }
+  _opacityTarget=target;
+  document.getElementById('op-label').textContent='שקיפות: '+(_OP_LABELS[target]||'');
+  document.getElementById('op-range').value=state.opacity[target];
+  document.getElementById('op-pct').textContent=Math.round(state.opacity[target]*100)+'%';
+  const b=btn.getBoundingClientRect();
+  strip.style.top=(b.bottom+6)+'px';
+  strip.style.left=Math.max(6,Math.min(window.innerWidth-236,b.left-110))+'px';
+  strip.classList.add('vis');
+}
+function _closeOpacity(){ const s=document.getElementById('opacity-strip'); if(s) s.classList.remove('vis'); }
+function _setLayerOpacity(v){
+  if(!_opacityTarget) return;
+  state.opacity[_opacityTarget]=Math.max(0,Math.min(1,parseFloat(v)||0));
+  document.getElementById('op-pct').textContent=Math.round(state.opacity[_opacityTarget]*100)+'%';
+  redraw();
+}
+document.addEventListener('mousedown',(e)=>{
+  const s=document.getElementById('opacity-strip');
+  if(!s||!s.classList.contains('vis')) return;
+  if(s.contains(e.target)||(e.target.classList&&e.target.classList.contains('op-btn'))) return;
+  _closeOpacity();
+});
+
 // ============================================================
 // 11. RENDERING
 // ============================================================
@@ -2596,11 +2656,12 @@ function redraw(){
   _drawBasemap();
   _scheduleBasemap();
 
+  const OG=state.opacity.global, OPL=state.opacity.plan, OPO=state.opacity.pol;
   // 1. Plan boundary
   if(state.layers.gvul&&state.gvulVisible){
     for(const f of state.layers.gvul.features){
       if(!f.geometry) continue;
-      drawPolygon(f.geometry.coordinates,'none','#1a3a6e',2.5,1);
+      drawPolygon(f.geometry.coordinates,'none','#1a3a6e',2.5,1*OG);
     }
   }
   // 2. POL
@@ -2610,7 +2671,7 @@ function redraw(){
       const code=f.properties.MAVAT_CODE;
       if(state.polLayerVisible[code]===false) continue;
       const st=getStyle(code)||getStyleByName(fixHebrew(f.properties.MAVAT_NAME))||DEFAULT_POLY;
-      drawPolygon(f.geometry.coordinates,effectiveFill(st),st.s,st.sw||0.8,.7);
+      drawPolygon(f.geometry.coordinates,effectiveFill(st),st.s,st.sw||0.8,.7*OPO*OG);
       if(sp&&state.dims.all&&state.dims.edges){
         const bb=polyScreenBBox(f.geometry.coordinates);
         if(Math.min(bb.w,bb.h)>160) drawEdgeDimensions(f.geometry.coordinates,sp);
@@ -2633,7 +2694,7 @@ function redraw(){
           ?_densityColor(_densityMap[String(num)])
           :(fillOn?effectiveFill(st):'none');
       const choroBorder=(state.rachakMode||state.densityMode)?'#555':st.s;
-      drawPolygon(f.geometry.coordinates,fillColor,choroBorder,isHov?2.5:1.2,isHov?.95:.8);
+      drawPolygon(f.geometry.coordinates,fillColor,choroBorder,isHov?2.5:1.2,(isHov?.95:.8)*OPL*OG);
       if(fillOn&&sp&&state.dims.all){
         const bb=polyScreenBBox(f.geometry.coordinates);
         if(isRoad(code)){
@@ -2646,6 +2707,7 @@ function redraw(){
   }
   // 4. ARC lines
   if(state.layers.arc&&state.arcAllVisible){
+    ctx.globalAlpha=OG;
     for(const f of state.layers.arc.features){
       if(!f.geometry) continue;
       const code=f.properties.MAVAT_CODE;
@@ -2656,6 +2718,7 @@ function redraw(){
         :f.geometry.coordinates.flat();
       drawLine(coords,st.s,st.sw||1,st.dash||[]);
     }
+    ctx.globalAlpha=1;
     if(sp&&state.dims.all&&state.dims.arcLines){
       const f21=state.layers.arc.features.filter(
         f=>Number(f.properties.MAVAT_CODE)===21010&&f.geometry&&state.lineLayerVisible[f.properties.MAVAT_CODE]!==false
