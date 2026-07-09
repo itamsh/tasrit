@@ -2674,7 +2674,7 @@ function redraw(){
       drawPolygon(f.geometry.coordinates,effectiveFill(st),st.s,st.sw||0.8,.7*OPO*OG);
       if(sp&&state.dims.all&&state.dims.edges){
         const bb=polyScreenBBox(f.geometry.coordinates);
-        if(Math.min(bb.w,bb.h)>160) drawEdgeDimensions(f.geometry.coordinates,sp);
+        if(Math.min(bb.w,bb.h)>160){ ctx.globalAlpha=OG; drawEdgeDimensions(f.geometry.coordinates,sp); ctx.globalAlpha=1; }
       }
     }
   }
@@ -2697,11 +2697,13 @@ function redraw(){
       drawPolygon(f.geometry.coordinates,fillColor,choroBorder,isHov?2.5:1.2,(isHov?.95:.8)*OPL*OG);
       if(fillOn&&sp&&state.dims.all){
         const bb=polyScreenBBox(f.geometry.coordinates);
+        ctx.globalAlpha=OG;
         if(isRoad(code)){
           if(state.dims.roads&&Math.max(bb.w,bb.h)>180) drawRoadWidth(f.geometry.coordinates,sp);
         } else {
           if(state.dims.edges&&Math.min(bb.w,bb.h)>160) drawEdgeDimensions(f.geometry.coordinates,sp);
         }
+        ctx.globalAlpha=1;
       }
     }
   }
@@ -2718,7 +2720,7 @@ function redraw(){
         :f.geometry.coordinates.flat();
       drawLine(coords,st.s,st.sw||1,st.dash||[]);
     }
-    ctx.globalAlpha=1;
+    // keep OG active through the ARC dimension text too
     if(sp&&state.dims.all&&state.dims.arcLines){
       const f21=state.layers.arc.features.filter(
         f=>Number(f.properties.MAVAT_CODE)===21010&&f.geometry&&state.lineLayerVisible[f.properties.MAVAT_CODE]!==false
@@ -2726,6 +2728,7 @@ function redraw(){
       if(f21.length) drawArcLineDimensions(f21,sp,90);
     }
     if(sp&&state.dims.all&&state.dims.setbacks) drawSetbacks(sp,30);
+    ctx.globalAlpha=1;
   }
   // 5. Zone number labels — regular or choropleth value
   const _inChoro=state.rachakMode||state.densityMode;
@@ -2742,6 +2745,7 @@ function redraw(){
       const la=+f.properties.LEGAL_AREA||0;
       numToArea[k]=sa>0?sa:(la>0?la:0);
     }
+    ctx.globalAlpha=OG; // labels fade with the GLOBAL control only (not plan/pol)
     for(const f of state.layers.plan_num.features){
       if(!f.geometry) continue;
       const num=String(f.properties.NUM||'');
@@ -2773,6 +2777,7 @@ function redraw(){
       }
     }
   }
+  ctx.globalAlpha=1; // reset after label layer
   document.getElementById('zoom-info').textContent='זום: ×'+scale.toFixed(1);
   // highlight selected dimension
   if(selectedDimIdx!==null&&selectedDimIdx<dimItems.length){
