@@ -883,32 +883,40 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 <div id="map-page">
   <div id="toolbar">
     <h1 id="plan-title">תצוגת תשריט</h1>
-    <div class="tb-sep t5-hide"></div>
-    <button class="tb-btn t5-hide" onclick="resetView()">↩ איפוס תצוגה</button>
-    <div class="tb-sep"></div>
-    <button class="tb-btn" id="btn-back" onclick="backToUpload()">⇦ טעינת קבצים</button>
-    <button class="tb-btn" id="btn-word" style="display:none" onclick="openWordDoc()">📝 תקנון</button>
-    <div class="tb-sep t5-hide"></div>
-    <button class="tb-btn active t5-hide" id="btn-labels" onclick="toggleLabels()" title="הצג/הסתר תגיות תאי שטח">🏷 תגיות</button>
-    <button class="tb-btn t5-hide" id="btn-grid" onclick="toggleGrid()" title="הצג/הסתר רשת 10מ׳ × 100מ׳">⊞ גריד</button>
-    <button class="tb-btn t5-hide" id="btn-basemap" onclick="_bmTogglePanel()" title="הצג מפת רקע גאוגרפית (תצלום אוויר / רחובות)">🌍 רקע</button>
-    <button class="tb-btn t5-hide" id="btn-rachak" onclick="toggleRachakMode()" title="הצג מפת רח״ק לפי טבלה 5">🏢 רח״ק</button>
-    <button class="tb-btn t5-hide" id="btn-density" onclick="toggleDensityMode()" title="הצג מפת צפיפות יח״ד/דונם לפי טבלה 5">🏘 צפיפות</button>
-    <div class="tb-sep t5-hide"></div>
-    <button class="tb-btn t5-hide" id="btn-meas-dist" onclick="setMeasMode('distance')" title="מדידת מרחק — לחץ להצבת נקודות, לחץ פעמיים לסיום">📏 מרחק</button>
-    <button class="tb-btn t5-hide" id="btn-meas-area" onclick="setMeasMode('area')" title="מדידת שטח — לחץ להצבת נקודות, לחץ פעמיים לסיום">⬡ שטח</button>
-    <span id="zoom-info" class="t5-hide"></span>
-    <div class="tb-sep t5-hide"></div>
-    <button class="tb-btn t5-hide" id="btn-search" onclick="openSearch()" title="חיפוש תא שטח (Ctrl+F)">🔍 חיפוש</button>
-    <span style="flex:1" class="t5-hide"></span>
+
+    <!-- ▸ מודולים / תצוגות -->
     <div class="tb-sep"></div>
     <button class="tb-btn active t5-hide" id="btn-tsharit" onclick="closeRoadNetPanel()" title="חזור לתצוגת תשריט">🗺 תשריט</button>
     <button class="tb-btn t5-hide" id="btn-road-net" onclick="onRoadNetClick()" title="בניית ועריכת רשת דרכים">🛣 רשת דרכים</button>
     <button class="tb-btn" id="btn-t5" onclick="openTable5View()" title="תצוגת טבלה 5 — זכויות בניה">📋 טבלה 5</button>
     <button class="tb-btn" id="btn-tama" onclick="openTamaView()" title="בדיקת תאימות תמ״א 35/4">📐 תמ״א 35/4</button>
     <button class="tb-btn" id="btn-prog" onclick="openProgView()" title="פרוגרמה לצורכי ציבור">📊 פרוגרמה</button>
+    <button class="tb-btn" id="btn-word" style="display:none" onclick="openWordDoc()">📝 תקנון</button>
+
+    <!-- ▸ שכבות ותצוגה -->
+    <div class="tb-sep t5-hide"></div>
+    <button class="tb-btn active t5-hide" id="btn-labels" onclick="toggleLabels()" title="הצג/הסתר תגיות תאי שטח">🏷 תגיות</button>
+    <button class="tb-btn t5-hide" id="btn-grid" onclick="toggleGrid()" title="הצג/הסתר רשת 100מ׳">⊞ גריד</button>
+    <button class="tb-btn t5-hide" id="btn-basemap" onclick="_bmTogglePanel()" title="מפת רקע גאוגרפית (תצלום אוויר / רחובות)">🌍 רקע</button>
+    <button class="tb-btn t5-hide" id="btn-rachak" onclick="toggleRachakMode()" title="מפת רח״ק לפי טבלה 5">🏢 רח״ק</button>
+    <button class="tb-btn t5-hide" id="btn-density" onclick="toggleDensityMode()" title="מפת צפיפות יח״ד/דונם לפי טבלה 5">🏘 צפיפות</button>
+
+    <!-- ▸ כלים -->
+    <div class="tb-sep t5-hide"></div>
+    <button class="tb-btn t5-hide" id="btn-search" onclick="openSearch()" title="חיפוש תא שטח (Ctrl+F)">🔍 חיפוש</button>
+    <button class="tb-btn t5-hide" id="btn-meas-dist" onclick="setMeasMode('distance')" title="מדידת מרחק — לחץ להצבת נקודות, לחץ פעמיים לסיום">📏 מרחק</button>
+    <button class="tb-btn t5-hide" id="btn-meas-area" onclick="setMeasMode('area')" title="מדידת שטח — לחץ להצבת נקודות, לחץ פעמיים לסיום">⬡ שטח</button>
+    <button class="tb-btn t5-hide" onclick="resetView()" title="איפוס תצוגת המפה">↩ איפוס תצוגה</button>
+    <span id="zoom-info" class="t5-hide"></span>
+
+    <span style="flex:1"></span>
+
+    <!-- ▸ קבצים -->
     <div class="tb-sep"></div>
     <button class="tb-btn" id="btn-projects" onclick="_projTogglePanel()" title="פרויקטים — מעבר בין תוכניות שמורות">📁 פרויקטים</button>
+    <button class="tb-btn" id="btn-back" onclick="backToUpload()" title="חזרה לעמוד טעינת הקבצים">⇦ טעינת קבצים</button>
+
+    <!-- ▸ הגדרות -->
     <div class="tb-sep"></div>
     <button id="btn-theme" onclick="toggleTheme()" title="החלפה בין תצוגה בהירה לכהה">
       <span id="theme-icon">🌙</span><span id="theme-lbl">כהה</span>
