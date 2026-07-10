@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Defense-in-depth: the app relies on inline handlers/styles, so 'unsafe-inline'
+     stays; the real value here is locking connect-src (exfiltration) + object-src. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data: blob:; connect-src 'self' https://ags.iplan.gov.il https://services.arcgisonline.com http://127.0.0.1:5001 http://localhost:5001; object-src 'none'; base-uri 'self';">
 <title>תצוגת תשריטים | מבא"ת</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -4610,7 +4613,16 @@ function onSearchInput(val){
       .filter(n=>n&&n.startsWith(val))
   )].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})).slice(0,25);
   if(!nums.length){dd.style.display='none';return;}
-  dd.innerHTML=nums.map(n=>`<div class="srch-item" onmousedown="event.preventDefault();jumpToZone('${n}')">${n}</div>`).join('');
+  // Build with textContent + real handlers — NUM comes from an uploaded DBF and
+  // must never be interpolated into HTML/inline JS (XSS from a booby-trapped file).
+  dd.innerHTML='';
+  for(const n of nums){
+    const item=document.createElement('div');
+    item.className='srch-item';
+    item.textContent=n;
+    item.onmousedown=e=>{e.preventDefault();jumpToZone(n);};
+    dd.appendChild(item);
+  }
   dd.style.display='block';
 }
 function _searchKeydown(e){
@@ -5282,18 +5294,18 @@ function _reMouseMove(e){
   const rect=canvas.getBoundingClientRect();
   const sx=e.clientX-rect.left,sy=e.clientY-rect.top;
   RE.hoverX=sx;RE.hoverY=sy;
-  if(RE.lasso){RE.lasso.x1=sx;RE.lasso.y1=sy;redraw();return;}
+  if(RE.lasso){RE.lasso.x1=sx;RE.lasso.y1=sy;scheduleRedraw();return;}
   if(RE.tool==='select'&&RE.dragNodeId!==null){
     const[dx,dy]=cd(sx,sy);
     const n=RE.nodes.find(n=>n.id===RE.dragNodeId);
     if(n){n.x=dx+RE.dragOffX;n.y=dy+RE.dragOffY;}
-    redraw();return;
+    scheduleRedraw();return;
   }
   if(dragging){
     viewX=viewStart.x+(e.clientX-dragStart.x);viewY=viewStart.y+(e.clientY-dragStart.y);
-    redraw();return;
+    scheduleRedraw();return;
   }
-  if(RE.tool==='draw'||RE.tool==='addnode') redraw();
+  if(RE.tool==='draw'||RE.tool==='addnode') scheduleRedraw();
 }
 function _reMouseUp(e){
   if(e.button===2) return; // right-click handled by contextmenu event
@@ -5424,24 +5436,32 @@ wrap.addEventListener('mousedown',e=>{
   dragging=true;dragStart={x:e.clientX,y:e.clientY};viewStart={x:viewX,y:viewY};
   wrap.classList.add('grabbing');
 });
+// Coalesce high-frequency redraws (pan/hover fire faster than the display refreshes)
+// into one draw per animation frame.
+let _rafPending=false;
+function scheduleRedraw(){
+  if(_rafPending) return;
+  _rafPending=true;
+  requestAnimationFrame(()=>{ _rafPending=false; redraw(); });
+}
 wrap.addEventListener('mousemove',e=>{
   if(_infoDrag) return; // info panel dragging — don't move map
   if(RE.active){_reMouseMove(e);return;}
   if(CALC.polyMode){
     const rect=canvas.getBoundingClientRect();
     CALC.hoverPt=cd(e.clientX-rect.left,e.clientY-rect.top);
-    redraw();return;
+    scheduleRedraw();return;
   }
   if(meas.mode){
     const rect=canvas.getBoundingClientRect();
     meas.hover=cd(e.clientX-rect.left,e.clientY-rect.top);
-    if(!meas.done) redraw();
+    if(!meas.done) scheduleRedraw();
     return;
   }
   if(!dragging) return;
   viewX=viewStart.x+(e.clientX-dragStart.x);
   viewY=viewStart.y+(e.clientY-dragStart.y);
-  redraw();
+  scheduleRedraw();
 });
 function hitTestDim(dx,dy){
   if(!dimItems.length) return -1;
@@ -7802,7 +7822,7 @@ function _renderFlowV2(ass,eduRows){
 
   const fmt=v=>v!=null?Number(v).toLocaleString('he-IL'):'—';
   const fmtF=v=>parseFloat(v).toFixed(1);
-  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  // esc() — uses the global canonical helper
   const isHaredi=(ass.sector||'')==='חרדי';
 
   // ── Chain ──
@@ -8074,7 +8094,7 @@ function _renderInstCards(ass,eduRows){
 
   const fmt=v=>v!=null?Number(v).toLocaleString('he-IL'):'—';
   const fmtF=v=>parseFloat(v).toFixed(1);
-  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  // esc() — uses the global canonical helper
   const isHaredi=(ass.sector||'')==='חרדי';
 
   // ── Demographic chain ──
@@ -9794,8 +9814,11 @@ function _closeProgDrilldown(){
 }
 
 // XSS helpers
+// ── Canonical HTML-escape helpers (use these at every innerHTML sink touching
+//    file/AI/user data). esc() also escapes quotes for attribute-safe use. ──
 function _esc(s){if(!s&&s!==0)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function _escAttr(s){if(!s)return '';return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 // ============================================================
 // 18. PROJECTS — multi-plan save/switch (IndexedDB, per-project)
