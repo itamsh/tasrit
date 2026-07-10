@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <!-- Defense-in-depth: the app relies on inline handlers/styles, so 'unsafe-inline'
      stays; the real value here is locking connect-src (exfiltration) + object-src. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data: blob:; connect-src 'self' https://ags.iplan.gov.il https://services.arcgisonline.com http://127.0.0.1:5001 http://localhost:5001; object-src 'none'; base-uri 'self';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' https://ags.iplan.gov.il https://services.arcgisonline.com http://127.0.0.1:5001 http://localhost:5001; object-src 'none'; base-uri 'self';">
 <title>תצוגת תשריטים | מבא"ת</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -1651,11 +1651,8 @@ function loadJSZip(){
   return new Promise((res,rej)=>{
     if(window.JSZip){res();return}
     const s=document.createElement('script');
-    // Pinned version + Subresource Integrity: the browser refuses to run the
-    // script if its bytes don't match this hash (guards against CDN compromise).
-    s.src='https://unpkg.com/jszip@3.10.1/dist/jszip.min.js';
-    s.integrity='sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG';
-    s.crossOrigin='anonymous';
+    // Self-hosted (jszip@3.10.1) — no CDN runtime dependency / supply-chain vector.
+    s.src='jszip.min.js';
     s.onload=res;s.onerror=()=>rej(new Error('לא ניתן לטעון JSZip'));
     document.head.appendChild(s);
   });
@@ -2341,12 +2338,10 @@ function loadShpjs(){
   return new Promise((res,rej)=>{
     if(window.shp){res();return}
     const s=document.createElement('script');
-    // Pinned version + Subresource Integrity (was shpjs@latest — a supply-chain risk).
-    s.src='https://unpkg.com/shpjs@6.2.0/dist/shp.js';
-    s.integrity='sha384-H+FfmRuvwpUgbk57oaE8X8JrkO8eMkd0Hjfd5zouea2lCSZdbjSBKTPqzBNWdIDE';
-    s.crossOrigin='anonymous';
+    // Self-hosted (shpjs@6.2.0) — no CDN runtime dependency / supply-chain vector.
+    s.src='shp.js';
     s.onload=res;
-    s.onerror=()=>rej(new Error('לא ניתן לטעון את ספריית shpjs. בדקו חיבור לאינטרנט.'));
+    s.onerror=()=>rej(new Error('לא ניתן לטעון את ספריית shpjs.'));
     document.head.appendChild(s);
   });
 }
@@ -9160,7 +9155,8 @@ function _renderEduPanel(d){
 function _pkv(label,value,span){
   if(value==null||value==='') return '';
   const st=span>1?`grid-column:span ${span}`:'';
-  return `<div class="prog-kv"${st?` style="${st}"`:''}><div class="prog-kv-lbl">${label}</div><div class="prog-kv-val">${value}</div></div>`;
+  // value comes from the DeepSeek result — untrusted, must be HTML-escaped
+  return `<div class="prog-kv"${st?` style="${st}"`:''}><div class="prog-kv-lbl">${label}</div><div class="prog-kv-val">${_esc(value)}</div></div>`;
 }
 
 // ממיר כל פורמט (ישן/חדש) לפורמט הממוקד החדש
