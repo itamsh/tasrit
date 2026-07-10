@@ -2681,7 +2681,8 @@ function redraw(){
       if(!f.geometry) continue;
       const code=f.properties.MAVAT_CODE;
       if(state.polLayerVisible[code]===false) continue;
-      const st=getStyle(code)||getStyleByName(fixHebrew(f.properties.MAVAT_NAME))||DEFAULT_POLY;
+      if(!_bboxOnScreen(f.geometry.coordinates)) continue;
+      let st=f._style; if(st===undefined){ st=getStyle(code)||getStyleByName(fixHebrew(f.properties.MAVAT_NAME))||DEFAULT_POLY; f._style=st; }
       drawPolygon(f.geometry.coordinates,effectiveFill(st),st.s,st.sw||0.8,.7*OPO*OG);
       if(sp&&state.dims.all&&state.dims.edges){
         const bb=polyScreenBBox(f.geometry.coordinates);
@@ -2696,8 +2697,9 @@ function redraw(){
       const code=f.properties.MAVAT_CODE;
       const fillOn=state.planVisible&&state.planLayerVisible[code]!==false;
       if(!fillOn&&!state.planBordersVisible) continue;
+      if(!_bboxOnScreen(f.geometry.coordinates)) continue;
       const num=f.properties.NUM;
-      const st=getStyle(code)||getStyleByName(fixHebrew(f.properties.MAVAT_NAME))||DEFAULT_POLY;
+      let st=f._style; if(st===undefined){ st=getStyle(code)||getStyleByName(fixHebrew(f.properties.MAVAT_NAME))||DEFAULT_POLY; f._style=st; }
       const isHov=hoveredNum&&num===hoveredNum;
       const fillColor=state.rachakMode&&_rachakMap
         ?_rachakColor(_rachakMap[String(num)])
@@ -2725,8 +2727,8 @@ function redraw(){
       if(!f.geometry) continue;
       const code=f.properties.MAVAT_CODE;
       if(code===23500) continue; // מידות — skip
-      const st=getStyle(code)||DEFAULT_LINE;
       if(!state.lineLayerVisible[code]) continue;
+      let st=f._style; if(st===undefined){ st=getStyle(code)||DEFAULT_LINE; f._style=st; }
       const coords=f.geometry.type==='LineString'?f.geometry.coordinates
         :f.geometry.coordinates.flat();
       drawLine(coords,st.s,st.sw||1,st.dash||[]);
@@ -2857,6 +2859,18 @@ function polyScreenBBox(coords){
   }
   const[sx1,sy1]=dc(minX,minY),[sx2,sy2]=dc(maxX,maxY);
   return{w:Math.abs(sx2-sx1),h:Math.abs(sy2-sy1)};
+}
+// Viewport culling: true if the polygon's outer-ring bbox overlaps the canvas.
+// Conservative — for MultiPolygon (nested arrays) it returns true (never skips).
+function _bboxOnScreen(coords){
+  const ring=coords&&coords[0];
+  if(!ring||!ring.length||Array.isArray(ring[0][0])) return true;
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  for(const[x,y] of ring){ if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y; }
+  const[ax,ay]=dc(minX,minY),[bx,by]=dc(maxX,maxY);
+  const m=24; // margin so partially-visible edges/labels aren't clipped
+  return !(Math.max(ax,bx)<-m || Math.min(ax,bx)>canvas.width+m ||
+           Math.max(ay,by)<-m || Math.min(ay,by)>canvas.height+m);
 }
 
 function edgeAngleVal(p1,p2){return Math.atan2(p2[1]-p1[1],p2[0]-p1[0]);}
