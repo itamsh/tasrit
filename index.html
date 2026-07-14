@@ -546,7 +546,10 @@ body.theme-light .bm-opt.on{background:#d8ebfb;border-color:#5a9adc;color:#154a7
 .proj-item-btns button:hover{background:#22384f;color:#bdf}
 .proj-badge{font-size:10px;color:#6acc8a;background:#0a2416;border:1px solid #1e5a38;border-radius:5px;padding:3px 8px;align-self:center}
 .proj-empty{font-size:12px;color:#6a8296;padding:10px;text-align:center;line-height:1.6}
-#ext-box{width:100%;max-width:760px;background:#16233480;border:1px solid #2a3f58;border-radius:10px;overflow:hidden}
+/* flex-shrink:0 — without it, this is the only #upload-page child with
+   overflow:hidden, which makes flexbox treat its min-height as 0 and collapse
+   it to zero height whenever total page content exceeds the viewport. */
+#ext-box{width:100%;max-width:760px;background:#16233480;border:1px solid #2a3f58;border-radius:10px;overflow:hidden;flex-shrink:0}
 .ext-hdr{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;cursor:pointer;font-size:13px;font-weight:700;color:#8ab6d8;user-select:none}
 .ext-toggle{transition:transform .2s;color:#5a7a9a}
 .ext-body{max-height:0;overflow:hidden;transition:max-height .25s ease;padding:0 16px}
