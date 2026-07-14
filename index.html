@@ -28,20 +28,21 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#1a2230;color:#eee;direc
 .dz-optional-tag{font-size:10px;color:#5599aa;background:#1a2e40;border:1px solid #3a5070;border-radius:10px;padding:1px 8px;margin-top:2px;display:inline-block}
 .dz-rec-tag{font-size:10px;color:#3fbf7a;background:#12301f;border:1px solid #2a7a4a;border-radius:10px;padding:1px 8px;margin-top:2px;display:inline-block}
 .dz-wip-tag{font-size:10px;color:#f0b429;background:#2e2410;border:1px solid #6a5320;border-radius:10px;padding:1px 8px;margin-top:2px;display:inline-block}
-#plannum-box{width:100%;max-width:788px;background:#132a1f;border:1px solid #2a6a4a;border-radius:14px;padding:16px 18px;text-align:center}
-.plannum-title{font-size:16px;font-weight:700;color:#5fd39a;margin-bottom:4px}
-.plannum-sub{font-size:12px;color:#8ab;margin-bottom:12px;line-height:1.5}
+#plannum-box{width:100%;max-width:788px;background:#16233480;border:1px solid #2a3f58;border-radius:14px;padding:16px 18px;text-align:center;flex-shrink:0}
+.plannum-title{font-size:14.5px;font-weight:700;color:#7a92aa;margin-bottom:4px}
+.plannum-sub{font-size:12px;color:#5a7288;margin-bottom:12px;line-height:1.5}
 .plannum-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
 #plannum-input{flex:1;min-width:200px;max-width:340px;background:#0c1620;border:1px solid #2d4060;border-radius:8px;padding:10px 14px;font-size:15px;color:#e8eef4;text-align:center;direction:ltr}
-#plannum-input:focus{outline:none;border-color:#2ecc71}
-#plannum-btn{background:#27ae60;color:#fff;border:none;border-radius:8px;padding:10px 22px;font-size:15px;font-weight:600;cursor:pointer;white-space:nowrap}
-#plannum-btn:hover{background:#2ecc71}
+#plannum-input:focus{outline:none;border-color:#3a6a9a}
+#plannum-btn{background:#2c4a6e;color:#dce8f5;border:none;border-radius:8px;padding:10px 22px;font-size:15px;font-weight:600;cursor:pointer;white-space:nowrap}
+#plannum-btn:hover{background:#355a82}
 #plannum-btn:disabled{opacity:.6;cursor:default}
-.plannum-note{font-size:10.5px;color:#6a8296;margin-top:9px}
-.upload-or{font-size:12px;color:#6a8296;margin:2px 0;letter-spacing:1px}
-body.theme-light #plannum-box{background:#e6f5ec;border-color:#8fcfa8}
+.plannum-note{font-size:10.5px;color:#5a7288;margin-top:9px}
+.page-divider{width:100%;max-width:788px;height:1px;background:#2d4060;margin:2px 0;flex-shrink:0}
+body.theme-light #plannum-box{background:#eef3fa;border-color:#c8d8ea}
 body.theme-light #plannum-input{background:#fff;border-color:#c8d8ea;color:#1a2535}
-body.theme-light .plannum-title{color:#1a7a44}
+body.theme-light .plannum-title{color:#3a5070}
+body.theme-light .page-divider{background:#c8d8ea}
 body.theme-light .drop-main{background:#e8f0fa;border-color:#7aa8d0}
 body.theme-light .dz-rec-tag{color:#1a7a44;background:#dcf3e6;border-color:#8fcfa8}
 .drop-zone{background:#1f2e42;border:2px dashed #3a5070;border-radius:12px;padding:28px 20px;text-align:center;cursor:pointer;transition:all .25s;position:relative;min-height:160px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
@@ -846,7 +847,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 
 <!-- ===== UPLOAD PAGE ===== -->
 <div id="upload-page" ondrop="onPageDrop(event)" ondragover="onPageDragOver(event)" ondragleave="onPageDragLeave(event)">
-  <h1>📐 תצוגת תשריטים | מבא"ת</h1>
+  <h1>ממשק הצגת תוכניות</h1>
 
   <!-- Load directly by plan number (no files, no download) -->
   <div id="plannum-box">
@@ -855,13 +856,15 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
     <div class="plannum-row">
       <input id="plannum-input" type="text" placeholder="למשל: 410-1186295" autocomplete="off"
              onkeydown="if(event.key==='Enter')launchFromPlanNumber()">
-      <button id="plannum-btn" onclick="launchFromPlanNumber()">טען תשריט ←</button>
+      <button id="plannum-btn" onclick="launchFromPlanNumber()">הצג תשריט ←</button>
     </div>
-    <div class="plannum-note">מושך רק את התשריט הגרפי — ללא טבלה 5 וללא נספח פרוגרמה</div>
+    <div class="plannum-note">מושך רק את התשריט הגרפי — ללא מידע על זכויות בנייה מתוך טבלה 5</div>
   </div>
 
-  <div class="upload-or">— או גררו קבצים —</div>
-  <p class="subtitle">גררו קבצים לתוך העמוד<br>ניתן לגרור קבצי SHP כתיקייה או כקבצים (או כתיקייה מכווצת ל-ZIP) וניתן לגרור יחד איתם גם אקסל של טבלה 5 וסוגי קבצים נוספים — הממשק יזהה אוטומטית מה הוא קיבל</p>
+  <div class="page-divider"></div>
+  <p class="subtitle">גררו לתוך העמוד קבצי תוכנית מתוך מערכת מבא"ת (אתר 'מידע תכנוני')<br>
+    להצגת תשריט - גררו קבצי SHP<br>
+    להצגת מידע מטבלה 5 על זכויות בנייה בתאי השטח - גררו קובץ אקסל של טבלה 5 ("זכויות והוראות בניה")</p>
 
   <!-- Main frame: the two primary inputs -->
   <div class="drop-main">
@@ -915,6 +918,8 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
     <button id="launch-btn" onclick="launchMap()">הצג תשריט ←</button>
     <button id="reset-btn" onclick="resetZones()">🗑 נקה קבצים</button>
   </div>
+
+  <div class="page-divider"></div>
 
   <!-- Optional companion browser extension -->
   <div id="ext-box">
