@@ -549,7 +549,7 @@ body.theme-light .bm-opt.on{background:#d8ebfb;border-color:#5a9adc;color:#154a7
 /* flex-shrink:0 — without it, this is the only #upload-page child with
    overflow:hidden, which makes flexbox treat its min-height as 0 and collapse
    it to zero height whenever total page content exceeds the viewport. */
-#ext-box{width:100%;max-width:760px;background:#16233480;border:1px solid #2a3f58;border-radius:10px;overflow:hidden;flex-shrink:0}
+#ext-box{display:none;width:100%;max-width:760px;background:#16233480;border:1px solid #2a3f58;border-radius:10px;overflow:hidden;flex-shrink:0}
 .ext-hdr{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;cursor:pointer;font-size:13px;font-weight:700;color:#8ab6d8;user-select:none}
 .ext-toggle{transition:transform .2s;color:#5a7a9a}
 .ext-body{max-height:0;overflow:hidden;transition:max-height .25s ease;padding:0 16px}
@@ -847,21 +847,21 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 <!-- ===== UPLOAD PAGE ===== -->
 <div id="upload-page" ondrop="onPageDrop(event)" ondragover="onPageDragOver(event)" ondragleave="onPageDragLeave(event)">
   <h1>📐 תצוגת תשריטים | מבא"ת</h1>
-  <p class="subtitle">גררו קבצים לתוך העמוד<br>ניתן לגרור קבצי SHP כתיקייה או כקבצים (או כתיקייה מכווצת ל-ZIP) וניתן לגרור יחד איתם גם אקסל של טבלה 5 וסוגי קבצים נוספים — הממשק יזהה אוטומטית מה הוא קיבל</p>
 
   <!-- Load directly by plan number (no files, no download) -->
   <div id="plannum-box">
     <div class="plannum-title">⚡ טעינה מהירה לפי מספר תוכנית</div>
-    <div class="plannum-sub">הזן מספר תוכנית והממשק ימשוך את התשריט ישירות ממערכת "מידע תכנוני" — בלי להוריד קבצים</div>
+    <div class="plannum-sub">הזן מספר תוכנית והממשק ימשוך את התשריט ישירות ממערכת "מידע תכנוני"</div>
     <div class="plannum-row">
       <input id="plannum-input" type="text" placeholder="למשל: 410-1186295" autocomplete="off"
              onkeydown="if(event.key==='Enter')launchFromPlanNumber()">
       <button id="plannum-btn" onclick="launchFromPlanNumber()">טען תשריט ←</button>
     </div>
-    <div class="plannum-note">מושך את התשריט (ייעודים, גבולות, קווים). טבלה 5 ונספח פרוגרמה אינם זמינים כך.</div>
+    <div class="plannum-note">מושך רק את התשריט הגרפי — ללא טבלה 5 וללא נספח פרוגרמה</div>
   </div>
 
   <div class="upload-or">— או גררו קבצים —</div>
+  <p class="subtitle">גררו קבצים לתוך העמוד<br>ניתן לגרור קבצי SHP כתיקייה או כקבצים (או כתיקייה מכווצת ל-ZIP) וניתן לגרור יחד איתם גם אקסל של טבלה 5 וסוגי קבצים נוספים — הממשק יזהה אוטומטית מה הוא קיבל</p>
 
   <!-- Main frame: the two primary inputs -->
   <div class="drop-main">
