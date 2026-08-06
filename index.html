@@ -549,6 +549,11 @@ body.theme-light .bm-opt.on{background:#d8ebfb;border-color:#5a9adc;color:#154a7
 .ov-refresh.spin{animation:ov-spin .8s linear infinite}
 @keyframes ov-spin{to{transform:rotate(360deg)}}
 #ov-nearby-list{max-height:220px;overflow-y:auto;margin-top:4px}
+.ov-wide-row{display:flex;align-items:center;gap:6px;font-size:10.5px;color:#8ab;cursor:pointer;margin-top:6px;padding:3px 2px}
+.ov-wide-row input{cursor:pointer}
+#ov-wide-list{max-height:220px;overflow-y:auto;margin-top:2px;border-top:1px dashed #2a3f58;padding-top:4px}
+body.theme-light .ov-wide-row{color:#5a7a9a}
+body.theme-light #ov-wide-list{border-top-color:#d0dcec}
 .ov-note{font-size:9.5px;color:#5a7288;margin-top:8px;line-height:1.4}
 body.theme-light #ov-panel{background:#fff;border-color:#c4d4e6}
 body.theme-light .ov-add-row input{background:#eef3fa;border-color:#d0dcec;color:#1a3450}
@@ -1086,7 +1091,12 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
       <button class="ov-refresh" id="ov-refresh-btn" title="רענן לפי התצוגה הנוכחית" onclick="_ovRefreshNearby()">⟳</button>
     </div>
     <div id="ov-nearby-list"></div>
-    <div class="ov-note">מציג גבול + ייעודי קרקע בלבד (בלי טבלה 5), כרקע להשוואה. מקור: אותו שירות Xplan של מינהל התכנון. הרשימה "בטווח התצוגה" מתעדכנת אוטומטית בזום/הזזה של המפה.</div>
+    <label class="ov-wide-row" id="ov-wide-row" style="display:none">
+      <input type="checkbox" id="ov-wide-chk" onchange="_ovToggleWide()">
+      <span>הצג רחבות/מרוחקות (<span id="ov-wide-count">0</span>)</span>
+    </label>
+    <div id="ov-wide-list" style="display:none"></div>
+    <div class="ov-note">מציג גבול + ייעודי קרקע בלבד (בלי טבלה 5), כרקע להשוואה. מקור: אותו שירות Xplan של מינהל התכנון. הרשימה "בטווח התצוגה" מתעדכנת אוטומטית בזום/הזזה של המפה. תוכניות "רחבות/מרוחקות" (כיסוי גדול מהתצוגה, או מרכז התוכנית מחוץ לתצוגה) מוסתרות כברירת מחדל — בדיוק כמו בתוסף iplan-plan-filter.</div>
   </div>
 
   <!-- Grid angle strip -->
@@ -2167,10 +2177,27 @@ function _ovRenderList(){
 
 // ── "Plans in view" auto-discovery — same idea as the iplan-plan-filter
 // Chrome extension (query the plan-boundary layer with the current view's
-// envelope, returnDistinctValues), simplified: every hit is just a
-// checkbox to add/remove as an overlay, no category/hide-wide logic needed.
+// envelope), simplified: every hit is just a checkbox to add/remove as an
+// overlay, no category/multi-entity logic needed. The wide/local split
+// below (WIDE_FACTOR, centroid-outside-view) ports content.js's
+// planIsWide() as-is — see iplan-plan-filter/knowledge/filtering-and-relevance.md.
 const OV_NEARBY_LIMIT=300;
+const OV_WIDE_FACTOR=40; // plan is "wide" if area > 40x the current view's area
 let _ovNearbyTimer=null, _ovNearbyReqId=0;
+let _ovShowWide=localStorage.getItem('tasritOvShowWide')==='1';
+let _ovLastRows=[], _ovLastViewAreaDunam=0, _ovLastViewExt=null;
+function _ovPlanIsWide(p){
+  if(_ovLastViewAreaDunam>0 && (p.area||0)>OV_WIDE_FACTOR*_ovLastViewAreaDunam) return true;
+  const ve=_ovLastViewExt;
+  if(ve&&p.cx!=null&&(p.cx<ve.xmin||p.cx>ve.xmax||p.cy<ve.ymin||p.cy>ve.ymax)) return true;
+  return false;
+}
+function _ovToggleWide(){
+  const chk=document.getElementById('ov-wide-chk');
+  _ovShowWide=chk?chk.checked:!_ovShowWide;
+  localStorage.setItem('tasritOvShowWide',_ovShowWide?'1':'0');
+  _ovRenderNearbyResults(_ovLastRows);
+}
 function _ovScheduleNearbyRefresh(){
   const p=document.getElementById('ov-panel');
   if(!p||!p.classList.contains('vis')) return;
@@ -2207,63 +2234,95 @@ async function _ovRefreshNearby(){
       list.textContent='';
       const msg=document.createElement('div'); msg.className='ov-empty';
       msg.textContent=`נמצאו ${count} תוכניות בטווח — התקרב במפה כדי לראות רשימה`;
-      list.appendChild(msg); return;
+      list.appendChild(msg); _ovRenderNearbyResults([]); return;
     }
     // Note: unlike the split קווים כחולים services, this MapServer layer
     // rejects returnDistinctValues combined with a spatial filter (ArcGIS
-    // error, HTTP 200 with an {error:...} body — easy to miss). Fetch plain
-    // features and dedupe by pl_number client-side instead.
-    const j=await (await fetch(`${XPLAN_BASE}/1/query?${common}&outFields=pl_number,pl_name&returnGeometry=false&f=json&resultRecordCount=${OV_NEARBY_LIMIT}`)).json();
+    // error, HTTP 200 with an {error:...} body — easy to miss). Fetch real
+    // geometry instead (needed anyway for area/centroid below, like
+    // queryFootprints() in iplan-plan-filter) and dedupe client-side.
+    const j=await (await fetch(`${XPLAN_BASE}/1/query?${common}&outFields=pl_number,pl_name&returnGeometry=true&outSR=2039&maxAllowableOffset=6&f=json&resultRecordCount=${OV_NEARBY_LIMIT}`)).json();
     if(reqId!==_ovNearbyReqId) return;
     if(j&&j.error) throw new Error(j.error.message||'שגיאת שרת');
-    const seen=new Map();
+    const agg=new Map();
     for(const f of ((j&&j.features)||[])){
-      const a=f.attributes;
-      if(a&&a.pl_number&&!seen.has(a.pl_number)) seen.set(a.pl_number,a);
+      const a=f.attributes; if(!a||!a.pl_number) continue;
+      let p=agg.get(a.pl_number);
+      if(!p){ p={num:a.pl_number,name:a.pl_name||'',area:0,sx:0,sy:0,sn:0}; agg.set(a.pl_number,p); }
+      if(!p.name&&a.pl_name) p.name=a.pl_name;
+      const rings=(f.geometry&&f.geometry.rings)||[];
+      for(const ring of rings){
+        p.area+=_polyArea(ring)/1000; // m² → dunam
+        for(const pt of ring){ p.sx+=pt[0]; p.sy+=pt[1]; p.sn++; }
+      }
     }
-    const rows=[...seen.values()]
-      .filter(a=>a.pl_number!==state.planNumber)
-      .sort((a,b)=>String(a.pl_number).localeCompare(String(b.pl_number)));
-    list.textContent='';
-    if(!rows.length){
-      const empty=document.createElement('div'); empty.className='ov-empty';
-      empty.textContent='לא נמצאו תוכניות נוספות בטווח התצוגה'; list.appendChild(empty); return;
-    }
-    for(const a of rows){
-      const row=document.createElement('div'); row.className='ov-item';
-      const chk=document.createElement('input'); chk.type='checkbox';
-      chk.dataset.num=a.pl_number; chk.checked=state.overlayPlans.some(o=>o.num===a.pl_number);
-      chk.onchange=async()=>{
-        if(chk.checked){
-          chk.disabled=true;
-          try{ await addOverlayPlan(a.pl_number); }
-          catch(e){ alert(e.message||'שגיאה בהוספת התוכנית'); chk.checked=false; }
-          chk.disabled=false;
-        } else {
-          removeOverlayPlan(a.pl_number);
-        }
-        _ovRenderList();
-      };
-      const txt=document.createElement('div'); txt.className='ov-item-txt';
-      const numEl=document.createElement('span'); numEl.className='ov-item-num'; numEl.textContent=a.pl_number;
-      const nameEl=document.createElement('span'); nameEl.className='ov-item-name'; nameEl.textContent=a.pl_name||'';
-      txt.append(numEl,document.createElement('br'),nameEl);
-      row.append(chk,txt);
-      list.appendChild(row);
-    }
+    _ovLastViewAreaDunam=Math.abs((env.xmax-env.xmin)*(env.ymax-env.ymin))/1000;
+    _ovLastViewExt=env;
+    const rows=[...agg.values()].map(p=>({...p,cx:p.sn?p.sx/p.sn:null,cy:p.sn?p.sy/p.sn:null}))
+      .filter(p=>p.num!==state.planNumber)
+      .sort((a,b)=>String(a.num).localeCompare(String(b.num)));
+    _ovRenderNearbyResults(rows);
   }catch(e){
     if(reqId!==_ovNearbyReqId) return;
     list.textContent='';
     const err=document.createElement('div'); err.className='ov-empty'; err.textContent='שגיאה באיתור תוכניות בטווח';
     list.appendChild(err);
+    _ovRenderNearbyResults([]);
   }finally{
     if(reqId===_ovNearbyReqId && btn) btn.classList.remove('spin');
+  }
+}
+function _ovRenderNearbyResults(rows){
+  _ovLastRows=rows;
+  const local=rows.filter(p=>!_ovPlanIsWide(p));
+  const wide=rows.filter(p=>_ovPlanIsWide(p));
+  _ovRenderPlanRows('ov-nearby-list',local,'לא נמצאו תוכניות נוספות בטווח התצוגה');
+  const wideRow=document.getElementById('ov-wide-row');
+  const cnt=document.getElementById('ov-wide-count');
+  if(cnt) cnt.textContent=wide.length;
+  if(wideRow) wideRow.style.display=wide.length?'flex':'none';
+  const chk=document.getElementById('ov-wide-chk'); if(chk) chk.checked=_ovShowWide;
+  const wideList=document.getElementById('ov-wide-list');
+  if(wideList) wideList.style.display=_ovShowWide?'block':'none';
+  _ovRenderPlanRows('ov-wide-list',wide,'');
+}
+function _ovRenderPlanRows(listId,rows,emptyMsg){
+  const list=document.getElementById(listId); if(!list) return;
+  list.textContent='';
+  if(!rows.length){
+    if(emptyMsg){
+      const empty=document.createElement('div'); empty.className='ov-empty'; empty.textContent=emptyMsg;
+      list.appendChild(empty);
+    }
+    return;
+  }
+  for(const p of rows){
+    const row=document.createElement('div'); row.className='ov-item';
+    const chk=document.createElement('input'); chk.type='checkbox';
+    chk.dataset.num=p.num; chk.checked=state.overlayPlans.some(o=>o.num===p.num);
+    chk.onchange=async()=>{
+      if(chk.checked){
+        chk.disabled=true;
+        try{ await addOverlayPlan(p.num); }
+        catch(e){ alert(e.message||'שגיאה בהוספת התוכנית'); chk.checked=false; }
+        chk.disabled=false;
+      } else {
+        removeOverlayPlan(p.num);
+      }
+      _ovRenderList();
+    };
+    const txt=document.createElement('div'); txt.className='ov-item-txt';
+    const numEl=document.createElement('span'); numEl.className='ov-item-num'; numEl.textContent=p.num;
+    const nameEl=document.createElement('span'); nameEl.className='ov-item-name'; nameEl.textContent=p.name||'';
+    txt.append(numEl,document.createElement('br'),nameEl);
+    row.append(chk,txt);
+    list.appendChild(row);
   }
 }
 // Keep "plans in view" checkboxes in sync without a full requery
 // (e.g. after adding/removing a plan via the manual number field).
 function _ovSyncNearbyChecks(){
-  document.querySelectorAll('#ov-nearby-list input[type=checkbox]').forEach(chk=>{
+  document.querySelectorAll('#ov-nearby-list input[type=checkbox], #ov-wide-list input[type=checkbox]').forEach(chk=>{
     chk.checked=state.overlayPlans.some(o=>o.num===chk.dataset.num);
   });
 }
