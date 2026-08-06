@@ -1965,6 +1965,7 @@ async function launchMap(){
     document.getElementById('upload-page').style.display='none';
     document.getElementById('map-page').style.display='flex';
     buildLegend();
+    _ovHoverRings=null; // stale coords would be in the old plan's geoAnchor space
     _ovRenderList(); // reset the "תוכניות נוספות" panel/button for the newly-loaded plan
     if(state.wordFile) document.getElementById('btn-word').style.display='';
     if(state.progData||state.progFile){const pb=document.getElementById('btn-prog');pb.style.background='';pb.style.borderColor='#44aa77';}
@@ -2192,6 +2193,8 @@ function _ovRenderList(){
       const rm=document.createElement('button'); rm.className='ov-rm'; rm.title='הסר תוכנית';
       rm.textContent='✕'; rm.onclick=()=>{ removeOverlayPlan(ov.num); _ovRenderList(); };
       row.append(chk,sw,txt,rm);
+      row.addEventListener('mouseenter',()=>_ovSetHover(_ovAddedHoverRings(ov.num)));
+      row.addEventListener('mouseleave',_ovClearHover);
       list.appendChild(row);
     }
   }
@@ -2275,13 +2278,16 @@ async function _ovRefreshNearby(){
     for(const f of ((j&&j.features)||[])){
       const a=f.attributes; if(!a||!a.pl_number) continue;
       let p=agg.get(a.pl_number);
-      if(!p){ p={num:a.pl_number,name:a.pl_name||'',area:0,sx:0,sy:0,sn:0}; agg.set(a.pl_number,p); }
+      if(!p){ p={num:a.pl_number,name:a.pl_name||'',area:0,sx:0,sy:0,sn:0,rings:[]}; agg.set(a.pl_number,p); }
       if(!p.name&&a.pl_name) p.name=a.pl_name;
       const rings=(f.geometry&&f.geometry.rings)||[];
       for(const ring of rings){
         p.area+=_polyArea(ring)/1000; // m² → dunam
         for(const pt of ring){ p.sx+=pt[0]; p.sy+=pt[1]; p.sn++; }
       }
+      // Keep the ITM rings (like queryFootprints in iplan-plan-filter) so
+      // hovering the row can highlight the real footprint with no re-fetch.
+      p.rings=p.rings.concat(rings);
     }
     _ovLastViewAreaDunam=Math.abs((env.xmax-env.xmin)*(env.ymax-env.ymin))/1000;
     _ovLastViewExt=env;
@@ -2363,8 +2369,35 @@ function _ovRenderPlanRows(listId,rows,emptyMsg){
     const nameEl=document.createElement('span'); nameEl.className='ov-item-name'; nameEl.textContent=p.name||'';
     txt.append(numEl,document.createElement('br'),nameEl);
     row.append(chk,txt);
+    row.addEventListener('mouseenter',()=>_ovSetHover(_ovNearbyHoverRings(p.num)));
+    row.addEventListener('mouseleave',_ovClearHover);
     list.appendChild(row);
   }
+}
+// ── Hover highlight — same idea as the extension's "yellow outline on
+// hover" (client-side Graphic, no server round trip): reuse geometry we
+// already fetched (added overlays are already in draw-space; nearby-list
+// rows keep their raw ITM rings from the area/centroid query above).
+let _ovHoverRings=null;
+function _ovSetHover(rings){ _ovHoverRings=rings; scheduleRedraw(); }
+function _ovClearHover(){ if(_ovHoverRings){ _ovHoverRings=null; scheduleRedraw(); } }
+function _ovAddedHoverRings(num){
+  const ov=state.overlayPlans.find(o=>o.num===num);
+  if(!ov||!ov.layers.gvul) return null;
+  const rings=[];
+  for(const f of ov.layers.gvul.features){
+    if(!f.geometry) continue;
+    const c=f.geometry.coordinates;
+    if(Array.isArray(c[0][0][0])) c.forEach(poly=>poly.forEach(r=>rings.push(r)));
+    else c.forEach(r=>rings.push(r));
+  }
+  return rings.length?rings:null;
+}
+function _ovNearbyHoverRings(num){
+  const p=_ovLastRows.find(r=>r.num===num);
+  if(!p||!p.rings||!p.rings.length||!state.geoAnchor) return null;
+  const {minX,minY,span}=state.geoAnchor;
+  return p.rings.map(ring=>ring.map(pt=>[(pt[0]-minX)/span*DATA_SIZE,(pt[1]-minY)/span*DATA_SIZE]));
 }
 // Keep "plans in view" checkboxes in sync without a full requery
 // (e.g. after adding/removing a plan via the manual number field).
@@ -3409,6 +3442,23 @@ function redraw(){
   drawRoadEdit();
   _drawCalcPoly();
   drawMeasurement();
+  // Overlay-panel row hover — glowing yellow outline, same idea as the
+  // iplan-plan-filter extension's client-side highlight Graphic.
+  if(_ovHoverRings&&_ovHoverRings.length){
+    ctx.save();
+    ctx.shadowColor='#ffe650';ctx.shadowBlur=16;
+    ctx.strokeStyle='#ffe650';ctx.lineWidth=3.5;ctx.setLineDash([]);
+    ctx.beginPath();
+    for(const ring of _ovHoverRings){
+      if(!ring.length) continue;
+      let[x,y]=dc(ring[0][0],ring[0][1]);
+      ctx.moveTo(x,y);
+      for(let i=1;i<ring.length;i++){[x,y]=dc(ring[i][0],ring[i][1]);ctx.lineTo(x,y)}
+      ctx.closePath();
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
 }
 
 function drawLabel(cx,cy,text,fs,color){
