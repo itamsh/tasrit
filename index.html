@@ -2201,6 +2201,7 @@ async function _ovRefreshNearby(){
     const common=`geometry=${encodeURIComponent(geom)}&geometryType=esriGeometryEnvelope&inSR=2039&spatialRel=esriSpatialRelIntersects`;
     const cj=await (await fetch(`${XPLAN_BASE}/1/query?${common}&returnCountOnly=true&f=json`)).json();
     if(reqId!==_ovNearbyReqId) return; // superseded by a newer view change
+    if(cj&&cj.error) throw new Error(cj.error.message||'שגיאת שרת');
     const count=(cj&&cj.count)||0;
     if(count>OV_NEARBY_LIMIT){
       list.textContent='';
@@ -2208,10 +2209,20 @@ async function _ovRefreshNearby(){
       msg.textContent=`נמצאו ${count} תוכניות בטווח — התקרב במפה כדי לראות רשימה`;
       list.appendChild(msg); return;
     }
-    const j=await (await fetch(`${XPLAN_BASE}/1/query?${common}&returnDistinctValues=true&outFields=pl_number,pl_name&returnGeometry=false&f=json&resultRecordCount=${OV_NEARBY_LIMIT}`)).json();
+    // Note: unlike the split קווים כחולים services, this MapServer layer
+    // rejects returnDistinctValues combined with a spatial filter (ArcGIS
+    // error, HTTP 200 with an {error:...} body — easy to miss). Fetch plain
+    // features and dedupe by pl_number client-side instead.
+    const j=await (await fetch(`${XPLAN_BASE}/1/query?${common}&outFields=pl_number,pl_name&returnGeometry=false&f=json&resultRecordCount=${OV_NEARBY_LIMIT}`)).json();
     if(reqId!==_ovNearbyReqId) return;
-    const rows=((j&&j.features)||[]).map(f=>f.attributes)
-      .filter(a=>a.pl_number && a.pl_number!==state.planNumber)
+    if(j&&j.error) throw new Error(j.error.message||'שגיאת שרת');
+    const seen=new Map();
+    for(const f of ((j&&j.features)||[])){
+      const a=f.attributes;
+      if(a&&a.pl_number&&!seen.has(a.pl_number)) seen.set(a.pl_number,a);
+    }
+    const rows=[...seen.values()]
+      .filter(a=>a.pl_number!==state.planNumber)
       .sort((a,b)=>String(a.pl_number).localeCompare(String(b.pl_number)));
     list.textContent='';
     if(!rows.length){
