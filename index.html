@@ -3007,7 +3007,12 @@ function redraw(){
       if(!ov.visible) continue;
       if(ov.layers.plan) for(const f of ov.layers.plan.features){
         if(!f.geometry||!_bboxOnScreen(f.geometry.coordinates)) continue;
-        drawPolygon(f.geometry.coordinates,ov.color,ov.color,0,.12*OG);
+        // Real land-use colors (same lookup as the main plan) so the overlay is
+        // actually legible — the overlay's own color is used only as the outline,
+        // to mark "this belongs to plan X" without hiding what the zone type is.
+        const code=f.properties.MAVAT_CODE;
+        let st=f._style; if(st===undefined){ st=getStyle(code)||getStyleByName(fixHebrew(f.properties.MAVAT_NAME))||DEFAULT_POLY; f._style=st; }
+        drawPolygon(f.geometry.coordinates,effectiveFill(st),ov.color,1,.45*OG);
       }
       if(ov.layers.gvul) for(const f of ov.layers.gvul.features){
         if(!f.geometry) continue;
