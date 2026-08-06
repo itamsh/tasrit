@@ -543,11 +543,19 @@ body.theme-light .bm-opt.on{background:#d8ebfb;border-color:#5a9adc;color:#154a7
 .ov-item-name{color:#7c93ac;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
 .ov-rm{background:none;border:none;color:#c66;cursor:pointer;font-size:13px;flex-shrink:0}
 .ov-empty{font-size:11px;color:#5a7288;padding:4px;text-align:center}
+.ov-sub-hdr{display:flex;justify-content:space-between;align-items:center;font-size:11.5px;font-weight:700;color:#7ecfff;margin-top:10px;padding-top:8px;border-top:1px solid #1f2e42}
+.ov-refresh{background:none;border:1px solid #3a5070;color:#9bd;border-radius:5px;padding:1px 7px;font-size:12px;cursor:pointer}
+.ov-refresh:hover{background:#22354a}
+.ov-refresh.spin{animation:ov-spin .8s linear infinite}
+@keyframes ov-spin{to{transform:rotate(360deg)}}
+#ov-nearby-list{max-height:220px;overflow-y:auto;margin-top:4px}
 .ov-note{font-size:9.5px;color:#5a7288;margin-top:8px;line-height:1.4}
 body.theme-light #ov-panel{background:#fff;border-color:#c4d4e6}
 body.theme-light .ov-add-row input{background:#eef3fa;border-color:#d0dcec;color:#1a3450}
 body.theme-light .ov-item{border-bottom-color:#e2e9f2}
 body.theme-light .ov-item-txt{color:#25405c}
+body.theme-light .ov-sub-hdr{border-top-color:#e2e9f2}
+body.theme-light .ov-refresh{border-color:#bcd;color:#3a6a9a}
 /* ── Projects ── */
 #proj-panel{position:fixed;top:52px;left:10px;z-index:320;width:340px;max-height:70vh;overflow-y:auto;background:#101a28;border:1px solid #2d4060;border-radius:10px;box-shadow:0 8px 26px rgba(0,0,0,.55);padding:12px;display:none;direction:rtl}
 #proj-panel.vis{display:block}
@@ -1073,7 +1081,12 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
       <button onclick="_ovAdd()">➕ הוסף</button>
     </div>
     <div id="ov-list"></div>
-    <div class="ov-note">מציג גבול + ייעודי קרקע בלבד (בלי טבלה 5), כרקע להשוואה. מקור: אותו שירות Xplan של מינהל התכנון.</div>
+    <div class="ov-sub-hdr">
+      <span>תוכניות בטווח התצוגה</span>
+      <button class="ov-refresh" id="ov-refresh-btn" title="רענן לפי התצוגה הנוכחית" onclick="_ovRefreshNearby()">⟳</button>
+    </div>
+    <div id="ov-nearby-list"></div>
+    <div class="ov-note">מציג גבול + ייעודי קרקע בלבד (בלי טבלה 5), כרקע להשוואה. מקור: אותו שירות Xplan של מינהל התכנון. הרשימה "בטווח התצוגה" מתעדכנת אוטומטית בזום/הזזה של המפה.</div>
   </div>
 
   <!-- Grid angle strip -->
@@ -2111,7 +2124,7 @@ function toggleOverlayPlanVisible(num){
 function _ovTogglePanel(){
   const p=document.getElementById('ov-panel'); if(!p) return;
   const vis=p.classList.toggle('vis');
-  if(vis) _ovRenderList();
+  if(vis){ _ovRenderList(); _ovRefreshNearby(); }
 }
 async function _ovAdd(){
   const inp=document.getElementById('ov-input');
@@ -2149,6 +2162,99 @@ function _ovRenderList(){
   }
   const btn=document.getElementById('btn-overlay');
   if(btn) btn.classList.toggle('active',state.overlayPlans.length>0);
+  _ovSyncNearbyChecks();
+}
+
+// ── "Plans in view" auto-discovery — same idea as the iplan-plan-filter
+// Chrome extension (query the plan-boundary layer with the current view's
+// envelope, returnDistinctValues), simplified: every hit is just a
+// checkbox to add/remove as an overlay, no category/hide-wide logic needed.
+const OV_NEARBY_LIMIT=300;
+let _ovNearbyTimer=null, _ovNearbyReqId=0;
+function _ovScheduleNearbyRefresh(){
+  const p=document.getElementById('ov-panel');
+  if(!p||!p.classList.contains('vis')) return;
+  clearTimeout(_ovNearbyTimer);
+  _ovNearbyTimer=setTimeout(_ovRefreshNearby,400);
+}
+// Current canvas viewport, converted from draw-space back to real ITM
+// meters via the main plan's geoAnchor (inverse of transformGeom).
+function _ovViewportEnvelope(){
+  if(!state.geoAnchor) return null;
+  const {minX,minY,span}=state.geoAnchor;
+  const toItm=(nx,ny)=>[nx/DATA_SIZE*span+minX, ny/DATA_SIZE*span+minY];
+  const[ix0,iy0]=toItm(...cd(0,0));
+  const[ix1,iy1]=toItm(...cd(canvas.width,canvas.height));
+  return {xmin:Math.min(ix0,ix1),xmax:Math.max(ix0,ix1),ymin:Math.min(iy0,iy1),ymax:Math.max(iy0,iy1)};
+}
+async function _ovRefreshNearby(){
+  const list=document.getElementById('ov-nearby-list'); if(!list) return;
+  const env=_ovViewportEnvelope();
+  if(!env){ list.textContent=''; return; }
+  const reqId=++_ovNearbyReqId;
+  const btn=document.getElementById('ov-refresh-btn'); if(btn) btn.classList.add('spin');
+  list.textContent='';
+  const loading=document.createElement('div'); loading.className='ov-empty'; loading.textContent='מאתר תוכניות…';
+  list.appendChild(loading);
+  try{
+    const geom=JSON.stringify({xmin:env.xmin,ymin:env.ymin,xmax:env.xmax,ymax:env.ymax,spatialReference:{wkid:2039}});
+    const common=`geometry=${encodeURIComponent(geom)}&geometryType=esriGeometryEnvelope&inSR=2039&spatialRel=esriSpatialRelIntersects`;
+    const cj=await (await fetch(`${XPLAN_BASE}/1/query?${common}&returnCountOnly=true&f=json`)).json();
+    if(reqId!==_ovNearbyReqId) return; // superseded by a newer view change
+    const count=(cj&&cj.count)||0;
+    if(count>OV_NEARBY_LIMIT){
+      list.textContent='';
+      const msg=document.createElement('div'); msg.className='ov-empty';
+      msg.textContent=`נמצאו ${count} תוכניות בטווח — התקרב במפה כדי לראות רשימה`;
+      list.appendChild(msg); return;
+    }
+    const j=await (await fetch(`${XPLAN_BASE}/1/query?${common}&returnDistinctValues=true&outFields=pl_number,pl_name&returnGeometry=false&f=json&resultRecordCount=${OV_NEARBY_LIMIT}`)).json();
+    if(reqId!==_ovNearbyReqId) return;
+    const rows=((j&&j.features)||[]).map(f=>f.attributes)
+      .filter(a=>a.pl_number && a.pl_number!==state.planNumber)
+      .sort((a,b)=>String(a.pl_number).localeCompare(String(b.pl_number)));
+    list.textContent='';
+    if(!rows.length){
+      const empty=document.createElement('div'); empty.className='ov-empty';
+      empty.textContent='לא נמצאו תוכניות נוספות בטווח התצוגה'; list.appendChild(empty); return;
+    }
+    for(const a of rows){
+      const row=document.createElement('div'); row.className='ov-item';
+      const chk=document.createElement('input'); chk.type='checkbox';
+      chk.dataset.num=a.pl_number; chk.checked=state.overlayPlans.some(o=>o.num===a.pl_number);
+      chk.onchange=async()=>{
+        if(chk.checked){
+          chk.disabled=true;
+          try{ await addOverlayPlan(a.pl_number); }
+          catch(e){ alert(e.message||'שגיאה בהוספת התוכנית'); chk.checked=false; }
+          chk.disabled=false;
+        } else {
+          removeOverlayPlan(a.pl_number);
+        }
+        _ovRenderList();
+      };
+      const txt=document.createElement('div'); txt.className='ov-item-txt';
+      const numEl=document.createElement('span'); numEl.className='ov-item-num'; numEl.textContent=a.pl_number;
+      const nameEl=document.createElement('span'); nameEl.className='ov-item-name'; nameEl.textContent=a.pl_name||'';
+      txt.append(numEl,document.createElement('br'),nameEl);
+      row.append(chk,txt);
+      list.appendChild(row);
+    }
+  }catch(e){
+    if(reqId!==_ovNearbyReqId) return;
+    list.textContent='';
+    const err=document.createElement('div'); err.className='ov-empty'; err.textContent='שגיאה באיתור תוכניות בטווח';
+    list.appendChild(err);
+  }finally{
+    if(reqId===_ovNearbyReqId && btn) btn.classList.remove('spin');
+  }
+}
+// Keep "plans in view" checkboxes in sync without a full requery
+// (e.g. after adding/removing a plan via the manual number field).
+function _ovSyncNearbyChecks(){
+  document.querySelectorAll('#ov-nearby-list input[type=checkbox]').forEach(chk=>{
+    chk.checked=state.overlayPlans.some(o=>o.num===chk.dataset.num);
+  });
 }
 
 // Reveal the map view (shared by the plan-number launch + project re-load).
@@ -5869,6 +5975,7 @@ wrap.addEventListener('mouseup',e=>{
   if(!dragging) return;
   const moved=Math.abs(e.clientX-dragStart.x)+Math.abs(e.clientY-dragStart.y);
   dragging=false;wrap.classList.remove('grabbing');
+  if(moved>=5) _ovScheduleNearbyRefresh();
   if(moved<5){
     const rect=canvas.getBoundingClientRect();
     // Check rachak scale toggle chip in legend
@@ -5919,6 +6026,7 @@ wrap.addEventListener('wheel',e=>{
   e.preventDefault();
   const rect=canvas.getBoundingClientRect();
   zoomAt(e.clientX-rect.left,e.clientY-rect.top,e.deltaY<0?1.15:1/1.15);
+  _ovScheduleNearbyRefresh();
 },{passive:false});
 window.addEventListener('keydown',e=>{
   if(RE.active){_reKeyDown(e);return;}
