@@ -569,6 +569,47 @@ body.theme-light .ov-item{border-bottom-color:#e2e9f2}
 body.theme-light .ov-item-txt{color:#25405c}
 body.theme-light .ov-sub-hdr{border-top-color:#e2e9f2}
 body.theme-light .ov-refresh{border-color:#bcd;color:#3a6a9a}
+/* ── PDF georeference overlay ── */
+#pdfov-panel{position:fixed;top:52px;left:10px;z-index:320;width:260px;background:#101a28;border:1px solid #2d4060;border-radius:10px;box-shadow:0 8px 22px rgba(0,0,0,.5);padding:11px;display:none;direction:rtl}
+#pdfov-panel.vis{display:block}
+.pdfov-hdr{display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:700;color:#7ecfff;margin-bottom:9px}
+.pdfov-panel-x{background:none;border:none;color:#8aa;cursor:pointer;font-size:13px}
+.pdfov-file-btn{display:block;text-align:center;background:#1a3a5a;border:1px solid #4a8acc;color:#bfe6ff;border-radius:6px;padding:8px;font-size:12px;cursor:pointer}
+.pdfov-file-btn:hover{background:#204a70}
+.pdfov-active-name{font-size:11.5px;color:#cfe0f0;word-break:break-all;margin-bottom:6px}
+.pdfov-vis-row{display:flex;align-items:center;gap:6px;font-size:11.5px;color:#9cc;cursor:pointer;margin-bottom:6px}
+.pdfov-opacity-row{display:flex;align-items:center;gap:8px;font-size:11px;color:#8aa;margin-bottom:8px}
+.pdfov-opacity-row input{flex:1}
+.pdfov-active-actions{display:flex;gap:6px}
+.pdfov-active-actions button{flex:1;background:#16283c;border:1px solid #2a4058;color:#9cc;border-radius:6px;padding:6px;font-size:11.5px;cursor:pointer}
+.pdfov-active-actions button:hover{background:#1e3a52}
+body.theme-light #pdfov-panel{background:#fff;border-color:#c4d4e6}
+body.theme-light .pdfov-active-name{color:#25405c}
+
+#pdfov-modal{position:fixed;inset:0;z-index:900;background:#0b1220;display:none;flex-direction:column;direction:rtl}
+#pdfov-modal.vis{display:flex}
+.pdfov-modal-hdr{display:flex;align-items:center;gap:14px;padding:10px 16px;background:#101a28;border-bottom:1px solid #2d4060;color:#7ecfff;font-size:14px;font-weight:700}
+.pdfov-page-nav{display:flex;align-items:center;gap:8px;font-size:12px;color:#9cc}
+.pdfov-page-nav button{background:#16283c;border:1px solid #2a4058;color:#9cc;border-radius:5px;padding:2px 9px;cursor:pointer}
+.pdfov-x{margin-inline-start:auto;background:#3a1a20;border:1px solid #a04050;color:#ffc0c8;border-radius:6px;padding:5px 12px;font-size:12px;cursor:pointer}
+.pdfov-hint{text-align:center;padding:8px;font-size:13px;color:#ffe650;background:#1a2436}
+.pdfov-canvas-wrap{flex:1;overflow:auto;background:#20242c;display:flex;align-items:flex-start;justify-content:flex-start;padding:20px}
+#pdfov-canvas{cursor:crosshair;box-shadow:0 0 0 1px #2d4060}
+.pdfov-zoom-ctl{display:flex;align-items:center;justify-content:center;gap:10px;padding:6px;background:#101a28;border-top:1px solid #2d4060}
+.pdfov-zoom-ctl button{background:#16283c;border:1px solid #2a4058;color:#9cc;border-radius:5px;padding:3px 12px;font-size:14px;cursor:pointer}
+.pdfov-zoom-ctl span{font-size:11px;color:#8aa;min-width:30px;text-align:center}
+.pdfov-point-form{position:fixed;bottom:60px;left:50%;transform:translateX(-50%);z-index:910;background:#101a28;border:1px solid #4a8acc;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.6);padding:14px;display:flex;gap:14px;align-items:flex-start}
+#pdfov-crop-canvas{border:1px solid #2a4058;border-radius:4px;background:#fff}
+.pdfov-point-fields{display:flex;flex-direction:column;gap:6px;min-width:220px}
+.pdfov-point-fields label{font-size:11px;color:#9cc;display:flex;align-items:center;gap:6px}
+.pdfov-point-fields input{flex:1;background:#16283c;border:1px solid #2a4058;color:#dfe8f2;border-radius:6px;padding:5px 8px;font-size:13px;font-family:monospace}
+.pdfov-ocr-note{font-size:10.5px;color:#7a92aa}
+.pdfov-ocr-chips{display:flex;flex-wrap:wrap;gap:5px}
+.pdfov-ocr-chips button{background:#1a3a5a;border:1px solid #4a8acc;color:#bfe6ff;border-radius:5px;padding:3px 8px;font-size:11px;font-family:monospace;cursor:pointer}
+.pdfov-ocr-chips button:hover{background:#204a70}
+.pdfov-point-actions{display:flex;gap:6px;margin-top:4px}
+.pdfov-point-actions button{flex:1;background:#1a3a5a;border:1px solid #4a8acc;color:#bfe6ff;border-radius:6px;padding:6px;font-size:11.5px;cursor:pointer}
+.pdfov-point-actions button:hover{background:#204a70}
 /* ── Projects ── */
 #proj-panel{position:fixed;top:52px;left:10px;z-index:320;width:340px;max-height:70vh;overflow-y:auto;background:#101a28;border:1px solid #2d4060;border-radius:10px;box-shadow:0 8px 26px rgba(0,0,0,.55);padding:12px;display:none;direction:rtl}
 #proj-panel.vis{display:block}
@@ -1027,6 +1068,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
     <button class="tb-btn t5-hide" id="btn-grid" onclick="toggleGrid()" title="הצג/הסתר רשת 100מ׳">⊞ גריד</button>
     <button class="tb-btn t5-hide" id="btn-basemap" onclick="_bmTogglePanel()" title="מפת רקע גאוגרפית (תצלום אוויר / רחובות)">🌍 רקע</button>
     <button class="tb-btn t5-hide" id="btn-overlay" onclick="_ovTogglePanel()" title="הצגת תוכניות נוספות (לפי מספר) כשכבת רקע להשוואה">🗂 תוכניות נוספות</button>
+    <button class="tb-btn t5-hide" id="btn-pdfov" onclick="_pdfOvTogglePanel()" title="עיגון מסמך PDF (נספח) על גבי התשריט לפי גריד קואורדינטות">📄 עיגון PDF</button>
     <button class="tb-btn t5-hide" id="btn-rachak" onclick="toggleRachakMode()" title="מפת רח״ק לפי טבלה 5">🏢 רח״ק</button>
     <button class="tb-btn t5-hide" id="btn-density" onclick="toggleDensityMode()" title="מפת צפיפות יח״ד/דונם לפי טבלה 5">🏘 צפיפות</button>
 
@@ -1122,6 +1164,66 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
       <div id="ov-wide-list"></div>
     </div>
     <div class="ov-note">מציג גבול + ייעודי קרקע בלבד (בלי טבלה 5), כרקע להשוואה. מקור: אותו שירות Xplan של מינהל התכנון. הרשימה "בטווח התצוגה" מתעדכנת אוטומטית בזום/הזזה של המפה. תוכניות "רחבות/מרוחקות" (כיסוי גדול מהתצוגה, או מרכז התוכנית מחוץ לתצוגה) מוסתרות כברירת מחדל — בדיוק כמו בתוסף iplan-plan-filter.</div>
+  </div>
+
+  <!-- PDF georeference overlay panel -->
+  <div id="pdfov-panel">
+    <div class="pdfov-hdr">📄 עיגון PDF<button class="pdfov-panel-x" onclick="_pdfOvTogglePanel()">✕</button></div>
+    <div id="pdfov-panel-body">
+      <label class="pdfov-file-btn">📎 טען קובץ PDF
+        <input type="file" accept=".pdf,application/pdf" onchange="_pdfOvFileChosen(this)" style="display:none">
+      </label>
+      <div class="ov-note">מזין מסמך PDF (נספח), מסמנים 2 נקודות עם קואורדינטת גריד ידועה — והוא יוצג במיקום הנכון על גבי התשריט. OCR ינסה לזהות מספרים בסביבת הלחיצה כהצעה — האישור הסופי תמיד ידני.</div>
+    </div>
+    <div id="pdfov-active" style="display:none">
+      <div class="pdfov-active-name" id="pdfov-active-name"></div>
+      <label class="pdfov-vis-row">
+        <input type="checkbox" id="pdfov-visible-chk" checked onchange="_pdfOvToggleVisible(this.checked)"> הצג על המפה
+      </label>
+      <div class="pdfov-opacity-row">
+        <span>שקיפות</span>
+        <input type="range" id="pdfov-opacity" min="0.1" max="1" step="0.05" value="0.6" oninput="_pdfOvSetOpacity(this.value)">
+      </div>
+      <div class="pdfov-active-actions">
+        <button onclick="_pdfOvReanchor()">🎯 עגן מחדש</button>
+        <button onclick="_pdfOvRemove()">🗑 הסר</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PDF georeference — full-screen 2-point picker -->
+  <div id="pdfov-modal">
+    <div class="pdfov-modal-hdr">
+      <span id="pdfov-modal-title">עיגון PDF — נקודת ייחוס 1 מתוך 2</span>
+      <div class="pdfov-page-nav" id="pdfov-page-nav" style="display:none">
+        <button onclick="_pdfPickPage(-1)">◂</button>
+        <span id="pdfov-page-lbl">1/1</span>
+        <button onclick="_pdfPickPage(1)">▸</button>
+      </div>
+      <button class="pdfov-x" onclick="_pdfOvCancelPicker()">✕ ביטול</button>
+    </div>
+    <div class="pdfov-hint" id="pdfov-hint">לחץ על צומת גריד עם תווית קואורדינטה ברורה בתמונה</div>
+    <div class="pdfov-canvas-wrap" id="pdfov-canvas-wrap">
+      <canvas id="pdfov-canvas"></canvas>
+    </div>
+    <div class="pdfov-zoom-ctl">
+      <button onclick="_pdfOvZoom(0.8)">－</button>
+      <span id="pdfov-zoom-lbl">זום</span>
+      <button onclick="_pdfOvZoom(1.25)">＋</button>
+    </div>
+    <div class="pdfov-point-form" id="pdfov-point-form" style="display:none">
+      <canvas id="pdfov-crop-canvas" width="220" height="90"></canvas>
+      <div class="pdfov-point-fields">
+        <div class="pdfov-ocr-note" id="pdfov-ocr-note"></div>
+        <div class="pdfov-ocr-chips" id="pdfov-ocr-chips"></div>
+        <label>X (מזרח, ITM): <input type="text" id="pdfov-x-input" inputmode="numeric"></label>
+        <label>Y (צפון, ITM): <input type="text" id="pdfov-y-input" inputmode="numeric"></label>
+        <div class="pdfov-point-actions">
+          <button onclick="_pdfOvConfirmPoint()">✔ אשר נקודה</button>
+          <button onclick="_pdfOvCancelPoint()">✕ בטל</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Grid angle strip -->
@@ -1966,6 +2068,7 @@ async function launchMap(){
     document.getElementById('map-page').style.display='flex';
     buildLegend();
     _ovHoverRings=null; // stale coords would be in the old plan's geoAnchor space
+    _pdfOv={img:null,m:null,opacity:0.6,visible:true,name:'',file:null}; _pdfOvSyncPanel();
     _ovRenderList(); // reset the "תוכניות נוספות" panel/button for the newly-loaded plan
     if(state.wordFile) document.getElementById('btn-word').style.display='';
     if(state.progData||state.progFile){const pb=document.getElementById('btn-prog');pb.style.background='';pb.style.borderColor='#44aa77';}
@@ -2407,11 +2510,294 @@ function _ovSyncNearbyChecks(){
   });
 }
 
+// ============================================================
+// 5c. PDF GEOREFERENCE OVERLAY — anchor a PDF appendix (e.g. a
+// transportation/building annex) onto the map by 2 user-picked control
+// points, each {image pixel} <-> {real ITM coordinate}. No shape
+// extraction — the PDF page is rendered once to a canvas and drawn back
+// as a single rotated/scaled raster image, same drawImage-with-opacity
+// idea as the georeferenced basemap (_drawBasemap), generalized to
+// support rotation via a full 2x3 affine instead of just a bounding box.
+// OCR (Tesseract.js) only ever SUGGESTS text near a click as clickable
+// chips — it never auto-fills X/Y, because a single grid tick label is
+// often one coordinate split across two lines (e.g. "677"/"750" ==
+// 677750), and guessing which digit-group is X vs Y would be silently
+// wrong exactly when it matters. The user always picks/types the value.
+// ============================================================
+let _pdfjsLib=null;
+async function loadPdfjs(){
+  if(_pdfjsLib) return _pdfjsLib;
+  const lib=await import('./pdf.min.mjs');
+  lib.GlobalWorkerOptions.workerSrc='pdf.worker.min.mjs';
+  _pdfjsLib=lib;
+  return lib;
+}
+function loadTesseractScript(){
+  return new Promise((res,rej)=>{
+    if(window.Tesseract){res();return}
+    const s=document.createElement('script');
+    s.src='tesseract.min.js';
+    s.onload=res;
+    s.onerror=()=>rej(new Error('לא ניתן לטעון את ספריית ה-OCR.'));
+    document.head.appendChild(s);
+  });
+}
+let _tessWorker=null,_tessWorkerPromise=null;
+async function _getTessWorker(){
+  if(_tessWorker) return _tessWorker;
+  if(_tessWorkerPromise) return _tessWorkerPromise;
+  _tessWorkerPromise=(async()=>{
+    await loadTesseractScript();
+    const w=await Tesseract.createWorker('eng',1,{
+      workerPath:'tess-worker.min.js', corePath:'tess-core-simd-lstm.js',
+      langPath:location.origin+'/', gzip:true,
+    });
+    await w.setParameters({tessedit_char_whitelist:'0123456789'});
+    _tessWorker=w;
+    return w;
+  })();
+  return _tessWorkerPromise;
+}
+
+let _pdfOv={img:null,m:null,opacity:0.6,visible:true,name:'',file:null};
+let _pdfPick=null, _pdfPendingPoint=null, _pdfZoom=1, _pdfOvLastField='x';
+
+function _pdfOvTogglePanel(){
+  const p=document.getElementById('pdfov-panel'); if(p) p.classList.toggle('vis');
+}
+function _pdfOvSyncPanel(){
+  const has=!!_pdfOv.img;
+  document.getElementById('pdfov-panel-body').style.display=has?'none':'block';
+  document.getElementById('pdfov-active').style.display=has?'block':'none';
+  if(has){
+    document.getElementById('pdfov-active-name').textContent=_pdfOv.name;
+    document.getElementById('pdfov-opacity').value=_pdfOv.opacity;
+    document.getElementById('pdfov-visible-chk').checked=_pdfOv.visible;
+  }
+  const btn=document.getElementById('btn-pdfov');
+  if(btn) btn.classList.toggle('active',has);
+}
+function _pdfOvSetOpacity(v){ _pdfOv.opacity=Math.max(0.05,Math.min(1,parseFloat(v)||0)); scheduleRedraw(); }
+function _pdfOvToggleVisible(v){ _pdfOv.visible=v; scheduleRedraw(); }
+function _pdfOvRemove(){
+  _pdfOv={img:null,m:null,opacity:0.6,visible:true,name:'',file:null};
+  _pdfOvSyncPanel(); scheduleRedraw();
+}
+function _pdfOvReanchor(){
+  if(!_pdfOv.file){ alert('אין קובץ PDF שמור — טען מחדש.'); return; }
+  _pdfOvStartPicker(_pdfOv.file).catch(e=>alert('שגיאה:\n'+(e.message||e)));
+}
+async function _pdfOvFileChosen(inputEl){
+  const f=inputEl.files&&inputEl.files[0];
+  inputEl.value='';
+  if(!f) return;
+  if(!state.geoAnchor){ alert('צריך קודם לטעון תוכנית ראשית על המפה.'); return; }
+  try{ await _pdfOvStartPicker(f); }
+  catch(e){ alert('שגיאה בפתיחת קובץ ה-PDF:\n'+(e.message||e)); document.getElementById('pdfov-modal').classList.remove('vis'); }
+}
+
+async function _pdfOvStartPicker(file){
+  const modal=document.getElementById('pdfov-modal');
+  modal.classList.add('vis');
+  document.getElementById('pdfov-hint').textContent='טוען PDF…';
+  const lib=await loadPdfjs();
+  const buf=await file.arrayBuffer();
+  const doc=await lib.getDocument({data:buf}).promise;
+  _pdfPick={file,doc,pageNum:1,points:[],canvas:null};
+  document.getElementById('pdfov-page-nav').style.display=doc.numPages>1?'flex':'none';
+  _pdfZoom=1;
+  _pdfOvUpdateHint();
+  await _pdfPickRenderPage();
+}
+async function _pdfPickRenderPage(){
+  const {doc,pageNum}=_pdfPick;
+  document.getElementById('pdfov-hint').textContent='מרנדר עמוד…';
+  const page=await doc.getPage(pageNum);
+  const baseVp=page.getViewport({scale:1});
+  const targetLong=2600;
+  const sc=Math.min(3,targetLong/Math.max(baseVp.width,baseVp.height));
+  const vp=page.getViewport({scale:sc});
+  const canvas=document.createElement('canvas');
+  canvas.width=Math.round(vp.width); canvas.height=Math.round(vp.height);
+  await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
+  _pdfPick.canvas=canvas;
+  document.getElementById('pdfov-page-lbl').textContent=`${pageNum}/${doc.numPages}`;
+  _pdfOvUpdateHint();
+  _pdfPickDraw();
+}
+function _pdfPickPage(delta){
+  if(!_pdfPick) return;
+  const n=_pdfPick.pageNum+delta;
+  if(n<1||n>_pdfPick.doc.numPages) return;
+  _pdfPick.pageNum=n; _pdfPick.points=[]; // a different page → previous points are meaningless
+  _pdfPickRenderPage();
+}
+function _pdfOvZoom(f){
+  _pdfZoom=Math.max(0.2,Math.min(4,_pdfZoom*f));
+  document.getElementById('pdfov-zoom-lbl').textContent=Math.round(_pdfZoom*100)+'%';
+  _pdfPickDraw();
+}
+function _pdfPickDraw(){
+  const disp=document.getElementById('pdfov-canvas');
+  if(!disp||!_pdfPick||!_pdfPick.canvas) return;
+  const src=_pdfPick.canvas;
+  disp.width=src.width; disp.height=src.height;
+  disp.style.width=(src.width*_pdfZoom)+'px';
+  disp.style.height=(src.height*_pdfZoom)+'px';
+  const dctx=disp.getContext('2d');
+  dctx.clearRect(0,0,disp.width,disp.height);
+  dctx.drawImage(src,0,0);
+  dctx.save();
+  dctx.strokeStyle='#ff3355'; dctx.lineWidth=3;
+  for(const pt of _pdfPick.points){
+    dctx.beginPath(); dctx.arc(pt.px,pt.py,11,0,Math.PI*2); dctx.stroke();
+    dctx.beginPath(); dctx.moveTo(pt.px-15,pt.py); dctx.lineTo(pt.px+15,pt.py);
+    dctx.moveTo(pt.px,pt.py-15); dctx.lineTo(pt.px,pt.py+15); dctx.stroke();
+  }
+  dctx.restore();
+}
+function _pdfOvUpdateHint(){
+  const n=_pdfPick?_pdfPick.points.length:0;
+  document.getElementById('pdfov-modal-title').textContent=`עיגון PDF — נקודת ייחוס ${Math.min(n+1,2)} מתוך 2`;
+  document.getElementById('pdfov-hint').textContent='לחץ על צומת גריד עם תווית קואורדינטה ברורה בתמונה';
+}
+function _pdfOvCanvasClick(e){
+  if(!_pdfPick||!_pdfPick.canvas||_pdfPick.points.length>=2) return;
+  const canvas=e.currentTarget;
+  const rect=canvas.getBoundingClientRect();
+  const px=Math.round((e.clientX-rect.left)*(canvas.width/rect.width));
+  const py=Math.round((e.clientY-rect.top)*(canvas.height/rect.height));
+  _pdfOvOpenPointForm(px,py);
+}
+// OCR runs on a raw (unmarked) crop and offers every distinct digit-run it
+// finds as a clickable chip — both per-line and the all-lines-joined
+// version (a label is often split across two lines, e.g. "677"/"750" is
+// really 677750). The user clicks a chip into whichever field they choose;
+// nothing is auto-assigned to X or Y.
+function _pdfOvOcrChips(text){
+  const lines=(text||'').split(/\n+/).map(s=>s.replace(/[^\d]/g,'')).filter(s=>s.length>=2);
+  const out=[]; const seen=new Set();
+  const joined=lines.join('');
+  if(joined&&!seen.has(joined)){seen.add(joined);out.push(joined);}
+  for(const l of lines) if(!seen.has(l)){seen.add(l);out.push(l);}
+  return out;
+}
+function _pdfOvChipInsert(v){
+  const id=_pdfOvLastField==='y'?'pdfov-y-input':'pdfov-x-input';
+  document.getElementById(id).value=v;
+}
+async function _pdfOvOpenPointForm(px,py){
+  _pdfPendingPoint={px,py};
+  document.getElementById('pdfov-point-form').style.display='flex';
+  document.getElementById('pdfov-x-input').value='';
+  document.getElementById('pdfov-y-input').value='';
+  const chipsEl=document.getElementById('pdfov-ocr-chips'); chipsEl.textContent='';
+  const note=document.getElementById('pdfov-ocr-note');
+  const src=_pdfPick.canvas;
+  // Annotated preview crop (with crosshair) — just for the user to see context
+  const cc=document.getElementById('pdfov-crop-canvas');
+  const cw=220,ch=90;
+  const cctx=cc.getContext('2d');
+  const sx=Math.max(0,Math.min(src.width-cw,px-cw/2)), sy=Math.max(0,Math.min(src.height-ch,py-ch/2));
+  cctx.fillStyle='#fff'; cctx.fillRect(0,0,cw,ch);
+  cctx.drawImage(src,sx,sy,cw,ch,0,0,cw,ch);
+  cctx.strokeStyle='#ff3355'; cctx.lineWidth=1.5;
+  const cx=px-sx,cy=py-sy;
+  cctx.beginPath(); cctx.moveTo(cx-8,cy); cctx.lineTo(cx+8,cy); cctx.moveTo(cx,cy-8); cctx.lineTo(cx,cy+8); cctx.stroke();
+  note.textContent='מזהה טקסט בסביבת הנקודה…';
+  try{
+    const worker=await _getTessWorker();
+    const ow=300,oh=130;
+    const ocrCanvas=document.createElement('canvas'); ocrCanvas.width=ow; ocrCanvas.height=oh;
+    const octx=ocrCanvas.getContext('2d');
+    const osx=Math.max(0,Math.min(src.width-ow,px-ow/2)), osy=Math.max(0,Math.min(src.height-oh,py-oh/2));
+    octx.fillStyle='#fff'; octx.fillRect(0,0,ow,oh);
+    octx.drawImage(src,osx,osy,ow,oh,0,0,ow,oh);
+    const {data}=await worker.recognize(ocrCanvas);
+    const chips=_pdfOvOcrChips(data.text);
+    if(chips.length){
+      note.textContent='זוהו המספרים הבאים — לחץ כדי להכניס לשדה X או Y (בהתאם לאחרון שבחרת):';
+      for(const v of chips){
+        const b=document.createElement('button'); b.type='button'; b.textContent=v;
+        b.onclick=()=>_pdfOvChipInsert(v);
+        chipsEl.appendChild(b);
+      }
+    } else {
+      note.textContent='לא זוהה מספר אוטומטית — הזן ידנית לפי התווית שרשומה בתשריט.';
+    }
+  }catch(e){
+    note.textContent='זיהוי אוטומטי נכשל — הזן ידנית לפי התווית שרשומה בתשריט.';
+  }
+}
+function _pdfOvCancelPoint(){
+  _pdfPendingPoint=null;
+  document.getElementById('pdfov-point-form').style.display='none';
+}
+function _pdfOvConfirmPoint(){
+  const xv=parseFloat(document.getElementById('pdfov-x-input').value);
+  const yv=parseFloat(document.getElementById('pdfov-y-input').value);
+  if(!isFinite(xv)||!isFinite(yv)){ alert('נא להזין X ו-Y תקינים (קואורדינטות ITM כפי שרשום בתשריט).'); return; }
+  _pdfPick.points.push({px:_pdfPendingPoint.px,py:_pdfPendingPoint.py,itmX:xv,itmY:yv});
+  _pdfPendingPoint=null;
+  document.getElementById('pdfov-point-form').style.display='none';
+  _pdfPickDraw();
+  if(_pdfPick.points.length<2){ _pdfOvUpdateHint(); }
+  else{ _pdfOvFinishPicking(); }
+}
+// Solve a 2-point similarity transform (uniform scale + rotation +
+// translation) from raw image pixels (Y-down) to draw-space (Y-up, same
+// normalized 0..DATA_SIZE space every plan layer already lives in).
+// Conjugating the image point (px, -py) before the standard complex
+// 2-point solve folds in the Y-axis handedness flip — otherwise a plain
+// rotation/scale can never reconcile a Y-down space with a Y-up one.
+function _pdfOvFinishPicking(){
+  const a=state.geoAnchor;
+  const[p1,p2]=_pdfPick.points;
+  const toDs=p=>[(p.itmX-a.minX)/a.span*DATA_SIZE,(p.itmY-a.minY)/a.span*DATA_SIZE];
+  const[w1r,w1i]=toDs(p1), [w2r,w2i]=toDs(p2);
+  const z1r=p1.px, z1i=-p1.py, z2r=p2.px, z2i=-p2.py;
+  const dzr=z2r-z1r, dzi=z2i-z1i, dwr=w2r-w1r, dwi=w2i-w1i;
+  const denom=dzr*dzr+dzi*dzi;
+  if(denom<1e-6){ alert('שתי הנקודות קרובות מדי זו לזו על התמונה — בחר נקודות מרוחקות יותר.'); return; }
+  const kr=(dwr*dzr+dwi*dzi)/denom, ki=(dwi*dzr-dwr*dzi)/denom;
+  const tr=w1r-(kr*z1r-ki*z1i), ti=w1i-(ki*z1r+kr*z1i);
+  // dsX = kr*px + ki*py + tr ; dsY = ki*px - kr*py + ti  → canvas-matrix form {a,b,c,d,e,f}
+  _pdfOv.img=_pdfPick.canvas;
+  _pdfOv.m={a:kr,b:ki,c:ki,d:-kr,e:tr,f:ti};
+  _pdfOv.name=_pdfPick.file.name;
+  _pdfOv.file=_pdfPick.file;
+  _pdfOv.visible=true;
+  document.getElementById('pdfov-modal').classList.remove('vis');
+  _pdfPick=null;
+  _pdfOvSyncPanel();
+  scheduleRedraw();
+}
+function _pdfOvCancelPicker(){
+  document.getElementById('pdfov-modal').classList.remove('vis');
+  document.getElementById('pdfov-point-form').style.display='none';
+  _pdfPick=null; _pdfPendingPoint=null;
+}
+// Draw the anchored PDF page as a rotated/scaled raster, same
+// draw-with-opacity idea as _drawBasemap but via a full affine (canvas's
+// own transform stack does the rotation math, not manual per-pixel work).
+function _drawPdfOverlay(){
+  if(!_pdfOv.img||!_pdfOv.m||!_pdfOv.visible||!state.geoAnchor) return;
+  const M=_pdfOv.m;
+  ctx.save();
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.transform(scale,0,0,-scale,viewX,DATA_SIZE*scale+viewY); // == dc(), draw-space → canvas
+  ctx.transform(M.a,M.b,M.c,M.d,M.e,M.f); // image pixel → draw-space
+  ctx.globalAlpha=_pdfOv.opacity;
+  try{ ctx.drawImage(_pdfOv.img,0,0); }catch(e){}
+  ctx.restore();
+}
+
 // Reveal the map view (shared by the plan-number launch + project re-load).
 function _showMapUI(title){
   document.getElementById('upload-page').style.display='none';
   document.getElementById('map-page').style.display='flex';
   buildLegend();
+  _ovHoverRings=null; _pdfOv={img:null,m:null,opacity:0.6,visible:true,name:'',file:null}; _pdfOvSyncPanel();
   _ovRenderList(); // reset the "תוכניות נוספות" panel/button for the newly-loaded plan
   if(title) document.getElementById('plan-title').textContent=title;
   resize(); setTimeout(resetView,80);
@@ -3399,6 +3785,7 @@ function redraw(){
     }
   }
   ctx.globalAlpha=1; // reset after label layer
+  _drawPdfOverlay(); // georeferenced PDF appendix, above the plan, opacity-controlled
   document.getElementById('zoom-info').textContent='זום: ×'+scale.toFixed(1);
   // highlight selected dimension
   if(selectedDimIdx!==null&&selectedDimIdx<dimItems.length){
@@ -6195,6 +6582,9 @@ wrap.addEventListener('wheel',e=>{
   zoomAt(e.clientX-rect.left,e.clientY-rect.top,e.deltaY<0?1.15:1/1.15);
   _ovScheduleNearbyRefresh();
 },{passive:false});
+document.getElementById('pdfov-canvas').addEventListener('click',_pdfOvCanvasClick);
+document.getElementById('pdfov-x-input').addEventListener('focus',()=>{_pdfOvLastField='x';});
+document.getElementById('pdfov-y-input').addEventListener('focus',()=>{_pdfOvLastField='y';});
 window.addEventListener('keydown',e=>{
   if(RE.active){_reKeyDown(e);return;}
   if(e.key==='Escape'&&CALC.polyMode){cancelPolyDraw();return;}
