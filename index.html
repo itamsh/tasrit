@@ -598,9 +598,9 @@ body.theme-light .pdfov-active-name{color:#25405c}
 .pdfov-zoom-ctl{display:flex;align-items:center;justify-content:center;gap:10px;padding:6px;background:#101a28;border-top:1px solid #2d4060}
 .pdfov-zoom-ctl button{background:#16283c;border:1px solid #2a4058;color:#9cc;border-radius:5px;padding:3px 12px;font-size:14px;cursor:pointer}
 .pdfov-zoom-ctl span{font-size:11px;color:#8aa;min-width:30px;text-align:center}
-.pdfov-point-form{position:fixed;bottom:60px;left:50%;transform:translateX(-50%);z-index:910;background:#101a28;border:1px solid #4a8acc;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.6);padding:14px;display:flex;gap:14px;align-items:flex-start}
-#pdfov-crop-canvas{border:1px solid #2a4058;border-radius:4px;background:#fff}
-.pdfov-point-fields{display:flex;flex-direction:column;gap:6px;min-width:220px}
+.pdfov-point-form{position:fixed;bottom:60px;left:50%;transform:translateX(-50%);z-index:910;width:340px;background:#101a28;border:1px solid #4a8acc;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.6);padding:14px;display:flex;flex-direction:column;gap:10px;align-items:stretch}
+#pdfov-crop-canvas{display:block;width:100%;height:auto;border:1px solid #2a4058;border-radius:4px;background:#fff;flex-shrink:0}
+.pdfov-point-fields{display:flex;flex-direction:column;gap:6px;width:100%}
 .pdfov-point-fields label{font-size:11px;color:#9cc;display:flex;align-items:center;gap:6px}
 .pdfov-point-fields input{flex:1;background:#16283c;border:1px solid #2a4058;color:#dfe8f2;border-radius:6px;padding:5px 8px;font-size:13px;font-family:monospace}
 .pdfov-ocr-note{font-size:10.5px;color:#7a92aa}
@@ -1212,7 +1212,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
       <button onclick="_pdfOvZoom(1.25)">＋</button>
     </div>
     <div class="pdfov-point-form" id="pdfov-point-form" style="display:none">
-      <canvas id="pdfov-crop-canvas" width="220" height="90"></canvas>
+      <canvas id="pdfov-crop-canvas" width="320" height="140"></canvas>
       <div class="pdfov-point-fields">
         <div class="pdfov-ocr-note" id="pdfov-ocr-note"></div>
         <div class="pdfov-ocr-chips" id="pdfov-ocr-chips"></div>
@@ -2694,16 +2694,19 @@ async function _pdfOvOpenPointForm(px,py){
   const chipsEl=document.getElementById('pdfov-ocr-chips'); chipsEl.textContent='';
   const note=document.getElementById('pdfov-ocr-note');
   const src=_pdfPick.canvas;
-  // Annotated preview crop (with crosshair) — just for the user to see context
+  // Annotated preview crop (with crosshair), actually magnified (~3.5x) —
+  // a 1:1 pixel copy inherits the same too-small text as the main view.
   const cc=document.getElementById('pdfov-crop-canvas');
-  const cw=220,ch=90;
+  const cw=cc.width,ch=cc.height;
+  const zoomF=3.5, sw=Math.round(cw/zoomF), sh=Math.round(ch/zoomF);
   const cctx=cc.getContext('2d');
-  const sx=Math.max(0,Math.min(src.width-cw,px-cw/2)), sy=Math.max(0,Math.min(src.height-ch,py-ch/2));
+  const sx=Math.max(0,Math.min(src.width-sw,px-sw/2)), sy=Math.max(0,Math.min(src.height-sh,py-sh/2));
+  cctx.imageSmoothingEnabled=false; // keep crisp text edges when scaling up
   cctx.fillStyle='#fff'; cctx.fillRect(0,0,cw,ch);
-  cctx.drawImage(src,sx,sy,cw,ch,0,0,cw,ch);
-  cctx.strokeStyle='#ff3355'; cctx.lineWidth=1.5;
-  const cx=px-sx,cy=py-sy;
-  cctx.beginPath(); cctx.moveTo(cx-8,cy); cctx.lineTo(cx+8,cy); cctx.moveTo(cx,cy-8); cctx.lineTo(cx,cy+8); cctx.stroke();
+  cctx.drawImage(src,sx,sy,sw,sh,0,0,cw,ch);
+  cctx.strokeStyle='#ff3355'; cctx.lineWidth=2;
+  const cx=(px-sx)*(cw/sw),cy=(py-sy)*(ch/sh);
+  cctx.beginPath(); cctx.moveTo(cx-10,cy); cctx.lineTo(cx+10,cy); cctx.moveTo(cx,cy-10); cctx.lineTo(cx,cy+10); cctx.stroke();
   note.textContent='מזהה טקסט בסביבת הנקודה…';
   try{
     const worker=await _getTessWorker();
