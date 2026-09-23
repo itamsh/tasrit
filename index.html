@@ -5456,6 +5456,9 @@ function _rnDetect(planFeats,gvulFeats,spanMeters,DS){
     const sa=Math.min(L,Math.ceil((G.nodes[e.a].R+1)/cellM)), sb=Math.min(L,Math.ceil((G.nodes[e.b].R+1)/cellM));
     e.catA=_rnMajority(e.pix.slice(sa,sa+K),cat)||_rnMajority(e.pix,cat)||1;
     e.catB=_rnMajority(e.pix.slice(Math.max(0,L-sb-K),L-sb),cat)||_rnMajority(e.pix,cat)||1;
+    // Typical half-width along the link (metres) — scales the acute-crossing test
+    const rs=e.pix.map(radM).sort((x,y)=>x-y);
+    e.hw=rs.length?rs[rs.length>>1]:0;
   }
   // ── 6. Cleanup: spurs, junction clusters, pass-through nodes ──
   const deg=()=>{ const d=new Array(G.nodes.length).fill(0); for(const e of G.edges) if(e.alive){ d[e.a]++; d[e.b]++; } return d; };
@@ -5477,7 +5480,25 @@ function _rnDetect(planFeats,gvulFeats,spanMeters,DS){
     for(const e of G.edges){
       if(!e.alive||e.a===e.b||d[e.a]<3||d[e.b]<3) continue;
       const A=G.nodes[e.a],B=G.nodes[e.b];
-      if(e.len>=1.15*(A.R+B.R)+2) continue;
+      const overlap=e.len<1.15*(A.R+B.R)+2;
+      // Acute crossing: the skeleton splits one X into two Y's joined by a short
+      // link, and at each Y both other arms point AWAY from the link (two go
+      // left at one end, two go right at the other). Staggered junctions differ:
+      // their side streets leave roughly perpendicular to the link.
+      let acute=false;
+      if(!overlap){
+        const armsAt=n=>G.edges.filter(f=>f!==e&&f.alive&&f.a!==f.b&&(f.a===n||f.b===n));
+        const aA=armsAt(e.a), aB=armsAt(e.b);
+        const hws=[...aA,...aB].map(f=>f.hw||0).filter(v=>v>0).sort((x,y)=>x-y);
+        const armHW=hws.length?hws[hws.length>>1]:0;
+        if(aA.length===2&&aB.length===2&&armHW>0&&e.len<8*armHW){
+          const ux=(B.x-A.x)/(Math.hypot(B.x-A.x,B.y-A.y)||1), uy=(B.y-A.y)/(Math.hypot(B.x-A.x,B.y-A.y)||1);
+          const back=(n,f,sx,sy)=>{ const[dx,dy]=_rnArmDir(G,n,f,mpu); return dx*sx+dy*sy>0.5; }; // within 60°
+          acute=aA.every(f=>back(e.a,f,-ux,-uy))&&aB.every(f=>back(e.b,f,ux,uy));
+        }
+      }
+      if(!overlap&&!acute) continue;
+      A.T=Math.max(A.T||A.R,B.T||B.R)+Math.hypot(A.x-B.x,A.y-B.y)*mpu/2; // area the merged junction now spans
       A.x=(A.x+B.x)/2; A.y=(A.y+B.y)/2; A.R=Math.max(A.R,B.R); B.alive=false; e.alive=false;
       for(const f of G.edges){ if(!f.alive) continue; if(f.a===e.b) f.a=e.a; if(f.b===e.b) f.b=e.a; }
       d=deg(); changed=true;
@@ -5571,7 +5592,13 @@ function _rnDetect(planFeats,gvulFeats,spanMeters,DS){
   for(const e of G.edges){
     if(!e.alive||e.a===e.b) continue;
     const A=G.nodes[e.a],B=G.nodes[e.b];
-    const line=_rnDP([[A.x,A.y],...e.pts,[B.x,B.y]],tol);
+    // Drop vertices inside each end junction's own circle: after merging several
+    // fork points into one junction they'd make the link jog toward the old spot
+    const inA=p=>Math.hypot(p[0]-A.x,p[1]-A.y)*mpu<(A.T||A.R), inB=p=>Math.hypot(p[0]-B.x,p[1]-B.y)*mpu<(B.T||B.R);
+    let i0=0,i1=e.pts.length;
+    while(i0<i1&&inA(e.pts[i0])) i0++;
+    while(i1>i0&&inB(e.pts[i1-1])) i1--;
+    const line=_rnDP([[A.x,A.y],...e.pts.slice(i0,i1),[B.x,B.y]],tol);
     const cat=e.catA===2&&e.catB===2?'path':(e.catA===2||e.catB===2?'mixed':'road');
     out.edges.push({a:idMap.get(e.a),b:idMap.get(e.b),wpts:line.slice(1,-1).map(([x,y])=>({x,y})),cat,viaOpen:!!e.open});
     st.edges++; st.lengthM+=e.len;
@@ -5600,6 +5627,15 @@ function _rnCollapse(G,flip){
     }
   }
   return changed;
+}
+// Unit direction in which link f leaves node n, sampled a bit past the junction
+// (max(15 m, 1.5×R)) so the skeleton's curl inside the intersection is ignored.
+function _rnArmDir(G,n,f,mpu){
+  const N=G.nodes[n], far=G.nodes[f.a===n?f.b:f.a];
+  const seq=(f.a===n?f.pts:[...f.pts].reverse()).concat([[far.x,far.y]]);
+  const want=Math.max(15,1.5*N.R); let px=N.x,py=N.y,acc=0,tx=far.x,ty=far.y;
+  for(const[x,y] of seq){ acc+=Math.hypot(x-px,y-py)*mpu; px=x; py=y; if(acc>=want){ tx=x; ty=y; break; } }
+  const L=Math.hypot(tx-N.x,ty-N.y)||1; return [(tx-N.x)/L,(ty-N.y)/L];
 }
 function _rnMajority(pix,cat){ let r=0,p=0; for(const i of pix){ if(cat[i]===1)r++; else if(cat[i]===2)p++; } return r||p?(p>r?2:1):0; }
 function _rnPolyLen(pts){ let L=0; for(let i=1;i<pts.length;i++) L+=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]); return L; }
