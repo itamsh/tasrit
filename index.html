@@ -640,7 +640,24 @@ body.theme-light .pdfov-active-name{color:#25405c}
 /* flex-shrink:0 — without it, this is the only #upload-page child with
    overflow:hidden, which makes flexbox treat its min-height as 0 and collapse
    it to zero height whenever total page content exceeds the viewport. */
-#ext-box{display:none;width:100%;max-width:760px;background:#16233480;border:1px solid #2a3f58;border-radius:10px;overflow:hidden;flex-shrink:0}
+.plannum-t5-row{display:flex;align-items:center;gap:7px;justify-content:center;margin-top:10px;font-size:13px;color:#a9c4e0;cursor:pointer}
+.plannum-t5-row input{accent-color:#2980b9;cursor:pointer}
+.plannum-ext-tag{font-size:11px;background:#1d3350;color:#9cc8f0;border:1px solid #3d6a9a;border-radius:10px;padding:1px 8px}
+body.theme-light .plannum-t5-row{color:#2a4a70}
+body.theme-light .plannum-ext-tag{background:#e3eefa;color:#1a5590;border-color:#bcd3ec}
+#mavat-status{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:60;display:none;align-items:center;gap:10px;
+  max-width:min(720px,90%);padding:9px 14px;border-radius:10px;font-size:13px;direction:rtl;box-shadow:0 4px 16px rgba(0,0,0,.35)}
+#mavat-status .ms-txt{flex:1;line-height:1.6}
+#mavat-status small{opacity:.75}
+#mavat-status .ms-x{background:none;border:none;color:inherit;cursor:pointer;font-size:15px;opacity:.7}
+#mavat-status .ms-btn{display:inline-block;margin-right:8px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.35);color:inherit;
+  border-radius:6px;padding:2px 9px;cursor:pointer;font-size:12px;text-decoration:none}
+#mavat-status.ms-busy{background:#1d3350;color:#d6e8fa;border:1px solid #3d6a9a}
+#mavat-status.ms-ok{background:#1e5a3a;color:#e4f7ec;border:1px solid #3aa06a}
+#mavat-status.ms-err{background:#5a2a1e;color:#fbe6df;border:1px solid #b0583f}
+.ms-spin{display:inline-block;width:12px;height:12px;border:2px solid #7ecfff;border-top-color:transparent;border-radius:50%;animation:msSpin .8s linear infinite;vertical-align:-2px;margin-left:4px}
+@keyframes msSpin{to{transform:rotate(360deg)}}
+#ext-box{width:100%;max-width:760px;background:#16233480;border:1px solid #2a3f58;border-radius:10px;overflow:hidden;flex-shrink:0}
 .ext-hdr{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;cursor:pointer;font-size:13px;font-weight:700;color:#8ab6d8;user-select:none}
 .ext-toggle{transition:transform .2s;color:#5a7a9a}
 .ext-body{max-height:0;overflow:hidden;transition:max-height .25s ease;padding:0 16px}
@@ -953,7 +970,10 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
              onkeydown="if(event.key==='Enter')launchFromPlanNumber()">
       <button id="plannum-btn" onclick="launchFromPlanNumber()">הצג תשריט ←</button>
     </div>
-    <div class="plannum-note">מושך רק את התשריט הגרפי — ללא מידע על זכויות בנייה מתוך טבלה 5</div>
+    <label id="plannum-t5-row" class="plannum-t5-row" style="display:none">
+      <input type="checkbox" id="plannum-t5" checked> משוך גם את טבלה 5 מ"מידע תכנוני" <span class="plannum-ext-tag">🧩 באמצעות התוסף</span>
+    </label>
+    <div class="plannum-note" id="plannum-note">מושך רק את התשריט הגרפי — ללא מידע על זכויות בנייה מתוך טבלה 5</div>
   </div>
 
   <div class="page-divider"></div>
@@ -1019,18 +1039,21 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
   <!-- Optional companion browser extension -->
   <div id="ext-box">
     <div class="ext-hdr" onclick="document.getElementById('ext-body').classList.toggle('vis')">
-      <span>🧩 תוסף דפדפן אופציונלי — שליחה אוטומטית מ"מידע תכנוני"</span>
+      <span>🧩 תוסף לכרום — טעינת טבלה 5 אוטומטית מ"מידע תכנוני"</span>
       <span class="ext-toggle">▾</span>
     </div>
     <div class="ext-body" id="ext-body">
-      <p>תוסף לכרום שמוסיף כפתור בעמוד תוכנית באתר <b>מידע תכנוני (mavat)</b>, ומאפשר לשלוח את קובצי <b>טבלה 5</b> ו<b>נספח הפרוגרמה</b> ישירות לכאן — בלי להוריד ולהעלות ידנית.</p>
+      <p>אתר <b>מידע תכנוני (mavat)</b> מגן על הורדת מסמכים מפני גישה אוטומטית, ולכן אתר זה לא יכול למשוך משם את <b>טבלה 5</b> בעצמו.
+        התוסף עושה זאת בדפדפן שלכם: אחרי <b>טעינה מהירה לפי מספר תוכנית</b>, הוא פותח את עמוד התוכנית בלשונית רקע, לוחץ על כפתור ההורדה של האתר עצמו, מעביר את הקובץ לכאן וסוגר את הלשונית.
+        בנוסף, בעמוד תוכנית ב"מידע תכנוני" מופיע כפתור "📤 שלח לתצוגת תשריטים".</p>
       <p class="ext-note">התקנה ידנית (עדיין לא בחנות התוספים של כרום):</p>
       <ol>
         <li>הורידו את קובץ ה-ZIP וחלצו אותו לתיקייה במחשב</li>
         <li>בכרום: <code>chrome://extensions</code> ← הפעילו "מצב מפתח" (Developer mode)</li>
         <li>לחצו "טען מפוזר" (Load unpacked) ובחרו את התיקייה שחילצתם</li>
       </ol>
-      <a class="ext-dl-btn" href="tasrit-mavat-bridge-v0.1.1.zip" download>⬇ הורדת התוסף (ZIP)</a>
+      <p class="ext-note">כבר מותקנת גרסה קודמת? מחקו את התיקייה הישנה, חלצו את החדשה לאותו מקום, ולחצו 🔄 (טעינה מחדש) בכרטיס התוסף ב-<code>chrome://extensions</code>. אחר כך רעננו את העמוד הזה.</p>
+      <a class="ext-dl-btn" href="tasrit-mavat-bridge-v0.2.0.zip" download>⬇ הורדת התוסף (ZIP, גרסה 0.2.0)</a>
     </div>
   </div>
 
@@ -1651,7 +1674,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 // ── App version — bump on EVERY deploy (date + that day's deploy number), so the
 //    user and Claude can confirm they're looking at the same build. Shown in the
 //    map toolbar and the loading-page footer.
-const APP_VERSION='2026.09.23-8';
+const APP_VERSION='2026.09.23-9';
 // Version of the road-network DETECTION ALGORITHM only — bump when _rnDetect's
 // output changes, so a network saved from an older run is flagged as stale
 // (networks are saved per project and are NOT re-detected on load).
@@ -2030,10 +2053,13 @@ function handleFiles(files,zone){
 // Only reacts to a specific event name/shape — no remote code execution, no
 // elevated trust; the files are routed through the exact same classifier as a
 // normal drag-and-drop.
+// Base64 → bytes (files from the extension travel as base64: extension messaging is JSON-only)
+function _b64ToBytes(b64){const s=atob(b64||'');const u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u;}
+function _bridgeDetail(e){const d=e&&e.detail;if(typeof d==='string'){try{return JSON.parse(d);}catch(x){return {};}}return d||{};}
 document.addEventListener('tasrit-import-files',(e)=>{
   try{
-    const items=(e.detail&&e.detail.files)||[];
-    const files=items.map(f=>new File([f.buffer],f.name,{type:f.type||''}));
+    const items=_bridgeDetail(e).files||[];
+    const files=items.map(f=>new File([f.b64!=null?_b64ToBytes(f.b64):f.buffer],f.name,{type:f.type||''}));
     if(files.length){ handleFilesAuto(files); _showToast('התקבלו '+files.length+' קבצים מהתוסף ✓'); }
   }catch(err){console.warn('tasrit-import-files failed',err);}
 });
@@ -2834,12 +2860,92 @@ async function launchFromPlanNumber(){
   try{
     await loadPlanByNumber(num);
     _showMapUI('תוכנית '+num);
-    _projAfterLaunch();
+    await _projAfterLaunch();
+    const wantT5=document.getElementById('plannum-t5');
+    if(_bridgeVersion()&&(!wantT5||wantT5.checked)) _mavatFetchT5(); // ברקע — התשריט כבר מוצג
   }catch(e){
     alert(e.message||'שגיאה בטעינת התוכנית');
   }finally{
     if(btn){ btn.disabled=false; btn.textContent=old; }
   }
+}
+
+// ============================================================
+// 5a'. TABLE 5 FROM "מידע תכנוני" VIA THE COMPANION EXTENSION
+// ============================================================
+// mavat documents are reCAPTCHA-gated and cannot be fetched from this site.
+// When the tasrit-mavat-bridge extension (v0.2+) is installed, it opens the
+// plan's mavat page in a background tab, presses mavat's OWN download control
+// for "זכויות והוראות בניה", and hands the file back here.
+function _bridgeVersion(){
+  const v=document.documentElement.getAttribute('data-tasrit-bridge')||'';
+  const [a,b]=v.split('.').map(Number);
+  return (a>0||b>=2)?v:''; // auto-fetch exists from 0.2.0
+}
+function _planMavatUrl(){
+  const g=state.layers&&state.layers.gvul&&state.layers.gvul.features&&state.layers.gvul.features[0];
+  const u=g&&g.properties&&g.properties.pl_url;
+  return (u&&/^https:\/\/mavat\.iplan\.gov\.il\/SV4\//.test(u))?u:'';
+}
+function _mavatStatus(kind,html){
+  let box=document.getElementById('mavat-status');
+  if(!box){
+    box=document.createElement('div');box.id='mavat-status';
+    document.getElementById('canvas-wrap').appendChild(box);
+  }
+  if(!kind){box.style.display='none';return;}
+  box.className='ms-'+kind; box.style.display='flex';
+  box.innerHTML=`<div class="ms-txt">${html}</div><button class="ms-x" title="סגירה" onclick="_mavatStatus(null)">✕</button>`;
+}
+let _mavatReq=null;
+function _mavatFetchT5(){
+  const url=_planMavatUrl();
+  if(!url){_mavatStatus('err','לא נמצא קישור לעמוד התוכנית ב"מידע תכנוני" — טבלה 5 לא נטענה.');return;}
+  if(_mavatReq) return;
+  const reqId='m'+Date.now();
+  const planNum=state.planNumber||'';
+  _mavatReq=reqId;
+  _mavatStatus('busy',`<span class="ms-spin"></span> מושך את טבלה 5 מ"מידע תכנוני"… <small>(נפתחת לשונית רקע ונסגרת מעצמה, עד כדקה)</small>`);
+  const timer=setTimeout(()=>onResp({detail:JSON.stringify({reqId,ok:false,error:'אין תשובה מהתוסף'})}),150000);
+  function onResp(e){
+    const d=_bridgeDetail(e);
+    if(d.reqId!==reqId) return;
+    document.removeEventListener('tasrit-mavat-response',onResp);
+    clearTimeout(timer); _mavatReq=null;
+    if(state.planNumber!==planNum) return; // המשתמש כבר עבר לתוכנית אחרת
+    if(!d.ok||!d.files||!d.files.length){
+      _mavatStatus('err',`טבלה 5 לא נטענה: ${esc(d.error||'שגיאה לא ידועה')}
+        <button class="ms-btn" onclick="_mavatFetchT5()">נסה שוב</button>
+        <a class="ms-btn" href="${esc(url)}" target="_blank" rel="noopener">פתח את עמוד התוכנית</a>`);
+      return;
+    }
+    _mavatApplyT5(d.files).catch(err=>_mavatStatus('err','הקובץ התקבל אך לא נקרא כטבלה 5: '+esc(err.message||err)));
+  }
+  document.addEventListener('tasrit-mavat-response',onResp);
+  document.dispatchEvent(new CustomEvent('tasrit-mavat-request',{detail:JSON.stringify({reqId,url,docs:['t5'],planLabel:planNum})}));
+}
+async function _mavatApplyT5(items){
+  const files=items.map(f=>new File([_b64ToBytes(f.b64)],f.name,{type:''}));
+  state.table5=null;
+  await parseTable5Files(files);
+  if(!state.table5) throw new Error('המבנה לא זוהה');
+  state.files.t5=files;
+  markZone('t5',files);
+  try{redraw();}catch(e){}
+  const n=Object.keys(state.table5).length;
+  _mavatStatus('ok',`✓ טבלה 5 נטענה מ"מידע תכנוני" — ${n} תאי שטח`);
+  setTimeout(()=>{const b=document.getElementById('mavat-status');if(b&&b.className==='ms-ok')_mavatStatus(null);},6000);
+  await _projAfterLaunch(); // לשמור את הקובץ בפרויקט
+}
+document.addEventListener('tasrit-bridge-ready',()=>{try{_plannumBridgeUI();}catch(e){}});
+setTimeout(()=>{try{_plannumBridgeUI();}catch(e){}},0);
+function _plannumBridgeUI(){
+  const on=!!_bridgeVersion();
+  const row=document.getElementById('plannum-t5-row'); if(row) row.style.display=on?'flex':'none';
+  const note=document.getElementById('plannum-note');
+  if(note) note.innerHTML=on
+    ?'התשריט נמשך מיידית; טבלה 5 נמשכת ברקע באמצעות התוסף (לשונית "מידע תכנוני" נפתחת ונסגרת מעצמה)'
+    :'מושך רק את התשריט הגרפי. לטעינת טבלה 5 אוטומטית — התקינו את <a href="#ext-box" onclick="document.getElementById(\'ext-body\').classList.add(\'vis\')">התוסף לכרום</a>';
 }
 
 // ============================================================
@@ -11502,7 +11608,9 @@ async function loadProjectById(id){
     checkReady();
     state.progData=obj.progData||null;
     if(!state.files.shp && obj.xplanNumber){
+      const keepT5=state.files.t5;               // loadPlanByNumber resets state.files
       await loadPlanByNumber(obj.xplanNumber);   // re-fetch geometry from Xplan
+      if(keepT5&&keepT5.length){ state.files.t5=keepT5; await parseTable5Files(keepT5); } // טבלה 5 שנמשכה מ"מידע תכנוני"
       _showMapUI('תוכנית '+obj.xplanNumber);
     } else {
       await launchMap();
