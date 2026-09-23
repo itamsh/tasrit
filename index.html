@@ -1353,7 +1353,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
         <div class="rn-sec-hdr">⚙ עריכת רשת דרכים</div>
         <div style="font-size:10.5px;color:#7ecfff;opacity:.8;text-align:center;line-height:1.3;margin-bottom:4px">מומלץ: קודם צמתים, אחר כך קווים</div>
         <div class="rep-toolbar-row" style="margin-bottom:4px">
-          <button class="rep-btn" style="flex:1" onclick="initRoadNetworkAuto()" title="זיהוי צמתים אוטומטי מייעודי הקרקע">⚡ זיהוי אוטומטי</button>
+          <button class="rep-btn" style="flex:1" onclick="initRoadNetworkAuto()" title="זיהוי אוטומטי של צמתים (דרך-דרך / דרך-שביל) ושל קטעי הדרך ביניהם, מתוך ייעודי הקרקע — דרך, שביל, ושצ&quot;פ כמקשר">⚡ זיהוי אוטומטי</button>
         </div>
         <div class="rn-divider"></div>
         <div class="rep-toolbar-row" style="margin-bottom:4px">
@@ -5228,137 +5228,393 @@ function drawMeasurement(){
 }
 
 // ============================================================
-// 18. ROAD NETWORK — centerline extraction via cross-section sampling
+// 18. ROAD NETWORK — auto-detection: raster skeleton of the union of all
+// road + path land use, read back as a graph (junctions + street links).
+// Replaced the old per-polygon PCA centerline, which assumed every road
+// polygon is one straight strip — it missed curves, T-junctions in the
+// middle of a polygon, multi-branch polygons, and marked every polygon
+// seam as a "junction".
 // ============================================================
-const ROAD_NET_CODES = new Set([820, 830, 840, 850, 860, 861]);
+// Land uses shown while in road-network mode = the ones the detector reads
+const ROAD_NET_CODES = new Set([820,830,840,850,903,940, 860,861,760, 670,700,780]);
+const RN_ROAD=new Set([820,830,840,850,903,940]);   // דרך מאושרת/מוצעת/משולבת/נופית/תח"צ
+const RN_PATH=new Set([860,861,760]);                // שביל / שביל רב קיבולת / טיילת
+const RN_OPEN=new Set([670,700,780]);                // שצ"פ / פארק / כיכר עירונית — connector only
 
-function toggleRoadNetwork(){
-  state.roadNetworkVisible = !state.roadNetworkVisible;
-  if(state.roadNetworkVisible && !state.roadNetwork)
-    state.roadNetwork = computeRoadNetwork();
-  document.getElementById('btn-road-net').classList.toggle('active', state.roadNetworkVisible);
-  redraw();
-}
-
-function computeRoadNetwork(){
-  const lines = [];
-  if(!state.layers.plan) return lines;
-  for(const f of state.layers.plan.features){
-    if(!f.geometry || !ROAD_NET_CODES.has(Number(f.properties.MAVAT_CODE))) continue;
-    const polys = f.geometry.type==='Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
-    for(const poly of polys){
-      const cl = roadPolyCenterline(poly[0]);
-      if(cl) lines.push(cl);
+function _rnDetect(planFeats,gvulFeats,spanMeters,DS){
+  const mpu=spanMeters/DS;                 // meters per draw unit
+  const polys=[];
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  for(const f of planFeats){
+    const g=f.geometry; if(!g) continue;
+    const p=f.properties||{};
+    const code=Number(p.MAVAT_CODE!=null?p.MAVAT_CODE:p.mavat_code);
+    const c=RN_ROAD.has(code)?1:RN_PATH.has(code)?2:RN_OPEN.has(code)?3:0;
+    if(!c) continue;
+    const ps=g.type==='Polygon'?[g.coordinates]:g.type==='MultiPolygon'?g.coordinates:[];
+    for(const rings of ps){
+      if(!rings||!rings.length) continue;
+      polys.push({c,rings});
+      for(const[x,y] of rings[0]){ if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y; }
     }
   }
-  snapRoadEndpoints(lines, DATA_SIZE * 0.02);
-  return lines;
-}
+  const empty={nodes:[],edges:[],stats:{junctions:0,rr:0,rp:0,deadEnds:0,boundary:0,edges:0,lengthM:0}};
+  if(!polys.some(p=>p.c!==3)) return empty;
 
-function roadPolyCenterline(ring){
-  const n = ring.length - 1;
-  if(n < 3) return null;
+  // ── 1. Grid: ~0.6–1m cells, long side capped for speed ──
+  const cellM=Math.max(0.6,Math.max(maxX-minX,maxY-minY)*mpu/2600);
+  const cell=cellM/mpu, pad=4;
+  const ox=minX-pad*cell, oy=minY-pad*cell;
+  const W=Math.ceil((maxX-minX)/cell)+2*pad+1, H=Math.ceil((maxY-minY)/cell)+2*pad+1;
+  const N=W*H;
+  const cat=new Uint8Array(N);  // 0 none · 1 road · 2 path · 3 open space
+  const gx=x=>(x-ox)/cell, gy=y=>(y-oy)/cell;
+  const toX=i=>ox+((i%W)+0.5)*cell, toY=i=>oy+(((i/W)|0)+0.5)*cell;
 
-  // Centroid
-  let cx=0, cy=0;
-  for(let i=0;i<n;i++){cx+=ring[i][0];cy+=ring[i][1];}
-  cx/=n; cy/=n;
-
-  // PCA: covariance matrix → long axis direction
-  let sxx=0, syy=0, sxy=0;
-  for(let i=0;i<n;i++){
-    const dx=ring[i][0]-cx, dy=ring[i][1]-cy;
-    sxx+=dx*dx; syy+=dy*dy; sxy+=dx*dy;
-  }
-  const disc=Math.sqrt(Math.max(0,(sxx-syy)**2 + 4*sxy**2));
-  const lam=(sxx+syy+disc)/2;
-  let ax, ay;
-  if(Math.abs(sxy)>1e-10){ax=sxy; ay=lam-sxx;}
-  else{ax=sxx>=syy?1:0; ay=sxx>=syy?0:1;}
-  const alen=Math.sqrt(ax*ax+ay*ay);
-  if(alen<1e-10) return null;
-  ax/=alen; ay/=alen;
-  const px=-ay, py=ax; // perpendicular unit vector
-
-  // Extent along long axis
-  let minP=Infinity, maxP=-Infinity;
-  for(let i=0;i<n;i++){
-    const t=(ring[i][0]-cx)*ax+(ring[i][1]-cy)*ay;
-    if(t<minP)minP=t; if(t>maxP)maxP=t;
-  }
-  const axLen=maxP-minP;
-  if(axLen<2) return null;
-
-  // Sample cross-sections: cast perpendicular rays, take midpoints
-  const NS=Math.max(4, Math.ceil(axLen/5));
-  const pts=[];
-  for(let si=0;si<=NS;si++){
-    const t=minP+axLen*si/NS;
-    const ox=cx+t*ax, oy=cy+t*ay;
-    let tPos=Infinity, tNeg=Infinity;
-    for(let i=0;i<n;i++){
-      const x1=ring[i][0], y1=ring[i][1];
-      const x2=ring[(i+1)%n][0], y2=ring[(i+1)%n][1];
-      const tp=raySegIntersect(ox,oy, px,py, x1,y1,x2,y2);
-      if(tp!==null && tp<tPos) tPos=tp;
-      const tn=raySegIntersect(ox,oy,-px,-py, x1,y1,x2,y2);
-      if(tn!==null && tn<tNeg) tNeg=tn;
-    }
-    if(tPos<Infinity && tNeg<Infinity)
-      pts.push([ox+px*(tPos-tNeg)/2, oy+py*(tPos-tNeg)/2]);
-  }
-  return pts.length>=2 ? pts : null;
-}
-
-// Snap each line endpoint to the nearest point on any other centerline
-function snapRoadEndpoints(lines, thresh){
-  for(let i=0;i<lines.length;i++){
-    for(const ei of [0, lines[i].length-1]){
-      const p=lines[i][ei];
-      let bestDist=thresh, bestPt=null;
-      for(let j=0;j<lines.length;j++){
-        if(i===j) continue;
-        for(let k=0;k<lines[j].length-1;k++){
-          const[x1,y1]=lines[j][k],[x2,y2]=lines[j][k+1];
-          const dx=x2-x1, dy=y2-y1, lenSq=dx*dx+dy*dy;
-          if(lenSq<1e-10) continue;
-          const t=Math.max(0,Math.min(1,((p[0]-x1)*dx+(p[1]-y1)*dy)/lenSq));
-          const nx=x1+t*dx, ny=y1+t*dy;
-          const d=Math.hypot(p[0]-nx,p[1]-ny);
-          if(d<bestDist){bestDist=d;bestPt=[nx,ny];}
+  function rasterPoly(rings,v){
+    let y0=Infinity,y1=-Infinity;
+    for(const[,y] of rings[0]){ const r=gy(y); if(r<y0)y0=r; if(r>y1)y1=r; }
+    const j0=Math.max(0,Math.floor(y0)), j1=Math.min(H-1,Math.ceil(y1));
+    const xs=[];
+    for(let j=j0;j<=j1;j++){
+      const yc=j+0.5; xs.length=0;
+      for(const ring of rings){
+        for(let k=0;k<ring.length-1;k++){
+          const ay=gy(ring[k][1]), by=gy(ring[k+1][1]);
+          if((ay>yc)===(by>yc)) continue;
+          const ax=gx(ring[k][0]), bx=gx(ring[k+1][0]);
+          xs.push(ax+(yc-ay)*(bx-ax)/(by-ay));
         }
       }
-      if(bestPt) lines[i][ei]=bestPt;
+      xs.sort((a,b)=>a-b);
+      for(let k=0;k+1<xs.length;k+=2){
+        const i0=Math.max(0,Math.ceil(xs[k]-0.5)), i1=Math.min(W-1,Math.floor(xs[k+1]-0.5));
+        for(let i=i0;i<=i1;i++) cat[j*W+i]=v;
+      }
+    }
+    // Stroke the outline too, so strips thinner than a cell still survive
+    for(const ring of rings){
+      for(let k=0;k<ring.length-1;k++){
+        const ax=gx(ring[k][0]),ay=gy(ring[k][1]),bx=gx(ring[k+1][0]),by=gy(ring[k+1][1]);
+        const steps=Math.ceil(Math.hypot(bx-ax,by-ay)*2)+1;
+        for(let s=0;s<=steps;s++){
+          const t=s/steps, i=Math.floor(ax+(bx-ax)*t), j=Math.floor(ay+(by-ay)*t);
+          if(i>=0&&j>=0&&i<W&&j<H&&(v!==3||!cat[j*W+i])) cat[j*W+i]=v;
+        }
+      }
     }
   }
-}
+  for(const order of [3,2,1]) for(const p of polys) if(p.c===order) rasterPoly(p.rings,order);
 
-function drawRoadNetwork(){
-  if(!state.roadNetwork||!state.roadNetworkVisible||!state.roadNetwork.length) return;
-  ctx.save();
-  ctx.strokeStyle='#1155dd';
-  ctx.lineWidth=2;
-  ctx.setLineDash([]);
-  for(const line of state.roadNetwork){
-    if(line.length<2) continue;
-    ctx.beginPath();
-    const[x0,y0]=dc(line[0][0],line[0][1]);
-    ctx.moveTo(x0,y0);
-    for(let i=1;i<line.length;i++){
-      const[xi,yi]=dc(line[i][0],line[i][1]);
-      ctx.lineTo(xi,yi);
-    }
-    ctx.stroke();
-  }
-  // Node dots at endpoints
-  ctx.fillStyle='#1155dd';
-  for(const line of state.roadNetwork){
-    for(const p of[line[0],line[line.length-1]]){
-      const[sx,sy]=dc(p[0],p[1]);
-      ctx.beginPath();ctx.arc(sx,sy,3,0,Math.PI*2);ctx.fill();
+  // ── 2. Foreground = road ∪ path; fill tiny holes (slivers / small islands) ──
+  const fg=new Uint8Array(N);
+  for(let i=0;i<N;i++) if(cat[i]===1||cat[i]===2) fg[i]=1;
+  {
+    const lab=new Int32Array(N).fill(-1), q=new Int32Array(N);
+    const holeMax=Math.round(400/(cellM*cellM));
+    for(let s=0;s<N;s++){
+      if(fg[s]||lab[s]>=0) continue;
+      let h=0,t=0,touches=false; q[t++]=s; lab[s]=s;
+      const comp=[];
+      while(h<t){
+        const i=q[h++]; comp.push(i);
+        const x=i%W,y=(i/W)|0;
+        if(x===0||y===0||x===W-1||y===H-1) touches=true;
+        if(x>0){const n=i-1; if(!fg[n]&&lab[n]<0){lab[n]=s;q[t++]=n;}}
+        if(x<W-1){const n=i+1; if(!fg[n]&&lab[n]<0){lab[n]=s;q[t++]=n;}}
+        if(y>0){const n=i-W; if(!fg[n]&&lab[n]<0){lab[n]=s;q[t++]=n;}}
+        if(y<H-1){const n=i+W; if(!fg[n]&&lab[n]<0){lab[n]=s;q[t++]=n;}}
+      }
+      if(!touches&&comp.length<=holeMax) for(const i of comp){ fg[i]=1; if(!cat[i]||cat[i]===3) cat[i]=1; }
     }
   }
-  ctx.restore();
+
+  // ── 3. Chamfer distance transform (3-4) → local half-width ──
+  const dt=new Float32Array(N);
+  for(let i=0;i<N;i++) dt[i]=fg[i]?1e9:0;
+  for(let y=1;y<H-1;y++) for(let x=1;x<W-1;x++){
+    const i=y*W+x; if(!dt[i]) continue;
+    dt[i]=Math.min(dt[i],dt[i-1]+3,dt[i-W]+3,dt[i-W-1]+4,dt[i-W+1]+4);
+  }
+  for(let y=H-2;y>0;y--) for(let x=W-2;x>0;x--){
+    const i=y*W+x; if(!dt[i]) continue;
+    dt[i]=Math.min(dt[i],dt[i+1]+3,dt[i+W]+3,dt[i+W+1]+4,dt[i+W-1]+4);
+  }
+  const radM=i=>dt[i]/3*cellM;   // distance to nearest non-road edge, meters
+
+  // ── 4. Zhang–Suen thinning ──
+  const sk=fg.slice();
+  const O=[W,W+1,1,-W+1,-W,-W-1,-1,W-1];   // p2..p9 : N NE E SE S SW W NW
+  {
+    let list=[]; for(let i=0;i<N;i++) if(sk[i]){const x=i%W,y=(i/W)|0; if(x>0&&y>0&&x<W-1&&y<H-1) list.push(i); else sk[i]=0;}
+    const del=[]; let changed=true;
+    while(changed){
+      changed=false;
+      for(let pass=0;pass<2;pass++){
+        del.length=0;
+        for(const i of list){
+          if(!sk[i]) continue;
+          const p2=sk[i+O[0]],p3=sk[i+O[1]],p4=sk[i+O[2]],p5=sk[i+O[3]],p6=sk[i+O[4]],p7=sk[i+O[5]],p8=sk[i+O[6]],p9=sk[i+O[7]];
+          const B=p2+p3+p4+p5+p6+p7+p8+p9; if(B<2||B>6) continue;
+          const A=(!p2&&p3)+(!p3&&p4)+(!p4&&p5)+(!p5&&p6)+(!p6&&p7)+(!p7&&p8)+(!p8&&p9)+(!p9&&p2);
+          if(A!==1) continue;
+          if(pass===0){ if(p2&&p4&&p6) continue; if(p4&&p6&&p8) continue; }
+          else{ if(p2&&p4&&p8) continue; if(p2&&p6&&p8) continue; }
+          del.push(i);
+        }
+        if(del.length){ changed=true; for(const i of del) sk[i]=0; }
+      }
+      list=list.filter(i=>sk[i]);
+    }
+  }
+
+  // ── 5. Skeleton → graph ──
+  // Number of separate 8-connected groups among a pixel's skeleton neighbours:
+  // 1 = end (or redundant), 2 = pass-through, ≥3 = fork. Ring neighbours k,k+1
+  // always touch; orthogonal ones two apart (N & E, E & S…) touch diagonally.
+  const groups=i=>{
+    const on=[]; for(let k=0;k<8;k++) on.push(sk[i+O[k]]);
+    const par=[0,1,2,3,4,5,6,7], f=x=>par[x]===x?x:(par[x]=f(par[x]));
+    for(let k=0;k<8;k++){ if(!on[k]) continue;
+      if(on[(k+1)&7]) par[f(k)]=f((k+1)&7);
+      if(!(k&1)&&on[(k+2)&7]) par[f(k)]=f((k+2)&7); }
+    const s=new Set(); for(let k=0;k<8;k++) if(on[k]) s.add(f(k)); return s.size;
+  };
+  const nb=i=>{ let b=0; for(let k=0;k<8;k++) b+=sk[i+O[k]]; return b; };
+  // Thin to a strictly minimal 8-path: drop "staircase" pixels whose neighbours
+  // stay connected without them. Zhang–Suen leaves these, and they can hide a
+  // fork (no pixel reads as a junction → the tracer walks past a side street).
+  let skel=[]; for(let i=0;i<N;i++) if(sk[i]) skel.push(i);
+  for(let again=true;again;){
+    again=false;
+    for(const i of skel){ if(sk[i]&&nb(i)>=2&&groups(i)===1){ sk[i]=0; again=true; } }
+  }
+  skel=skel.filter(i=>sk[i]);
+  const nodeOf=new Int32Array(N).fill(-1);
+  const clusters=[];
+  // On a minimal skeleton a plain line pixel has exactly 2 neighbours, so any
+  // pixel with ≥3 is part of a junction — incl. small pixel "triangles" where
+  // no single pixel splits 3 ways (groups() alone misses those).
+  for(const i of skel){
+    const b=nb(i);
+    if(b===0){ sk[i]=0; continue; }
+    if(b!==2) nodeOf[i]=-2;                       // node pixel, cluster not yet assigned
+  }
+  for(const s of skel){
+    if(nodeOf[s]!==-2) continue;
+    const id=clusters.length, px=[s]; nodeOf[s]=id;
+    for(let h=0;h<px.length;h++){
+      const i=px[h];
+      for(let k=0;k<8;k++){ const n=i+O[k]; if(nodeOf[n]===-2){ nodeOf[n]=id; px.push(n); } }
+    }
+    clusters.push(px);
+  }
+  const G={nodes:[],edges:[]};
+  for(const px of clusters){
+    let sx=0,sy=0,r=0; for(const i of px){ sx+=toX(i); sy+=toY(i); r=Math.max(r,radM(i)); }
+    G.nodes.push({x:sx/px.length,y:sy/px.length,R:r,alive:true});
+  }
+  const used=new Uint8Array(N);
+  const seenPair=new Set();
+  for(let c=0;c<clusters.length;c++){
+    for(const p of clusters[c]){
+      for(let k=0;k<8;k++){
+        const q0=p+O[k];
+        if(!sk[q0]||nodeOf[q0]===c) continue;
+        if(nodeOf[q0]>=0){                          // two node clusters touching directly
+          const key=Math.min(c,nodeOf[q0])+'_'+Math.max(c,nodeOf[q0]);
+          if(!seenPair.has(key)){ seenPair.add(key); G.edges.push({a:c,b:nodeOf[q0],pix:[],alive:true}); }
+          continue;
+        }
+        if(used[q0]) continue;
+        const pix=[q0]; used[q0]=1;
+        let prev=p,cur=q0,end=-1;
+        for(let guard=0;guard<N;guard++){
+          let next=-1,nodeHit=-1;
+          for(const k2 of [0,2,4,6,1,3,5,7]){       // 4-neighbours first
+            const n=cur+O[k2];
+            if(!sk[n]||n===prev) continue;
+            if(nodeOf[n]>=0){ if(nodeOf[n]!==c||pix.length>2){ nodeHit=nodeOf[n]; break; } continue; }
+            if(!used[n]&&next<0) next=n;
+          }
+          if(nodeHit>=0){ end=nodeHit; break; }
+          if(next<0) break;
+          used[next]=1; pix.push(next); prev=cur; cur=next;
+        }
+        if(end>=0) G.edges.push({a:c,b:end,pix,alive:true});
+        else for(const i of pix) used[i]=0;         // failed walk: free the pixels for the other end
+      }
+    }
+  }
+  for(const e of G.edges){
+    e.pts=e.pix.map(i=>[toX(i),toY(i)]);
+    e.len=_rnPolyLen([[G.nodes[e.a].x,G.nodes[e.a].y],...e.pts,[G.nodes[e.b].x,G.nodes[e.b].y]])*mpu;
+    // Land use of each end, sampled just PAST the junction's own inscribed
+    // circle — the first metres of any branch still lie inside the (road)
+    // intersection, which made path junctions read as road–road.
+    const K=Math.max(3,Math.round(8/cellM)), L=e.pix.length;
+    const sa=Math.min(L,Math.ceil((G.nodes[e.a].R+1)/cellM)), sb=Math.min(L,Math.ceil((G.nodes[e.b].R+1)/cellM));
+    e.catA=_rnMajority(e.pix.slice(sa,sa+K),cat)||_rnMajority(e.pix,cat)||1;
+    e.catB=_rnMajority(e.pix.slice(Math.max(0,L-sb-K),L-sb),cat)||_rnMajority(e.pix,cat)||1;
+  }
+  // ── 6. Cleanup: spurs, junction clusters, pass-through nodes ──
+  const deg=()=>{ const d=new Array(G.nodes.length).fill(0); for(const e of G.edges) if(e.alive){ d[e.a]++; d[e.b]++; } return d; };
+  const flip=e=>{ const t=e.a; e.a=e.b; e.b=t; e.pts.reverse(); const c=e.catA; e.catA=e.catB; e.catB=c; };
+  for(let round=0;round<8;round++){
+    let changed=false;
+    // (a) spurs: dead-end branch shorter than ~1.6× the junction's inscribed radius
+    //     = corner/flat-end thinning artefacts, not real streets
+    let d=deg(); const kill=[];
+    for(const e of G.edges){
+      if(!e.alive||e.a===e.b) continue;
+      const [end,jn]=d[e.a]===1&&d[e.b]>=3?[e.a,e.b]:d[e.b]===1&&d[e.a]>=3?[e.b,e.a]:[-1,-1];
+      if(end<0) continue;
+      if(e.len<Math.max(3,1.6*G.nodes[jn].R)) kill.push(e);
+    }
+    for(const e of kill){ e.alive=false; changed=true; }
+    // (b) junctions whose inscribed circles overlap → one intersection
+    d=deg();
+    for(const e of G.edges){
+      if(!e.alive||e.a===e.b||d[e.a]<3||d[e.b]<3) continue;
+      const A=G.nodes[e.a],B=G.nodes[e.b];
+      if(e.len>=1.15*(A.R+B.R)+2) continue;
+      A.x=(A.x+B.x)/2; A.y=(A.y+B.y)/2; A.R=Math.max(A.R,B.R); B.alive=false; e.alive=false;
+      for(const f of G.edges){ if(!f.alive) continue; if(f.a===e.b) f.a=e.a; if(f.b===e.b) f.b=e.a; }
+      d=deg(); changed=true;
+    }
+    for(const e of G.edges) if(e.alive&&e.a===e.b&&e.len<150) { e.alive=false; changed=true; }
+    // (c) degree-2 nodes are not junctions → merge their two edges
+    changed=_rnCollapse(G,flip,mpu)||changed;
+    if(!changed) break;
+  }
+
+  // ── 7. שצ"פ connectors: a path/road that dead-ends at open space and
+  //       continues on its far side is one connection through the park ──
+  const touchesOpen=n=>{
+    const r=Math.ceil((n.R+4)/cellM), cx=Math.floor(gx(n.x)), cy=Math.floor(gy(n.y));
+    for(let y=cy-r;y<=cy+r;y++) for(let x=cx-r;x<=cx+r;x++){
+      if(x<0||y<0||x>=W||y>=H) continue;
+      if(cat[y*W+x]===3&&(x-cx)**2+(y-cy)**2<=r*r) return true;
+    }
+    return false;
+  };
+  const segOK=(A,B)=>{
+    const L=Math.hypot(B.x-A.x,B.y-A.y), steps=Math.ceil(L/(cell/2));
+    let open=0,tot=0;
+    for(let s=1;s<steps;s++){
+      const t=s/steps, i=Math.floor(gx(A.x+(B.x-A.x)*t)), j=Math.floor(gy(A.y+(B.y-A.y)*t));
+      if(i<0||j<0||i>=W||j>=H) return false;
+      const v=cat[j*W+i]; if(!v) return false;
+      tot++; if(v===3) open++;
+    }
+    return tot>0&&open/tot>=0.3;
+  };
+  // A dead end within reach of the plan boundary is a street that simply
+  // continues outside the plan — not a cul-de-sac, and not a park connector.
+  const gvulSegs=[];
+  for(const f of gvulFeats||[]){
+    const g=f.geometry; if(!g) continue;
+    const ps=g.type==='Polygon'?[g.coordinates]:g.type==='MultiPolygon'?g.coordinates:[];
+    for(const rings of ps) for(const ring of rings) for(let k=0;k<ring.length-1;k++) gvulSegs.push([ring[k],ring[k+1]]);
+  }
+  const distToGvul=n=>{ let b=Infinity; for(const[p,q] of gvulSegs) b=Math.min(b,_rnSegDist(n.x,n.y,p[0],p[1],q[0],q[1])); return b*mpu; };
+  const atBoundary=n=>gvulSegs.length>0&&distToGvul(n)<=Math.max(8,n.R*1.5+4);
+  // Heading of a dead end: from ~15 m back along its street toward the tip
+  const heading=(i,e)=>{
+    const seq=(e.a===i?e.pts:[...e.pts].reverse()).concat([[G.nodes[e.a===i?e.b:e.a].x,G.nodes[e.a===i?e.b:e.a].y]]);
+    const A=G.nodes[i]; let px=A.x,py=A.y,acc=0,bx=seq[seq.length-1][0],by=seq[seq.length-1][1];
+    for(const[x,y] of seq){ acc+=Math.hypot(x-px,y-py)*mpu; px=x; py=y; if(acc>=15){ bx=x; by=y; break; } }
+    const L=Math.hypot(A.x-bx,A.y-by)||1; return [(A.x-bx)/L,(A.y-by)/L];
+  };
+  {
+    const d=deg();
+    const alive=G.nodes.map((n,i)=>i).filter(i=>G.nodes[i].alive&&d[i]>0);
+    const openNode=new Map(); for(const i of alive) openNode.set(i,!atBoundary(G.nodes[i])&&touchesOpen(G.nodes[i]));
+    const linked=new Set();
+    for(const e of G.edges) if(e.alive) linked.add(Math.min(e.a,e.b)+'_'+Math.max(e.a,e.b));
+    for(const i of alive){
+      if(d[i]!==1||!openNode.get(i)) continue;
+      const own=G.edges.find(e=>e.alive&&(e.a===i||e.b===i)); if(!own) continue;
+      const [hx,hy]=heading(i,own);
+      const A=G.nodes[i]; let best=-1,bd=300/mpu;
+      for(const j of alive){
+        if(j===i||!openNode.get(j)) continue;
+        const B=G.nodes[j], L=Math.hypot(B.x-A.x,B.y-A.y);
+        if(L>=bd||linked.has(Math.min(i,j)+'_'+Math.max(i,j))) continue;
+        if(((B.x-A.x)*hx+(B.y-A.y)*hy)/L<0.6) continue;   // must roughly continue the street's direction
+        if(segOK(A,B)){ best=j; bd=L; }
+      }
+      if(best<0) continue;
+      linked.add(Math.min(i,best)+'_'+Math.max(i,best));
+      G.edges.push({a:i,b:best,pts:[],len:bd*mpu,catA:2,catB:2,open:true,alive:true});
+    }
+    _rnCollapse(G,flip);
+  }
+
+  // ── 8. Classification, simplification ──
+  const d=deg(), idMap=new Map(), out={nodes:[],edges:[]};
+  const st={junctions:0,rr:0,rp:0,deadEnds:0,boundary:0,edges:0,lengthM:0};
+  G.nodes.forEach((n,i)=>{
+    if(!n.alive||!d[i]) return;
+    const o={x:n.x,y:n.y,deg:d[i]};
+    if(d[i]>=3){
+      let path=false;
+      for(const e of G.edges){ if(!e.alive) continue; if(e.a===i&&e.catA===2) path=true; if(e.b===i&&e.catB===2) path=true; }
+      o.nodeType=path?'rp':'rr'; st.junctions++; path?st.rp++:st.rr++;
+    } else if(d[i]===1){
+      o.end=atBoundary(n)?'boundary':'dead';
+      o.end==='boundary'?st.boundary++:st.deadEnds++;
+    }
+    idMap.set(i,out.nodes.length); out.nodes.push(o);
+  });
+  const tol=Math.max(1.2,cellM*1.5)/mpu;
+  for(const e of G.edges){
+    if(!e.alive||e.a===e.b) continue;
+    const A=G.nodes[e.a],B=G.nodes[e.b];
+    const line=_rnDP([[A.x,A.y],...e.pts,[B.x,B.y]],tol);
+    const cat=e.catA===2&&e.catB===2?'path':(e.catA===2||e.catB===2?'mixed':'road');
+    out.edges.push({a:idMap.get(e.a),b:idMap.get(e.b),wpts:line.slice(1,-1).map(([x,y])=>({x,y})),cat,viaOpen:!!e.open});
+    st.edges++; st.lengthM+=e.len;
+  }
+  out.stats=st; out.cellM=cellM; out.grid=[W,H];
+  return out;
+}
+// Degree-2 nodes are pass-throughs, not junctions → splice their two edges into one.
+function _rnCollapse(G,flip){
+  let changed=false, did=true;
+  while(did){
+    did=false;
+    const inc=G.nodes.map(()=>[]);
+    for(const e of G.edges) if(e.alive&&e.a!==e.b){ inc[e.a].push(e); inc[e.b].push(e); }
+    for(let i=0;i<G.nodes.length;i++){
+      if(!G.nodes[i].alive||inc[i].length!==2) continue;
+      const[e1,e2]=inc[i];
+      if(!e1.alive||!e2.alive) continue;
+      if(e1.b!==i) flip(e1); if(e2.a!==i) flip(e2);
+      if(e1.a===e2.b) continue;                       // would close into a self-loop
+      const n=G.nodes[i];
+      e1.pts=[...e1.pts,[n.x,n.y],...e2.pts]; e1.b=e2.b; e1.catB=e2.catB;
+      e1.len+=e2.len; e1.open=e1.open||e2.open; e2.alive=false; n.alive=false;
+      inc[e2.b]=inc[e2.b].map(e=>e===e2?e1:e);        // keep incidence valid for the rest of this sweep
+      did=true; changed=true;
+    }
+  }
+  return changed;
+}
+function _rnMajority(pix,cat){ let r=0,p=0; for(const i of pix){ if(cat[i]===1)r++; else if(cat[i]===2)p++; } return r||p?(p>r?2:1):0; }
+function _rnPolyLen(pts){ let L=0; for(let i=1;i<pts.length;i++) L+=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]); return L; }
+function _rnSegDist(px,py,x1,y1,x2,y2){
+  const dx=x2-x1,dy=y2-y1,l=dx*dx+dy*dy;
+  const t=l?Math.max(0,Math.min(1,((px-x1)*dx+(py-y1)*dy)/l)):0;
+  return Math.hypot(px-x1-t*dx,py-y1-t*dy);
+}
+function _rnDP(pts,tol){
+  if(pts.length<3) return pts;
+  let idx=-1,md=0;
+  for(let i=1;i<pts.length-1;i++){ const d=_rnSegDist(pts[i][0],pts[i][1],pts[0][0],pts[0][1],pts[pts.length-1][0],pts[pts.length-1][1]); if(d>md){md=d;idx=i;} }
+  if(md<=tol) return [pts[0],pts[pts.length-1]];
+  const a=_rnDP(pts.slice(0,idx+1),tol), b=_rnDP(pts.slice(idx),tol);
+  return [...a.slice(0,-1),...b];
 }
 
 // ============================================================
@@ -5762,18 +6018,19 @@ function _calcShowAvgDist(){
   }
   const avg=total/cnt;
   avgEl.textContent=avg<1000?`∼ ${avg.toFixed(0)} מ׳`:`∼ ${(avg/1000).toFixed(2)} ק"מ`;
-  subEl.textContent=`מבוסס על ${cnt} קווים, ${RE.nodes.length} צמתים`;
+  subEl.textContent=`מבוסס על ${cnt} קווים, ${RE.nodes.filter(n=>!n.end).length} צמתים`;
 }
 
 function _calcDensityResult(polygonPts){
   const mpu=state.spanMeters/DATA_SIZE;
-  const inside=RE.nodes.filter(n=>_ptInPoly(n.x,n.y,polygonPts));
+  // Junctions only — dead ends / plan-boundary exits (n.end, from auto-detect) aren't intersections
+  const inside=RE.nodes.filter(n=>!n.end&&_ptInPoly(n.x,n.y,polygonPts));
   const areaM2=_polyArea(polygonPts)*mpu*mpu;
   const areaKm2=areaM2/1e6;
   const density=inside.length/areaKm2;
   document.getElementById('calc-density').textContent=`∼ ${density.toFixed(1)} צמתים/קמ"ר`;
   const areaStr=areaKm2<0.1?`${(areaKm2*1000).toFixed(0)} דונם`:areaKm2<1?`${(areaKm2*1000).toFixed(0)} דונם`:` ${areaKm2.toFixed(2)} קמ"ר`;
-  document.getElementById('calc-density-sub').textContent=`${inside.length} צמתים בשטח${areaStr}`;
+  document.getElementById('calc-density-sub').textContent=`${inside.length} צמתים בשטח ${areaStr.trim()}`;
 }
 
 function calcByGvul(){
@@ -5901,22 +6158,21 @@ function _restoreVis(){
 
 function initRoadNetworkAuto(){
   if((RE.nodes.length||RE.edges.length)&&!confirm('פעולה זו תמחק את הצמתים והקווים הקיימים. להמשיך?')) return;
-  RE.history=[];  // fresh history after full reset
-  const lines=computeRoadNetwork();
-  RE.nodes=[];RE.edges=[];RE.pendingEdges=[];RE.nId=0;RE.eId=0;
-  const SNAP=DATA_SIZE*0.015;
-  const findOrCreate=(x,y)=>{
-    for(const n of RE.nodes) if(Math.hypot(n.x-x,n.y-y)<SNAP) return n.id;
-    const id=RE.nId++;RE.nodes.push({id,x,y});return id;
-  };
-  for(const line of lines){
-    if(line.length<2) continue;
-    const id1=findOrCreate(line[0][0],line[0][1]);
-    const id2=findOrCreate(line[line.length-1][0],line[line.length-1][1]);
-    if(id1!==id2&&!RE.pendingEdges.some(e=>(e.id1===id1&&e.id2===id2)||(e.id1===id2&&e.id2===id1)))
-      RE.pendingEdges.push({id1,id2});
-  }
+  if(!state.layers.plan||!state.spanMeters){ alert('אין תשריט טעון'); return; }
+  const r=_rnDetect(state.layers.plan.features,state.layers.gvul?state.layers.gvul.features:[],state.spanMeters,DATA_SIZE);
+  if(!r.nodes.length){ alert('לא נמצאו בתשריט ייעודי דרך או שביל לזיהוי.'); return; }
+  _rePushHistory(); // undoable, like any other edit
+  RE.nodes=r.nodes.map((n,i)=>{
+    const o={id:i,x:n.x,y:n.y};
+    if(n.nodeType) o.nodeType=n.nodeType;   // 'rr' דרך-דרך · 'rp' דרך-שביל
+    if(n.end) o.end=n.end;                   // 'dead' רחוב ללא מוצא · 'boundary' יציאה מגבול התוכנית
+    return o;
+  });
+  RE.edges=r.edges.map((e,i)=>({id:i,n1:e.a,n2:e.b,wpts:e.wpts,cat:e.cat,viaOpen:e.viaOpen||undefined}));
+  RE.pendingEdges=[]; RE.nId=RE.nodes.length; RE.eId=RE.edges.length;
   setRETool('select');
+  const s=r.stats;
+  _showToast(`זוהו ${s.junctions} צמתים (${s.rr} דרך-דרך, ${s.rp} דרך-שביל) · ${s.edges} קטעים · ${s.deadEnds} ללא מוצא · ${s.boundary} יציאות מגבול התוכנית`,7000);
   redraw();
 }
 
@@ -6005,7 +6261,7 @@ function _loadRoadFromStorage(){
     return true;
   }catch(e){return false;}
 }
-function _showToast(msg){
+function _showToast(msg,ms){
   let t=document.getElementById('re-toast');
   if(!t){
     t=document.createElement('div');t.id='re-toast';
@@ -6013,7 +6269,7 @@ function _showToast(msg){
     document.body.appendChild(t);
   }
   t.textContent=msg;t.style.opacity='1';
-  clearTimeout(t._tmr);t._tmr=setTimeout(()=>t.style.opacity='0',1800);
+  clearTimeout(t._tmr);t._tmr=setTimeout(()=>t.style.opacity='0',ms||1800);
 }
 
 function setRETool(t){
@@ -6154,7 +6410,8 @@ function drawRoadEdit(){
   if(showEdges){
     for(const e of RE.edges){
       const sel=RE.sel&&RE.sel.type==='edge'&&RE.sel.id===e.id;
-      ctx.strokeStyle=sel?'#ffcc00':'#1155dd';ctx.lineWidth=sel?3.5:2;
+      // auto-detected links carry their land use: path green, through-park orange
+      ctx.strokeStyle=sel?'#ffcc00':e.viaOpen?'#e08a00':e.cat==='path'?'#1a9a3a':'#1155dd';ctx.lineWidth=sel?3.5:2;
       if(anim){ctx.setLineDash([9,5]);ctx.lineDashOffset=-RE.anim;}
       else ctx.setLineDash([]);
       if(_drawEdgePath(e)) ctx.stroke();
@@ -6222,13 +6479,15 @@ function drawRoadEdit(){
     const[sx,sy]=dc(n.x,n.y);
     const sel=RE.sel&&RE.sel.type==='node'&&RE.sel.id===n.id;
     const multiSel=RE.selNodes.has(n.id);
-    let fill,stroke;
+    let fill,stroke,r=RE_NODE_R;
     if(sel){fill='#ffcc00';stroke='#cc9900';}
     else if(multiSel){fill='#ff8800';stroke='#cc5500';}
     else if(n.nodeType==='rr'){fill='#d02020';stroke='#8b0000';}
     else if(n.nodeType==='rp'){fill='#1a9a3a';stroke='#0d6626';}
+    else if(n.end){fill='#fff';stroke='#777';r=RE_NODE_R*0.55;}   // dead end / plan-boundary exit — not a junction
     else{fill=anim?'#fff':'#1155dd';stroke='#1155dd';}
-    ctx.beginPath();ctx.arc(sx,sy,RE_NODE_R,0,Math.PI*2);
+    ctx.beginPath();
+    if(n.end==='boundary'&&!sel&&!multiSel) ctx.rect(sx-r,sy-r,r*2,r*2); else ctx.arc(sx,sy,r,0,Math.PI*2);
     ctx.fillStyle=fill;ctx.strokeStyle=stroke;ctx.lineWidth=2;
     ctx.fill();ctx.stroke();
     // extra ring for multi-select to distinguish from orange type
@@ -6635,7 +6894,7 @@ function setNodeType(type){
   const allHave=targetIds.every(id=>(RE.nodes.find(n=>n.id===id)?.nodeType===type));
   for(const id of targetIds){
     const n=RE.nodes.find(n=>n.id===id);
-    if(n) n.nodeType=allHave?null:type;
+    if(n){ n.nodeType=allHave?null:type; if(n.nodeType) delete n.end; } // tagged as a junction → no longer a dead end
   }
   // Clear selection so nodes show their type color immediately
   RE.sel=null;RE.selNodes.clear();
