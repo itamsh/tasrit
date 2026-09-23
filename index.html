@@ -1066,7 +1066,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
     <button class="tb-btn t5-hide" id="btn-road-net" onclick="onRoadNetClick()" title="בניית ועריכת רשת דרכים">🛣 רשת דרכים</button>
     <button class="tb-btn" id="btn-t5" onclick="openTable5View()" title="תצוגת טבלה 5 — זכויות בניה">📋 טבלה 5</button>
     <button class="tb-btn" id="btn-tama" onclick="openTamaView()" title="בדיקת תאימות תמ״א 35/4">📐 תמ״א 35/4</button>
-    <button class="tb-btn" id="btn-prog" onclick="openProgView()" title="פרוגרמה לצורכי ציבור">📊 פרוגרמה</button>
+    <button class="tb-btn" id="btn-prog" onclick="(window.openProgReader||openProgView)()" title="קורא הפרוגרמה — הבנת נספח הפרוגרמה על גבי התשריט">📊 פרוגרמה</button>
     <button class="tb-btn" id="btn-word" style="display:none" onclick="openWordDoc()">📝 תקנון</button>
 
     <!-- ▸ שכבות ותצוגה -->
@@ -1651,7 +1651,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 // ── App version — bump on EVERY deploy (date + that day's deploy number), so the
 //    user and Claude can confirm they're looking at the same build. Shown in the
 //    map toolbar and the loading-page footer.
-const APP_VERSION='2026.09.23-7';
+const APP_VERSION='2026.09.23-8';
 // Version of the road-network DETECTION ALGORITHM only — bump when _rnDetect's
 // output changes, so a network saved from an older run is flagged as stale
 // (networks are saved per project and are NOT re-detected on load).
@@ -3850,6 +3850,7 @@ function redraw(){
   drawRoadEdit();
   _drawCalcPoly();
   drawMeasurement();
+  if(window.PR&&PR.open) try{PR.drawLayer(ctx);}catch(e){console.error(e);}
   // Overlay-panel row hover — glowing yellow outline, same idea as the
   // iplan-plan-filter extension's client-side highlight Graphic.
   if(_ovHoverRings&&_ovHoverRings.length){
@@ -11346,6 +11347,7 @@ function _projClearAllInputs(){
   _flowInputs={models:{},builtin:{},mixed:{},mixedEntries:{}};
   _sensOvr={hs:null,cPct:null,modelYes:null,modelAl:null,mixedMode:false,perInstModels:{}};
   Object.assign(T5_PARAMS,{serviceMarkami:15,serviceMigdali:25,ahuzMode:'ahuz'});
+  if(window.PR) PR.reset(); else window._PR_PENDING=null;
   // Grid overlay
   state.gridAngle=0;
   // Close any open analysis panels so stale content isn't shown
@@ -11369,6 +11371,7 @@ function _projCollectInputs(){
       normM2:TAMA.normM2,normIncFeat:NORM.incFeat?[...NORM.incFeat]:null,normPolyRing:NORM.polyRing||null
     },
     program:{flowInputs:_flowInputs,sensOvr:_sensOvr,t5params:T5_PARAMS},
+    programSpec:window.PR?PR.getSpec():(window._PR_PENDING||null), // קורא הפרוגרמה
     gridAngle:state.gridAngle||0
   };
 }
@@ -11412,6 +11415,8 @@ function _projApplyInputs(inp){
     if(inp.program.t5params)Object.assign(T5_PARAMS,inp.program.t5params);
   }
   if(inp.gridAngle!=null)state.gridAngle=inp.gridAngle;
+  // קורא הפרוגרמה — אם הסקריפט עוד לא נטען, נשמר להחלה בטעינתו
+  if(window.PR) PR.setSpec(inp.programSpec||null); else window._PR_PENDING=inp.programSpec||null;
   try{redraw();}catch(e){}
 }
 async function _projCollectFiles(){
@@ -11712,5 +11717,7 @@ function toggleTheme(){
   applyTheme(saved);
 })();
 </script>
+<!-- קורא הפרוגרמה (פרוגרמה/ROADMAP_program_reader.md) — קובץ נפרד -->
+<script src="prog_reader.js"></script>
 </body>
 </html>
