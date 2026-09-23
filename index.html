@@ -5573,7 +5573,18 @@ function _rnDetect(planFeats,gvulFeats,spanMeters,DS){
   }
 
   // ── 8. Classification, simplification ──
-  const d=deg(), idMap=new Map(), out={nodes:[],edges:[]};
+  const d=deg();
+  const zoneOf=n=>Math.max(n.T||0,1.5*n.R);
+  // A straight chord is acceptable only if it stays on road/path land use
+  const onRoad=(p,q)=>{
+    const steps=Math.max(2,Math.ceil(Math.hypot(q[0]-p[0],q[1]-p[1])/(cell/2)));
+    for(let s=1;s<steps;s++){
+      const t=s/steps, i=Math.floor(gx(p[0]+(q[0]-p[0])*t)), j=Math.floor(gy(p[1]+(q[1]-p[1])*t));
+      if(i<0||j<0||i>=W||j>=H||!fg[j*W+i]) return false;
+    }
+    return true;
+  };
+  const idMap=new Map(), out={nodes:[],edges:[]};
   const st={junctions:0,rr:0,rp:0,deadEnds:0,boundary:0,edges:0,lengthM:0};
   G.nodes.forEach((n,i)=>{
     if(!n.alive||!d[i]) return;
@@ -5588,17 +5599,25 @@ function _rnDetect(planFeats,gvulFeats,spanMeters,DS){
     }
     idMap.set(i,out.nodes.length); out.nodes.push(o);
   });
-  const tol=Math.max(1.2,cellM*1.5)/mpu;
   for(const e of G.edges){
     if(!e.alive||e.a===e.b) continue;
     const A=G.nodes[e.a],B=G.nodes[e.b];
-    // Drop vertices inside each end junction's own circle: after merging several
-    // fork points into one junction they'd make the link jog toward the old spot
-    const inA=p=>Math.hypot(p[0]-A.x,p[1]-A.y)*mpu<(A.T||A.R), inB=p=>Math.hypot(p[0]-B.x,p[1]-B.y)*mpu<(B.T||B.R);
+    // Drop vertices inside each end junction's zone — the skeleton curls there,
+    // and the junction now sits on the true crossing, so the arm leaves it straight
+    const zA=d[e.a]>=3?zoneOf(A):0, zB=d[e.b]>=3?zoneOf(B):0;
+    const inA=p=>zA>0&&Math.hypot(p[0]-A.x,p[1]-A.y)*mpu<zA, inB=p=>zB>0&&Math.hypot(p[0]-B.x,p[1]-B.y)*mpu<zB;
     let i0=0,i1=e.pts.length;
     while(i0<i1&&inA(e.pts[i0])) i0++;
     while(i1>i0&&inB(e.pts[i1-1])) i1--;
-    const line=_rnDP([[A.x,A.y],...e.pts.slice(i0,i1),[B.x,B.y]],tol);
+    // Straight wherever a straight line still stays inside the street: tolerance
+    // ~half the street's width, and every chord is checked to lie on road/path.
+    // Skeleton wobble (and a junction sitting a little off-centre) vanishes; a
+    // real bend keeps its vertex because the straight chord would leave the strip.
+    // Then square off cut corners and simplify once more.
+    const hw=e.hw||5, tol=Math.max(1.5,0.9*hw,cellM*1.5)/mpu;
+    const inside=e.open?null:onRoad;                    // park links are straight by construction
+    let line=_rnDP([[A.x,A.y],...e.pts.slice(i0,i1),[B.x,B.y]],tol,inside);
+    line=_rnDP(_rnSquareCorners(line,2*hw/mpu,inside),tol,inside);
     const cat=e.catA===2&&e.catB===2?'path':(e.catA===2||e.catB===2?'mixed':'road');
     out.edges.push({a:idMap.get(e.a),b:idMap.get(e.b),wpts:line.slice(1,-1).map(([x,y])=>({x,y})),cat,viaOpen:!!e.open});
     st.edges++; st.lengthM+=e.len;
@@ -5637,6 +5656,32 @@ function _rnArmDir(G,n,f,mpu){
   for(const[x,y] of seq){ acc+=Math.hypot(x-px,y-py)*mpu; px=x; py=y; if(acc>=want){ tx=x; ty=y; break; } }
   const L=Math.hypot(tx-N.x,ty-N.y)||1; return [(tx-N.x)/L,(ty-N.y)/L];
 }
+// A skeleton rounds a corner off with a short diagonal. Where a short segment
+// sits between two longer legs meeting at a real angle, replace it with the
+// point where the two legs' lines cross (a clean corner). End points never move.
+function _rnSquareCorners(p,w,inside){
+  for(let again=true;again;){
+    again=false;
+    for(let i=1;i+2<p.length;i++){
+      const a=p[i-1],b=p[i],c=p[i+1],d=p[i+2];
+      const s=Math.hypot(c[0]-b[0],c[1]-b[1]), l1=Math.hypot(b[0]-a[0],b[1]-a[1]), l2=Math.hypot(d[0]-c[0],d[1]-c[1]);
+      if(s>1.2*w||l1<s||l2<s) continue;
+      const cos=((b[0]-a[0])*(d[0]-c[0])+(b[1]-a[1])*(d[1]-c[1]))/(l1*l2);
+      if(cos>0.97) continue;                             // legs nearly parallel: a jog, not a corner
+      const X=_rnLineX(a,b,c,d); if(!X) continue;
+      if(Math.hypot(X[0]-(b[0]+c[0])/2,X[1]-(b[1]+c[1])/2)>1.5*w) continue;
+      if(inside&&(!inside(a,X)||!inside(X,d))) continue;  // the squared corner must stay on the street
+      p.splice(i,2,X); again=true; break;
+    }
+  }
+  return p;
+}
+function _rnLineX(a,b,c,d){
+  const rx=b[0]-a[0],ry=b[1]-a[1],sx=d[0]-c[0],sy=d[1]-c[1], den=rx*sy-ry*sx;
+  if(Math.abs(den)<1e-12) return null;
+  const t=((c[0]-a[0])*sy-(c[1]-a[1])*sx)/den;
+  return [a[0]+t*rx,a[1]+t*ry];
+}
 function _rnMajority(pix,cat){ let r=0,p=0; for(const i of pix){ if(cat[i]===1)r++; else if(cat[i]===2)p++; } return r||p?(p>r?2:1):0; }
 function _rnPolyLen(pts){ let L=0; for(let i=1;i<pts.length;i++) L+=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]); return L; }
 function _rnSegDist(px,py,x1,y1,x2,y2){
@@ -5644,12 +5689,14 @@ function _rnSegDist(px,py,x1,y1,x2,y2){
   const t=l?Math.max(0,Math.min(1,((px-x1)*dx+(py-y1)*dy)/l)):0;
   return Math.hypot(px-x1-t*dx,py-y1-t*dy);
 }
-function _rnDP(pts,tol){
+// Douglas–Peucker; with `inside`, a chord is only accepted if it also stays on
+// road/path land use (otherwise split at the farthest point anyway).
+function _rnDP(pts,tol,inside){
   if(pts.length<3) return pts;
   let idx=-1,md=0;
   for(let i=1;i<pts.length-1;i++){ const d=_rnSegDist(pts[i][0],pts[i][1],pts[0][0],pts[0][1],pts[pts.length-1][0],pts[pts.length-1][1]); if(d>md){md=d;idx=i;} }
-  if(md<=tol) return [pts[0],pts[pts.length-1]];
-  const a=_rnDP(pts.slice(0,idx+1),tol), b=_rnDP(pts.slice(idx),tol);
+  if(md<=tol&&(!inside||inside(pts[0],pts[pts.length-1]))) return [pts[0],pts[pts.length-1]];
+  const a=_rnDP(pts.slice(0,idx+1),tol,inside), b=_rnDP(pts.slice(idx),tol,inside);
   return [...a.slice(0,-1),...b];
 }
 
