@@ -1357,7 +1357,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
         </div>
         <div class="rn-divider"></div>
         <div class="rep-toolbar-row" style="margin-bottom:4px">
-          <button class="rep-btn active" id="rep-btn-sel" onclick="setRETool('select')" title="בחירה — גרירה על שטח ריק = ריבוע בחירה · Shift+גרירה = הזזת מפה">☛ בחירה</button>
+          <button class="rep-btn active" id="rep-btn-sel" onclick="setRETool('select')" title="בחירה — גרירה על שטח ריק = הזזת מפה · Shift+גרירה = ריבוע בחירה של כמה צמתים">☛ בחירה</button>
           <button class="rep-btn" id="rep-btn-addnode" onclick="setRETool('addnode')" title="הוסף צומת">⊕ צומת</button>
           <button class="rep-btn" id="rep-btn-draw" onclick="setRETool('draw')" title="ציור קו (קליק ימני = שבירה)">✏ קו</button>
         </div>
@@ -6643,14 +6643,14 @@ function _reMouseDown(e){
       return;
     }
     if(e.shiftKey){
-      // Shift+drag on empty: pan the map
-      dragging=true;dragStart={x:e.clientX,y:e.clientY};viewStart={x:viewX,y:viewY};
-      wrap.classList.add('grabbing');
+      // Shift+drag on empty: rubber-band marquee selection
+      RE.lasso={x0:sx,y0:sy,x1:sx,y1:sy};
       return;
     }
-    // Plain drag on empty: start rubber-band marquee selection.
-    // A tiny drag (i.e. a click) is treated as edge-select / clear on mouseup.
-    RE.lasso={x0:sx,y0:sy,x1:sx,y1:sy};
+    // Plain drag on empty: pan the map, like everywhere else in the app.
+    // A click without movement still selects the nearest edge / clears (mouseup).
+    dragging=true;dragStart={x:e.clientX,y:e.clientY};viewStart={x:viewX,y:viewY};
+    wrap.classList.add('grabbing');
     return;
   }
   if(RE.tool==='draw'){
@@ -6704,7 +6704,17 @@ function _reMouseUp(e){
   }
   if(RE.tool==='select'){
     if(RE.dragNodeId!==null){RE.dragNodeId=null;return;}
-    if(dragging){dragging=false;wrap.classList.remove('grabbing');return;}
+    if(dragging){
+      dragging=false;wrap.classList.remove('grabbing');
+      // No real movement = a click on empty space: select nearest edge, else clear
+      if(Math.hypot(e.clientX-dragStart.x,e.clientY-dragStart.y)<=4){
+        RE.selNodes.clear();
+        const eg=_nearestEdge(sx,sy);
+        RE.sel=eg?{type:'edge',id:eg.id}:null;
+        redraw();
+      }
+      return;
+    }
     return;
   }
   if(RE.tool==='addnode'){
