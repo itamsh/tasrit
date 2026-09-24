@@ -645,6 +645,15 @@ body.theme-light .pdfov-active-name{color:#25405c}
 .plannum-ext-tag{font-size:11px;background:#1d3350;color:#9cc8f0;border:1px solid #3d6a9a;border-radius:10px;padding:1px 8px}
 body.theme-light .plannum-t5-row{color:#2a4a70}
 body.theme-light .plannum-ext-tag{background:#e3eefa;color:#1a5590;border-color:#bcd3ec}
+#hover-tip{position:absolute;display:none;z-index:40;pointer-events:none;direction:rtl;max-width:260px;
+  background:rgba(20,30,44,.94);color:#e8f0f8;border:1px solid #3d5a7a;border-radius:8px;padding:6px 10px;
+  font-size:12.5px;line-height:1.45;box-shadow:0 3px 12px rgba(0,0,0,.35);white-space:nowrap}
+#hover-tip .ht-name{font-weight:600;display:flex;align-items:center;gap:7px;white-space:normal}
+#hover-tip .ht-sw{width:13px;height:13px;border-radius:3px;border:1px solid #888;flex-shrink:0}
+#hover-tip .ht-sub{font-size:11.5px;color:#a9bdd3;margin-top:2px}
+#hover-tip .ht-extra{font-size:11.5px;color:#f5d58a;margin-top:2px}
+body.theme-light #hover-tip{background:rgba(255,255,255,.97);color:#1c2b3c;border-color:#b8c8da}
+body.theme-light #hover-tip .ht-sub{color:#4a5d74}
 #mavat-status{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:60;display:none;align-items:center;gap:10px;
   max-width:min(720px,90%);padding:9px 14px;border-radius:10px;font-size:13px;direction:rtl;box-shadow:0 4px 16px rgba(0,0,0,.35)}
 #mavat-status .ms-txt{flex:1;line-height:1.6}
@@ -1292,6 +1301,11 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
         <span>שקיפות שכבות (כללי)</span>
         <button class="op-btn" title="שליטה בשקיפות כל השכבות" onclick="_openOpacity('global',this)">🎚</button>
       </div>
+      <label class="leg-opacity-row" style="cursor:pointer" title="מעבר עם העכבר על התשריט מציג ליד הסמן את ייעוד הקרקע, מספר התא והשטח">
+        <span>ייעוד ליד הסמן</span>
+        <input type="checkbox" id="chk-hover-tip" style="cursor:pointer;accent-color:#2980b9"
+               onchange="state.hoverTip=this.checked;try{localStorage.setItem('tasrit_hover_tip',this.checked?'1':'0')}catch(e){};if(!this.checked)_hoverTipHide()">
+      </label>
       <h3 style="display:flex;align-items:center;justify-content:space-between">
         <span>גבול תוכנית (GVUL)</span>
         <input type="checkbox" id="chk-gvul" checked title="הצג/הסתר גבול תוכנית"
@@ -1674,7 +1688,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 // ── App version — bump on EVERY deploy (date + that day's deploy number), so the
 //    user and Claude can confirm they're looking at the same build. Shown in the
 //    map toolbar and the loading-page footer.
-const APP_VERSION='2026.09.23-9';
+const APP_VERSION='2026.09.24-1';
 // Version of the road-network DETECTION ALGORITHM only — bump when _rnDetect's
 // output changes, so a network saved from an older run is flagged as stale
 // (networks are saved per project and are NOT re-detected on load).
@@ -1888,6 +1902,7 @@ const state = {
 wordFile:null,
 progFile:null,
 progData:null,
+hoverTip:(()=>{try{return localStorage.getItem('tasrit_hover_tip')!=='0';}catch(e){return true;}})(), // חלונית ייעוד ליד הסמן
 progParsing:false,
   spanMeters:0,// real-world span for dimension calc
   gvulVisible:true,    // toggle for גבול תוכנית
@@ -2938,7 +2953,7 @@ async function _mavatApplyT5(items){
   await _projAfterLaunch(); // לשמור את הקובץ בפרויקט
 }
 document.addEventListener('tasrit-bridge-ready',()=>{try{_plannumBridgeUI();}catch(e){}});
-setTimeout(()=>{try{_plannumBridgeUI();}catch(e){}},0);
+setTimeout(()=>{try{_plannumBridgeUI();}catch(e){} const c=document.getElementById('chk-hover-tip'); if(c) c.checked=!!state.hoverTip;},0);
 function _plannumBridgeUI(){
   const on=!!_bridgeVersion();
   const row=document.getElementById('plannum-t5-row'); if(row) row.style.display=on?'flex':'none';
@@ -7049,11 +7064,83 @@ wrap.addEventListener('mousemove',e=>{
     if(!meas.done) scheduleRedraw();
     return;
   }
-  if(!dragging) return;
+  if(!dragging){ _hoverTipMove(e); return; }
+  _hoverTipHide();
   viewX=viewStart.x+(e.clientX-dragStart.x);
   viewY=viewStart.y+(e.clientY-dragStart.y);
   scheduleRedraw();
 });
+// ── חלונית ייעוד ליד הסמן (hover) ──
+// מעבר עם העכבר על התשריט מציג ליד הסמן את ייעוד הקרקע שמתחת לו, מספר תא ושטח.
+// הבדיקה (נקודה-בפוליגון) מווסתת לפריים אחד — לא על כל אירוע תנועה.
+let _htPending=null, _htLastNum=null;
+function _hoverTipEl(){
+  let t=document.getElementById('hover-tip');
+  if(!t){ t=document.createElement('div'); t.id='hover-tip'; wrap.appendChild(t); }
+  return t;
+}
+function _hoverTipHide(){
+  _htPending=null; _htLastNum=null;
+  const t=document.getElementById('hover-tip'); if(t) t.style.display='none';
+}
+function _hoverTipMove(e){
+  if(!state.hoverTip||!state.layers.plan||e.target.closest('#info-panel,#mavat-status,#re-node-ctx')){ _hoverTipHide(); return; }
+  const first=!_htPending;
+  _htPending={x:e.clientX,y:e.clientY};
+  if(first) requestAnimationFrame(_hoverTipUpdate);
+}
+function _hoverTipFeat(dx,dy){
+  // הפוליגון העליון (האחרון שצויר), ורק מייעוד שמוצג כרגע
+  const fs=state.layers.plan.features;
+  for(let i=fs.length-1;i>=0;i--){
+    const f=fs[i]; if(!f.geometry) continue;
+    if(state.planLayerVisible[f.properties.MAVAT_CODE]===false) continue;
+    const c=f.geometry.coordinates, polys=f.geometry.type==='Polygon'?[c]:c;
+    for(const poly of polys) if(ptInRing(dx,dy,poly[0])) return f;
+  }
+  return null;
+}
+function _hoverTipUpdate(){
+  const p=_htPending; if(!p) return;
+  _htPending=null;
+  const rect=canvas.getBoundingClientRect();
+  const sx=p.x-rect.left, sy=p.y-rect.top;
+  const t=_hoverTipEl();
+  const f=(state.planVisible||state.planBordersVisible)?_hoverTipFeat(...cd(sx,sy)):null;
+  if(!f){ t.style.display='none'; _htLastNum=null; return; }
+  const pr=f.properties, num=pr.NUM;
+  const key=String(num)+'|'+(state.rachakMode?'r':state.densityMode?'d':'');
+  if(key!==_htLastNum){
+    _htLastNum=key;
+    const st=getStyle(pr.MAVAT_CODE)||getStyleByName(fixHebrew(pr.MAVAT_NAME))||DEFAULT_POLY;
+    const name=st.name&&st.name!=='אחר'?st.name:(fixHebrew(pr.MAVAT_NAME)||String(pr.MAVAT_CODE||''));
+    const sw=st.stripes?`repeating-linear-gradient(45deg,${st.stripes[0]} 0 3px,${st.stripes[1]||'#fff'} 3px 6px)`:(st.f&&st.f!=='none'?st.f:'transparent');
+    const area=+pr.SHAPE_AREA>0?+pr.SHAPE_AREA:(+pr.LEGAL_AREA>0?+pr.LEGAL_AREA:0);
+    const sub=[];
+    if(num!=null&&num!=='') sub.push('תא שטח '+esc(num));
+    if(area>0) sub.push((area/1000).toFixed(1)+' ד׳');
+    if(state.table5){
+      const rows=state.table5[String(num)]||state.table5[String(+num)];
+      const u=rows&&rows.reduce((s,r)=>s+(parseFloat(String(r.yihud||'').replace(/,/g,''))||0),0);
+      if(u>0) sub.push(Math.round(u).toLocaleString('he-IL')+' יח"ד');
+    }
+    let extra='';
+    if(state.rachakMode&&_rachakMap){ const v=_rachakMap[String(num)]??_rachakMap[String(+num)]; if(v!=null) extra=`<div class="ht-extra">רח"ק ${v.toFixed(2)}</div>`; }
+    else if(state.densityMode&&_densityMap){ const v=_densityMap[String(num)]??_densityMap[String(+num)]; if(v!=null) extra=`<div class="ht-extra">צפיפות ${v.toFixed(1)} יח"ד/ד׳</div>`; }
+    t.innerHTML=`<div class="ht-name"><span class="ht-sw" style="background:${sw};border-color:${st.s||'#888'}"></span>${esc(name)}</div>`+
+      (sub.length?`<div class="ht-sub">${sub.join(' · ')}</div>`:'')+extra;
+  }
+  t.style.display='block';
+  // ליד הסמן; הופכים צד כשמתקרבים לשולי המפה
+  const W=wrap.clientWidth, H=wrap.clientHeight, tw=t.offsetWidth, th=t.offsetHeight, off=16;
+  let x=sx+off, y=sy+off;
+  if(x+tw>W-4) x=sx-off-tw;
+  if(y+th>H-4) y=sy-off-th;
+  t.style.left=Math.max(4,x)+'px'; t.style.top=Math.max(4,y)+'px';
+}
+wrap.addEventListener('mouseleave',_hoverTipHide);
+wrap.addEventListener('wheel',()=>{ const t=document.getElementById('hover-tip'); if(t&&t.style.display!=='none') _htLastNum=null; },{passive:true});
+
 function hitTestDim(dx,dy){
   if(!dimItems.length) return -1;
   const[sx,sy]=dc(dx,dy);
