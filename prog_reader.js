@@ -1402,10 +1402,10 @@ PR.cellInfoHtml=function(cn){
   const list=(PR.spec.provision||[]).filter(a=>a.cells.includes(cn));
   if(!list.length){
     const s=(builtScan()||[]).find(x=>x.cn===cn);
-    return s?`<div class="inf-sec">נספח הפרוגרמה</div><div style="margin:3px 0">🏢 בטבלה 5: <b>${fmtN(s.sqm)} מ"ר</b> ציבורי מבונה במגרש ${E(s.yiud)} — ${_nonEdu().includes(cn)?'סומן כלא-חינוך':'<b>לא שויך</b> לשום מענה'}</div>`:'';
+    return s?`<div class="t5-shimush t5-prog">פרוגרמה</div><div style="margin:3px 0">🏢 בטבלה 5: <b>${fmtN(s.sqm)} מ"ר</b> ציבורי מבונה במגרש ${E(s.yiud)} — ${_nonEdu().includes(cn)?'סומן כלא-חינוך':'<b>לא שויך</b> לשום מענה'}</div>`:'';
   }
   const lines=_eduLines();
-  return `<div class="inf-sec">נספח הפרוגרמה — מוסדות בתא</div>`+list.map(a=>{
+  return `<div class="t5-shimush t5-prog">פרוגרמה</div>`+list.map(a=>{
     const dots=aLines(a).map(l=>`<span style="width:10px;height:10px;border-radius:50%;background:${(EDU_META[eduBase(l)]||{}).color};display:inline-block"></span>`).join('');
     return `<div style="display:flex;gap:6px;align-items:center;margin:3px 0">${dots}
       <b>${E(_allocLabel(a,lines))}</b> — ${isShared(a)?'אשכול משותף · ':''}${num(a.classes)?fmtN(num(a.classes))+' כיתות · ':''}${E(ALLOC_MODE_LABEL[a.mode]||'')}${a.mode==='built'&&num(a.built)?` · ${fmtN(num(a.built))} מ"ר`:''}${a.alt?' · <b>תא חלופי</b> (אחד מכמה שימושים)':''}</div>`;
