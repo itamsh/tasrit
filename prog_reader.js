@@ -520,7 +520,7 @@ body.theme-light .pr-wb{background:#f1e6f8;color:#5b2c6f}
 .pr-chip.non{background:#2a2a33;border-color:#666;color:#bbb;text-decoration:line-through}
 .pr-bsel{margin-right:auto;background:#0f1824;border:1px solid #6c4a8a;color:#e6eef8;border-radius:5px;padding:2px 5px;font-size:11.5px}
 .pr-legend .lg-built{border:2.5px solid #3498db;box-shadow:0 0 0 1.5px #fff inset;background:transparent}
-.pr-legend .lg-t5b{border:1.5px dashed #9b59b6}
+.pr-legend .lg-t5b{border:3px solid #8b5a2b}
 .pr-btn.on{background:#00a6c8;border-color:#00c8e8;color:#fff}
 .pr-pick{position:sticky;top:-12px;z-index:5;background:#0f3a4a;border:1px solid #00c8e8;border-radius:8px;padding:8px 10px;margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .pr-chk{font-size:11.5px;margin:2px 0;line-height:1.45}
@@ -1444,17 +1444,18 @@ PR.drawLayer=function(ctx){
   ctx.setLineDash([6,4]); ctx.lineWidth=2; ctx.strokeStyle='rgba(192,57,43,.85)';
   for(const [k,fs] of Object.entries(idx)) if(!byCell[k]&&isPublicCell(fs)){ _pathCell(ctx,fs); ctx.stroke(); }
   ctx.setLineDash([]);
-  // 1ב. שטח ציבורי מבונה בטבלה 5 שלא שויך — מסגרת סגולה מקווקוות + תג מ"ר
+  // 1ב. שטח ציבורי מבונה בטבלה 5 שלא שויך — גבול חום עבה (צבע "מבנים ומוסדות ציבור") + תג מ"ר
   const scan=builtScan();
   if(scan&&scan.length){ const non=new Set(_nonEdu());
     ctx.font='bold 10.5px Arial'; ctx.textBaseline='middle'; ctx.textAlign='center';
     for(const s of scan){ if(byCell[s.cn]||non.has(s.cn)) continue; const fs=idx[s.cn]; if(!fs) continue;
-      _pathCell(ctx,fs); ctx.setLineDash([4,3]); ctx.lineWidth=2.2; ctx.strokeStyle='rgba(155,89,182,.95)'; ctx.stroke(); ctx.setLineDash([]);
+      _pathCell(ctx,fs); ctx.lineWidth=6; ctx.strokeStyle='rgba(255,255,255,.75)'; ctx.stroke(); // הילה בהירה — שהגבול ייראה גם על כתום
+      ctx.lineWidth=4; ctx.strokeStyle='#8b5a2b'; ctx.stroke();
       const p=cellCentroid(fs); if(!p) continue; const [sx,sy]=dc(p[0],p[1]);
-      const t=`🏢 ${fmtN(s.sqm)} מ"ר`, w=ctx.measureText(t).width+10;
-      ctx.fillStyle='rgba(248,240,252,.95)'; ctx.strokeStyle='#9b59b6'; ctx.lineWidth=1.5;
+      const t=s.sqm>0?`🏢 ${fmtN(s.sqm)} מ"ר`:"🏢 ציבורי (בלי שטח בטבלה 5)", w=ctx.measureText(t).width+10;
+      ctx.fillStyle='rgba(250,243,235,.96)'; ctx.strokeStyle='#8b5a2b'; ctx.lineWidth=1.5;
       ctx.beginPath(); if(ctx.roundRect) ctx.roundRect(sx-w/2,sy+10,w,15,6); else ctx.rect(sx-w/2,sy+10,w,15); ctx.fill(); ctx.stroke();
-      ctx.fillStyle='#5b2c6f'; ctx.fillText(t,sx,sy+17.5); } }
+      ctx.fillStyle='#5a3515'; ctx.fillText(t,sx,sy+17.5); } }
   // 2. רדיוסים + מגרשי מגורים מחוץ לטווח
   const R=PR.spec.radii;
   if(R&&R.on&&R.base&&EDU_META[R.base]){
