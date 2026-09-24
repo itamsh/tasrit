@@ -728,10 +728,9 @@ function _renderAssump(){
       ${span?'<td></td>':''}
       <td class="num"><span data-out="T-pop">—</span></td><td class="num"><span data-out="T-coh">—</span></td><td></td></tr>
     <tr data-out-row="spc"><td colspan="${7+span}" class="pr-small" data-out="T-special"></td></tr>
-    <tr class="pr-decl"><td>הנספח מצהיר <div class="pr-small">סיכום מתוך הנספח</div></td>
-      <td>${_inp('assumptions.declared.units',D.units,'n')}<div data-out="st-units"></div></td><td></td>
-      <td>${_inp('assumptions.declared.household_size',D.household_size,'n')}<div data-out="st-hh"></div></td>
-      <td>${_inp('assumptions.declared.cohort_pct',D.cohort_pct,'n')}<div data-out="st-cp"></div></td>
+    <tr class="pr-decl"><td>תוצאות הנספח <div class="pr-small">לא חובה — לבדיקת החשבון של היועץ</div></td>
+      <td></td><td></td><td></td>
+      <td class="pr-small" style="text-align:left">מה הנספח קיבל ←</td>
       ${span?'<td></td>':''}
       <td>${_inp('assumptions.declared.population',D.population,'n')}<div data-out="st-pop"></div></td>
       <td>${_inp('assumptions.declared.cohort_count',D.cohort_count,'n')}<div data-out="st-coh"></div></td><td></td></tr>`;
@@ -794,8 +793,8 @@ function _refreshComputed(){
     set('st-'+k,c.status==='ok'?'<span class="pr-st ok">✓ תואם</span>'
       :c.status==='diff'?`<span class="pr-st diff" title="החישוב מההנחות: ${E(fmtN(comp,kind?2:0))}">⚠ פער ${E(fmtN(c.diff,kind?2:0))}</span>`:'');
   };
-  st('units',D.units,T.units); st('pop',D.population,T.pop); st('coh',D.cohort_count,T.coh);
-  st('hh',D.household_size,T.hh,'ratio'); st('cp',D.cohort_pct,T.cp,'pct');
+  // רק התוצאות (אוכלוסייה, ילדים בשנתון) — את ההנחות עצמן מקלידים מהנספח בשורות המקטעים, אין מה להשוות
+  st('pop',D.population,T.pop); st('coh',D.cohort_count,T.coh);
   // שרשרת
   const nd=(l,v,hi)=>`<div class="pr-node${hi?' hi':''}"><div class="l">${l}</div><div class="v">${v}</div></div>`;
   const ar=t=>`<div class="pr-arr"><div>${t}</div><div>◀</div></div>`;
@@ -1353,7 +1352,7 @@ function _renderChecks(){
   const items=[];
   const D=PR.spec.assumptions.declared, T=A.T;
   const cmp=(lbl,decl,comp,kind)=>{ const c=compare(decl,comp,kind); if(c.status==='diff') items.push({g:'עקביות ההנחות',ok:false,txt:`${lbl}: הנספח ${fmtN(num(decl),kind?2:0)}, מחישוב המקטעים ${fmtN(comp,kind?2:0)}`}); else if(c.status==='ok') items.push({g:'עקביות ההנחות',ok:true,txt:`${lbl} תואם`}); };
-  cmp('אוכלוסייה',D.population,T.pop); cmp('ילדים בשנתון',D.cohort_count,T.coh); cmp('נפשות למשק בית',D.household_size,T.hh,'ratio');
+  cmp('אוכלוסייה',D.population,T.pop); cmp('ילדים בשנתון',D.cohort_count,T.coh);
   const lines=eduDemand(PR.spec,A);
   for(const L of lines){
     const d=_dem(L.id), s=eduRowStatus(L,d);
