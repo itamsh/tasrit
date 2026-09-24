@@ -526,10 +526,12 @@ function _renderPlanDocs(){
     return `<div class="pr-docrow"><span class="pr-docname">${label}</span><span class="pr-docfmt">${E(fmt)}</span>
       <span class="pr-docver">${ver}</span><button class="pr-btn" onclick="openPlanDoc('${k}')">${fmt==='PDF'?'פתח':'הורד'}</button></div>`;
   };
-  const canFetch=typeof _bridgeVersion==='function'&&_bridgeVersion()&&typeof _planMavatUrl==='function'&&_planMavatUrl();
+  // הקישור עצמו נמצא בעת הלחיצה (_resolveMavatUrl) — גם לתוכנית שנטענה מקובצי SHP
+  const canFetch=typeof _bridgeVersion==='function'&&_bridgeVersion()&&typeof _planNumberForMavat==='function'
+    &&(_planMavatUrl()||_planNumberForMavat()||(state.layers&&state.layers.gvul));
   const missing=['takanon','prog'].filter(k=>!has(k));
   const fetchBtn=canFetch?`<button class="pr-btn" onclick="_mavatFetchDocs(${E(JSON.stringify(missing.length?missing:['takanon','prog']))})">⟳ ${missing.length?'משוך מ"מידע תכנוני"':'משוך שוב (בדיקת גרסה חדשה)'}</button>`
-    :`<span class="pr-small">למשיכה אוטומטית — טעינה מהירה לפי מספר תוכנית + התוסף לכרום</span>`;
+    :`<span class="pr-small">למשיכה אוטומטית מ"מידע תכנוני" — התקינו את התוסף לכרום (בעמוד הפתיחה)</span>`;
   return `<div class="pr-sec"><h3>מסמכי התוכנית <span class="pr-hint">הנספח והתקנון — לפתיחה לצד התשריט בזמן ההזנה</span></h3>
     ${row('prog','נספח פרוגרמה')}${row('takanon','תקנון')}
     <div style="margin-top:6px">${fetchBtn}</div></div>`;

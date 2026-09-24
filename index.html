@@ -1702,7 +1702,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 // ── App version — bump on EVERY deploy (date + that day's deploy number), so the
 //    user and Claude can confirm they're looking at the same build. Shown in the
 //    map toolbar and the loading-page footer.
-const APP_VERSION='2026.09.24-5';
+const APP_VERSION='2026.09.24-6';
 // Version of the road-network DETECTION ALGORITHM only — bump when _rnDetect's
 // output changes, so a network saved from an older run is flagged as stale
 // (networks are saved per project and are NOT re-detected on load).
@@ -2181,6 +2181,7 @@ function openWordDoc(){
 // ============================================================
 async function parseAll(){
   state.planNumber=null; // loaded from local files, not from Xplan
+  state.mavatUrl=null;   // resolved lazily (_resolveMavatUrl) from the SHP's PLAN_NAME / AGAM_ID
   state.overlayPlans=[]; // fresh plan → drop any context overlays from the previous one
   // Load shpjs if not already loaded
   await loadShpjs();
@@ -2225,6 +2226,7 @@ async function _xplanQuery(layerId,planNum){
     const r=await fetch(url);
     if(!r.ok) throw new Error(`שגיאת רשת (שכבה ${layerId}, קוד ${r.status})`);
     const j=await r.json();
+    if(j&&j.error) console.warn(`Xplan layer ${layerId} query failed:`,j.error); // השרת מחזיר 200 עם error — שלא ייראה כ"אין נתונים" בשקט
     const fs=(j&&j.features)||[];
     feats.push(...fs);
     if(fs.length<page) break;
@@ -2272,7 +2274,7 @@ async function loadPlanByNumber(rawNum){
   if(!num) throw new Error('לא הוזן מספר תוכנית');
   // Fresh slate — behave like loading a brand-new plan
   state.files={shp:null,t5:null,word:null,prog:null};
-  state.table5=null; state.progData=null; state.progFile=null; state.wordFile=null;
+  state.table5=null; state.progData=null; state.progFile=null; state.wordFile=null; state.mavatUrl=null;
   state.layers={plan:null,pol:null,arc:null,gvul:null,plan_num:null};
   state.overlayPlans=[]; // fresh plan → drop any context overlays from the previous one
   for(const [lid,key] of Object.entries(XPLAN_LAYERS)){
@@ -2914,10 +2916,42 @@ function _bridgeVersion(){
   const [a,b]=v.split('.').map(Number);
   return (a>0||b>=2)?v:''; // auto-fetch exists from 0.2.0
 }
+// קישור לעמוד התוכנית ב"מידע תכנוני" — סינכרוני, מה שכבר ידוע (בלי רשת)
+const _MAVAT_URL_RE=/^https:\/\/mavat\.iplan\.gov\.il\/SV4\/\d+\/\d+\/\d+/;
+function _gvulProps(){ return ((state.layers&&state.layers.gvul&&state.layers.gvul.features)||[]).map(f=>f.properties||{}); }
 function _planMavatUrl(){
-  const g=state.layers&&state.layers.gvul&&state.layers.gvul.features&&state.layers.gvul.features[0];
-  const u=g&&g.properties&&g.properties.pl_url;
-  return (u&&/^https:\/\/mavat\.iplan\.gov\.il\/SV4\//.test(u))?u:'';
+  if(state.mavatUrl&&_MAVAT_URL_RE.test(state.mavatUrl)) return state.mavatUrl;
+  for(const p of _gvulProps()){ const u=p.pl_url||p.PL_URL; if(u&&_MAVAT_URL_RE.test(u)) return u; } // Xplan
+  return '';
+}
+// מספר התוכנית: מהטעינה לפי מספר, או מקובצי ה-SHP (שדה PLAN_NAME בגבול התוכנית)
+function _planNumberForMavat(){
+  if(state.planNumber) return state.planNumber;
+  for(const p of _gvulProps()){ let v=p.pl_number||p.PL_NUMBER||p.PLAN_NAME; if(v){ try{ v=fixHebrew(String(v)); }catch(e){} v=String(v).trim(); if(v) return v; } }
+  return '';
+}
+// אסינכרוני: אם אין קישור מוכן — שואלים את Xplan לפי מספר התוכנית; ואם גם זה לא —
+// בונים מ-AGAM_ID שבקובצי ה-SHP (= מזהה התוכנית ב"מידע תכנוני")
+async function _resolveMavatUrl(){
+  let u=_planMavatUrl(); if(u) return u;
+  // מזהה התוכנית ב"מידע תכנוני" קיים גם בכל תא שטח שנטען מ-Xplan (mp_id) — לא תלוי בשכבת
+  // הגבול (שכבה 1), שבפועל נופלת לפעמים בשרת (24/09/2026: כל שאילתה עליה החזירה שגיאה)
+  const pf=state.layers&&state.layers.plan&&state.layers.plan.features&&state.layers.plan.features.find(f=>f.properties&&+f.properties.mp_id>1e9);
+  if(pf){ state.mavatUrl=`https://mavat.iplan.gov.il/SV4/1/${Math.round(+pf.properties.mp_id)}/310`; return state.mavatUrl; }
+  const num=_planNumberForMavat();
+  if(num){
+    try{
+      const q=`${XPLAN_BASE}/1/query?where=${encodeURIComponent(`pl_number='${num.replace(/'/g,"''")}'`)}&outFields=pl_url&returnGeometry=false&f=json`;
+      const j=await (await fetch(q)).json();
+      const f=(j.features||[]).find(x=>x.attributes&&_MAVAT_URL_RE.test(x.attributes.pl_url||''));
+      if(f){ state.mavatUrl=f.attributes.pl_url; return state.mavatUrl; }
+    }catch(e){ console.warn('pl_url lookup failed',e); }
+  }
+  for(const p of _gvulProps()){
+    const id=Math.round(+p.AGAM_ID||+p.agam_id||+p.mp_id||0);
+    if(id>1e9){ state.mavatUrl=`https://mavat.iplan.gov.il/SV4/1/${id}/310`; return state.mavatUrl; }
+  }
+  return '';
 }
 function _mavatStatus(kind,html){
   let box=document.getElementById('mavat-status');
@@ -2933,10 +2967,15 @@ let _mavatReq=null;
 const MAVAT_DOC_LABEL={t5:'טבלה 5',takanon:'תקנון',prog:'נספח פרוגרמה'};
 // מושך מסמכים מ"מידע תכנוני" דרך התוסף. לתקנון ולנספח הפרוגרמה התוסף בוחר את הגרסה
 // האחרונה (תאריך עריכה אחרון; בשוויון — שלב מתקדם יותר: מאושרים > מופקדים > בתהליך).
-function _mavatFetchDocs(kinds){
+async function _mavatFetchDocs(kinds){
   kinds=(kinds&&kinds.length)?kinds:['t5'];
-  const url=_planMavatUrl();
-  if(!url){_mavatStatus('err','לא נמצא קישור לעמוד התוכנית ב"מידע תכנוני" — המסמכים לא נטענו.');return;}
+  if(_mavatReq) return;
+  const url=await _resolveMavatUrl();
+  if(!url){
+    const num=_planNumberForMavat();
+    _mavatStatus('err',`לא נמצא קישור לעמוד התוכנית ב"מידע תכנוני"${num?` (תוכנית ${esc(num)})`:''} — המסמכים לא נטענו.`);
+    return;
+  }
   if(_mavatReq) return;
   const reqId='m'+Date.now();
   const planNum=state.planNumber||'';
