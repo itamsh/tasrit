@@ -1053,7 +1053,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
   </div>
 
   <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:center">
-    <button id="launch-btn" onclick="launchMap()">הצג תשריט ←</button>
+    <button id="launch-btn" onclick="launchFromUpload()">הצג תשריט ←</button>
     <button id="reset-btn" onclick="resetZones()">🗑 נקה קבצים</button>
   </div>
 
@@ -1702,7 +1702,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 // ── App version — bump on EVERY deploy (date + that day's deploy number), so the
 //    user and Claude can confirm they're looking at the same build. Shown in the
 //    map toolbar and the loading-page footer.
-const APP_VERSION='2026.09.24-9';
+const APP_VERSION='2026.09.24-10';
 // Version of the road-network DETECTION ALGORITHM only — bump when _rnDetect's
 // output changes, so a network saved from an older run is flagged as stale
 // (networks are saved per project and are NOT re-detected on load).
@@ -2151,14 +2151,19 @@ async function launchMap(){
     // (applied via _projApplyInputs on project load). We intentionally do NOT
     // auto-load the legacy global road-net key here — that leaked old nets into
     // unrelated plans.
-    _projAfterLaunch(); // create/reconcile the active project (no-op during project load)
+    if(!_projLoading){ // תוכנית חדשה מקבצים: אם יש לה פרויקט שמור — משחזרים את הנתונים שהוזנו
+      const saved=await _projFindSaved();
+      if(saved) await _projRestoreSaved(saved); else _projAfterLaunch();
+    }
   }catch(ex){
     alert('שגיאה בטעינת הקבצים:\n'+ex.message);
     document.getElementById('launch-btn').textContent='הצג תשריט ←';
     console.error(ex);
   }
 }
-function backToUpload(){
+async function backToUpload(){
+  await _projStashCurrent();  // שומרים את מה שהוזן לתוכנית הזו (פרויקט בשמה)
+  _projClearAllInputs();      // והתוכנית הבאה תתחיל נקייה
   clearCache();
   _clearTamaState();
   if(document.getElementById('prog-panel').classList.contains('vis')) closeProgView();
@@ -2889,12 +2894,16 @@ async function launchFromPlanNumber(){
   const old=btn?btn.textContent:'';
   if(btn){ btn.disabled=true; btn.textContent='טוען…'; }
   try{
+    await _projStashCurrent();   // הנתונים של התוכנית הקודמת נשמרים בפרויקטים
+    _projClearAllInputs();       // ומתחילים נקי — בלי שאריות מהתוכנית הקודמת
     await loadPlanByNumber(num);
     _showMapUI('תוכנית '+num);
-    await _projAfterLaunch();
-    if(_bridgeVersion()){ // ברקע — התשריט כבר מוצג
+    const saved=await _projFindSaved();
+    if(saved) await _projRestoreSaved(saved); else await _projAfterLaunch();
+    if(_bridgeVersion()){ // ברקע — התשריט כבר מוצג; רק מסמכים שעוד אין (פרויקט שמור כבר מכיל אותם)
+      const have=k=>k==='takanon'?!!((state.files.takanon&&state.files.takanon.length)||(state.files.word&&state.files.word.length)):!!(state.files[k]&&state.files[k].length);
       const kinds=[['t5','plannum-t5'],['takanon','plannum-takanon'],['prog','plannum-prog']]
-        .filter(([k,id])=>{const c=document.getElementById(id);return !c||c.checked;}).map(([k])=>k);
+        .filter(([k,id])=>{const c=document.getElementById(id);return (!c||c.checked)&&!have(k);}).map(([k])=>k);
       if(kinds.length) _mavatFetchDocs(kinds);
     }
   }catch(e){
@@ -11819,6 +11828,7 @@ async function _projCollectFiles(){
 function _projDefaultName(){
   const tb=state.progData&&state.progData.title_block;
   if(tb){const s=[tb.plan_number,tb.plan_name].filter(Boolean).join(' — ');if(s)return s;}
+  if(state.planNumber) return 'תוכנית '+state.planNumber;
   const shp=state.files.shp&&state.files.shp[0];
   if(shp) return shp.name.replace(/\.[^.]+$/,'');
   return 'תוכנית '+new Date().toLocaleDateString('he-IL');
@@ -11936,16 +11946,83 @@ async function _projAfterLaunch(){
   _projRenderList();
 }
 
+// ── זיכרון לפי תוכנית: כל תוכנית שהוזנו לה נתונים נשמרת אוטומטית כפרויקט בשמה, ונטענת שוב כשפותחים אותה ──
+function _projHasUserInputs(){
+  try{
+    const s=window.PR?PR.getSpec():window._PR_PENDING;
+    if(s){
+      if((s.provision||[]).length) return true;
+      if(Object.values(s.demand||{}).some(d=>d&&Object.values(Object.assign({},d.declared,d.keys)).some(v=>v!=null&&v!==''))) return true;
+      if(((s.assumptions||{}).segments||[]).some(g=>g.units!=null&&g.units!=='')) return true;
+    }
+    return !!(RE.nodes&&RE.nodes.length);
+  }catch(e){ return false; }
+}
+// פרויקט בשם (לא משבצת העבודה) של אותה תוכנית — לפי מספר תוכנית או שם קובץ ה-SHP
+async function _projFindSaved(){
+  const xp=state.planNumber||'', shp=(state.files.shp&&state.files.shp[0]&&state.files.shp[0].name)||'';
+  if(!xp&&!shp) return null;
+  const all=(await _projAll()).filter(p=>!p.unnamed&&p.id!==_PROJ_WORKING);
+  const m=all.filter(p=>(xp&&p.xplanNumber===xp)||(shp&&p.files&&p.files.shp&&p.files.shp[0]&&p.files.shp[0].name===shp));
+  return m.sort((a,b)=>b.updatedAt-a.updatedAt)[0]||null;
+}
+// לפני מעבר לתוכנית אחרת: לשמור את מה שהוזן לתוכנית הנוכחית
+async function _projStashCurrent(){
+  if(_projLoading||!state.layers||!state.layers.plan) return;
+  if(document.getElementById('map-page').style.display==='none') return; // כבר עזבנו את התוכנית (נשמר ביציאה)
+  const active=_projActiveId();
+  if(active&&active!==_PROJ_WORKING){ await _projSaveInputs(); _projSetActive(null); return; } // פרויקט בשם — שמירה אחרונה
+  _projSetActive(null); // מכאן — אין פרויקט פעיל עד שהתוכנית הבאה נטענת (השמירה האוטומטית לא תדרוס)
+  if(!_projHasUserInputs()) return;
+  const saved=await _projFindSaved(); let name;
+  if(saved){ saved.inputs=_projCollectInputs(); saved.files=await _projCollectFiles(); saved.progData=state.progData||saved.progData||null;
+    saved.xplanNumber=state.planNumber||saved.xplanNumber||null; saved.updatedAt=Date.now(); await _projPut(saved); name=saved.name; }
+  else { name=_projDefaultName(); await _projCreateFromCurrent(name); _projSetActive(null); }
+  try{ _showToast(`הנתונים שהוזנו ל"${name}" נשמרו ב📁 פרויקטים`,4000); }catch(e){}
+  _projRenderList();
+}
+// נתוני קורא-פרוגרמה של תוכנית אחרת (שאריות) — נשמרים כפרויקט בשם אותה תוכנית; הגאומטריה תימשך מ-Xplan בטעינה
+async function _projSaveForeignSpec(spec){
+  const pn=String((spec.identity&&spec.identity.plan_number)||'').replace(/^תו?כנית\s*/,'').trim(); if(!pn) return;
+  const all=(await _projAll()).filter(p=>!p.unnamed&&p.id!==_PROJ_WORKING);
+  const norm=v=>String(v||'').replace(/\s+/g,'');
+  const ex=all.find(p=>norm(p.xplanNumber)===norm(pn));
+  if(ex){ ex.inputs=Object.assign({},ex.inputs||{},{programSpec:spec}); ex.updatedAt=Date.now(); await _projPut(ex); }
+  else await _projPut({id:'p_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),name:'תוכנית '+pn,planNumber:pn,xplanNumber:pn,
+    createdAt:Date.now(),updatedAt:Date.now(),files:{},inputs:{programSpec:spec},progData:null});
+  try{ _showToast(`נשמר כפרויקט "תוכנית ${pn}" ✓`,3500); }catch(e){}
+  _projRenderList();
+}
+// שחזור פרויקט שמור לתוכנית שנטענה זה עתה (הגאומטריה כבר טעונה)
+async function _projRestoreSaved(obj){
+  _projLoading=true;
+  try{
+    for(const z of ['t5','word','prog','takanon']){
+      const arr=obj.files&&obj.files[z];
+      if(arr&&arr.length&&!(state.files[z]&&state.files[z].length)) state.files[z]=arr.map(({name,type,buf})=>new File([buf],name,{type}));
+    }
+    if(state.files.word) state.wordFile=state.files.word[0];
+    if(state.files.t5) await parseTable5Files(state.files.t5);
+    state.progData=state.progData||obj.progData||null;
+    _projApplyInputs(obj.inputs);
+    _projSetActive(obj.id); _projLastHash='';
+  }finally{ _projLoading=false; }
+  try{ _showToast(`נטענו הנתונים ששמרת לתוכנית זו (פרויקט "${obj.name}")`,4500); }catch(e){}
+  _projRenderList();
+}
+async function launchFromUpload(){ await launchMap(); }
+
 async function switchToProject(id){
   const active=_projActiveId();
   // Only offer to back up a NAMED project (not the transient working slot)
   if(active&&active!==id&&active!==_PROJ_WORKING){
     if(confirm('לפני המעבר — לייצא את הפרויקט הנוכחי לקובץ גיבוי?')) await exportProjectById(active);
   }
+  if(active!==id) await _projStashCurrent(); // עבודה לא שמורה על התוכנית הנוכחית — נשמרת כפרויקט בשמה
   await loadProjectById(id);
 }
 async function saveCurrentAsNewProject(){
-  if(!state.files.shp){alert('אין תוכנית טעונה לשמירה');return;}
+  if(!state.files.shp&&!state.planNumber){alert('אין תוכנית טעונה לשמירה');return;}
   const nm=prompt('שם הפרויקט החדש:',_projDefaultName()); if(nm==null) return;
   await _projCreateFromCurrent(nm.trim()||_projDefaultName());
   _projRenderList(); try{_showToast('נשמר כפרויקט חדש ✓');}catch(e){}

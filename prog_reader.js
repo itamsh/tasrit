@@ -511,6 +511,22 @@ function _prefillIdentity(){
   try{ if(!I.plan_number&&typeof _projPlanNumber==='function') I.plan_number=_projPlanNumber()||''; }catch(e){}
 }
 
+// הגנה: נתונים שהוזנו לתוכנית אחרת (למשל משארית מגרסה קודמת) — מציעים לשמור אותם בשם התוכנית ההיא ולנקות
+const _normPN=v=>String(v||'').replace(/^תו?כנית\s*/,'').replace(/\s+/g,'').trim();
+function _curPlanNumber(){ try{ return (typeof _projPlanNumber==='function'&&_projPlanNumber())||''; }catch(e){ return ''; } }
+function _mismatchBanner(){
+  const I=PR.spec.identity||{}, cur=_curPlanNumber();
+  if(!I.plan_number||!cur||_normPN(I.plan_number)===_normPN(cur)) return '';
+  return `<div class="pr-pick" style="background:#3a2a10;border-color:#f0b429">⚠ הנתונים כאן הוזנו לתוכנית <b>${E(I.plan_number)}</b>, אבל טעונה עכשיו <b>${E(cur)}</b>.
+    <button class="pr-btn" onclick="PR.stashForeign()">שמור אותם כפרויקט "${E(I.plan_number)}" ונקה</button>
+    <button class="pr-btn" onclick="PR.clearSpec()">נקה בלי לשמור</button></div>`;
+}
+PR.clearSpec=function(){ PR.spec=emptySpec(); PR.pick=null; _prefillIdentity(); PR.render(); safeRedraw(); };
+PR.stashForeign=async function(){
+  const spec=JSON.parse(JSON.stringify(PR.spec));
+  try{ if(typeof _projSaveForeignSpec==='function') await _projSaveForeignSpec(spec); }catch(e){ alert('השמירה נכשלה: '+e.message); return; }
+  PR.clearSpec();
+};
 PR.setDomain=function(d){ PR.domain=d; PR.render(); };
 PR.setTab=function(t){ PR.tab=t; PR.render(); };
 
@@ -551,9 +567,9 @@ PR.render=function(){
   const body=$('pr-body');
   const sc=body.scrollTop;
   const eduDom=PR.domain==='edu'||PR.domain==='all';
-  body.innerHTML=PR.tab==='assump'?_renderAssump():PR.tab==='demand'?_renderDemand()
+  body.innerHTML=_mismatchBanner()+(PR.tab==='assump'?_renderAssump():PR.tab==='demand'?_renderDemand()
     :PR.tab==='supply'?(eduDom?_renderSupplyEdu():_renderSoon('supply'))
-    :PR.tab==='checks'?(eduDom?_renderChecks():_renderSoon('checks')):'';
+    :PR.tab==='checks'?(eduDom?_renderChecks():_renderSoon('checks')):'');
   body.scrollTop=sc;
   _refreshComputed(); _refreshEdu(); _refreshSupply();
 };
