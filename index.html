@@ -69,6 +69,56 @@ body.theme-light .dz-rec-tag{color:#1a7a44;background:#dcf3e6;border-color:#8fcf
 #map-page{display:none;flex-direction:column;height:100vh}
 #toolbar{background:#1f2e42;color:#dde;padding:5px 10px;display:flex;align-items:center;gap:5px;flex-wrap:nowrap;overflow-x:auto;border-bottom:1px solid #2d4060;flex-shrink:0;font-size:13px}
 #toolbar h1{font-size:14px;font-weight:600;color:#7ecfff;flex-shrink:0}
+/* ── סרגל כלים דו-שורתי (v2026.09.24-16) ── */
+#toolbar{flex-direction:column;align-items:stretch;gap:0;padding:0;overflow:visible}
+.tb-row{display:flex;align-items:center;gap:6px;padding:4px 10px;min-width:0}
+.tb-top{padding:5px 10px 4px}
+.tb-tabs{align-items:flex-end;padding:0 10px;background:#18263a;border-top:1px solid #2d4060;gap:2px}
+.tb-icon{font-size:15px;padding:3px 9px}
+.tb-tab{background:transparent;border:1px solid transparent;border-bottom:none;color:#8fa6c0;padding:6px 13px 5px;border-radius:7px 7px 0 0;cursor:pointer;font-size:12.5px;white-space:nowrap;margin-top:4px;flex-shrink:0}
+.tb-tab:hover{color:#dde;background:#1f3048}
+.tb-tab.active{background:#243650;border-color:#3a5070;color:#fff;font-weight:600}
+#toolbar.rn-mode .tb-tab#btn-road-net.active{background:#1f5a32;border-color:#2f8a4c}
+.tb-lbl{font-size:11.5px;color:#7899bb;margin-bottom:6px;flex-shrink:0}
+.tb-seg{display:inline-flex;border:1px solid #3a5070;border-radius:6px;overflow:hidden;margin-bottom:4px;flex-shrink:0}
+.tb-seg button{background:transparent;border:none;color:#9ab;padding:3px 9px;font-size:12px;cursor:pointer;border-left:1px solid #3a5070}
+.tb-seg button:last-child{border-left:none}
+.tb-seg button.active{background:#2980b9;color:#fff}
+.tb-dd{position:relative;margin-bottom:4px;flex-shrink:0}
+.tb-menu{display:none;position:fixed;z-index:400;min-width:190px;background:#101a28;border:1px solid #2d4060;border-radius:9px;box-shadow:0 8px 22px rgba(0,0,0,.5);padding:5px;direction:rtl}
+.tb-menu.vis{display:block}
+.tb-mi{display:block;width:100%;text-align:right;background:transparent!important;color:#cdd!important;padding:6px 10px;border-radius:5px}
+.tb-mi:hover{background:#1f3350!important}
+.tb-chk::before{content:'☐ ';color:#7899bb}
+.tb-chk.active::before{content:'☑ ';color:#5ecf99}
+.tb-mi:not(.tb-chk).active{color:#7ecfff!important}
+.tb-mi:not(.tb-chk).active::after{content:' · פעיל';font-size:10.5px;color:#5ecf99}
+.tb-msep{height:1px;background:#2d4060;margin:4px 6px}
+.tb-tab{border-color:transparent!important;background-color:transparent}
+.tb-tab.active{border-color:#3a5070!important}
+body.theme-light .tb-tab.active{border-color:#c8d8ea!important}
+#btn-t5:not(.loaded){opacity:.45}
+.tb-seg #btn-rachak.active{background:#6c3fa0}.tb-seg #btn-density.active{background:#1c7a5a}
+#map-tools{position:absolute;top:10px;left:10px;z-index:150;display:flex;flex-direction:column;gap:4px;align-items:center}
+.mt-btn{width:32px;height:32px;border-radius:7px;border:1px solid #3a5070;background:rgba(20,32,48,.92);color:#dde;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.3)}
+.mt-btn:hover{background:#27456b}
+.mt-btn.active{background:#2980b9;border-color:#5aa0e0;color:#fff}
+.mt-gap{height:6px}
+#zoom-info{font-size:10px;color:#5577aa;background:rgba(255,255,255,.75);border-radius:4px;padding:0 3px}
+body.theme-light .tb-tabs{background:#e6edf5;border-top-color:#c8d8ea}
+body.theme-light .tb-tab{color:#4a5d74}
+body.theme-light .tb-tab:hover{background:#dde6f0;color:#1a3560}
+body.theme-light .tb-tab.active{background:#fff;border-color:#c8d8ea;color:#1a3560}
+body.theme-light .tb-seg{border-color:#bfccdb}
+body.theme-light .tb-seg button{color:#4a5d74;border-left-color:#bfccdb;background:#fff}
+body.theme-light .tb-seg button.active{background:#2980b9;color:#fff}
+body.theme-light .tb-menu{background:#fff;border-color:#c8d8ea}
+body.theme-light .tb-mi{color:#1c2b3c!important}
+body.theme-light .tb-mi:hover{background:#e8f1fb!important}
+body.theme-light .mt-btn{background:rgba(255,255,255,.95);border-color:#bfccdb;color:#1a3560}
+body.theme-light .mt-btn:hover{background:#e8f1fb}
+body.theme-light .mt-btn.active{background:#2980b9;color:#fff}
+
 #plan-head{display:flex;flex-direction:column;gap:2px;flex-shrink:0}
 #plan-docs{display:flex;gap:3px}
 #plan-docs:empty{display:none}
@@ -143,7 +193,7 @@ canvas{position:absolute;top:0;left:0;display:block}
 .rep-btn.needs-type{animation:rep-pulse 1s ease-in-out infinite;border:1px solid #ff8800;color:#ffaa44!important}
 /* SEARCH */
 #map-page{position:relative}
-#search-wrap{position:absolute;top:44px;left:50%;transform:translateX(-50%);z-index:200;display:none;flex-direction:column;width:250px;box-shadow:0 4px 20px rgba(0,0,0,.5)}
+#search-wrap{position:absolute;top:calc(var(--tbh,88px) - 6px);left:50%;transform:translateX(-50%);z-index:200;display:none;flex-direction:column;width:250px;box-shadow:0 4px 20px rgba(0,0,0,.5)}
 #search-input{background:#1a2a3a;color:#dde;border:1.5px solid #3a6090;border-radius:6px 6px 0 0;padding:8px 13px;font-size:14px;outline:none;direction:rtl;font-family:inherit;width:100%;box-sizing:border-box}
 #search-input:focus{border-color:#2980b9;box-shadow:0 0 0 2px rgba(41,128,185,.3)}
 #search-dropdown{background:#111e2e;border:1.5px solid #2d4060;border-top:none;border-radius:0 0 6px 6px;max-height:220px;overflow-y:auto;direction:rtl;display:none}
@@ -177,9 +227,6 @@ canvas{position:absolute;top:0;left:0;display:block}
 .calc-opt-btn.active{background:#2980b9;border-color:#2980b9;color:#fff}
 /* rn-mode left toolbar button */
 #btn-road-net-wrap{margin-right:auto}
-#btn-road-net{background:#1e3a28;color:#7dffa0;border:1px solid #2d5a3a}
-#btn-road-net:hover{background:#27503a;color:#aaffbb}
-#btn-road-net.active{background:#27ae60;color:#fff;border-color:#27ae60}
 /* ===== TABLE 5 VIEW ===== */
 #t5-panel{display:none;flex:1;flex-direction:column;overflow:hidden;background:#141e2c}
 #t5-panel.vis{display:flex}
@@ -235,19 +282,9 @@ body.theme-dark .t5v-env-cell{background:#0a2620!important;color:#8ff0d0!importa
 .t5-dp-tbl .t5-dp-sum{background:#eef3ff;font-weight:700;color:#1a3060;border-top:2px solid #9ab8dc}
 .t5-dp-formula{background:#f4f8ff;border:1px solid #c0d4ec;border-radius:6px;padding:9px 12px;font-size:12px;color:#2a5080;text-align:center;font-weight:600;margin-top:2px}
 .t5-dp-formula .t5-dp-eq{font-size:11px;color:#6688aa;margin-top:3px}
-#btn-t5{background:#1a2e42;color:#4a7099;border:1px solid #1d3550;opacity:.55;cursor:default}
-#btn-t5.loaded{color:#7ecfff;border-color:#2d5070;opacity:1;cursor:pointer}
-#btn-t5.loaded:hover{background:#243d54}
-#btn-t5.active{background:#1a4a6a;color:#7ecfff;border-color:#2980b9;opacity:1;cursor:pointer}
 /* toolbar t5-mode */
 #toolbar.t5-mode .t5-hide{display:none!important}
 /* rachak mode */
-#btn-rachak{display:none}
-#btn-rachak.loaded{display:inline-flex}
-#btn-rachak.active{background:#5a2d82;color:#e0c0ff;border-color:#8040bb}
-#btn-density{display:none}
-#btn-density.loaded{display:inline-flex}
-#btn-density.active{background:#0d4a3a;color:#80ffcc;border-color:#20a060}
 /* ===== TAMA 35/4 PANEL ===== */
 #tama-panel{display:none;flex:1;flex-direction:column;overflow:hidden;background:#141e2c}
 #tama-panel.vis{display:flex}
@@ -307,9 +344,6 @@ body.theme-dark .t5v-env-cell{background:#0a2620!important;color:#8ff0d0!importa
 .det-val{font-weight:700;color:#223;white-space:nowrap;font-size:11px}
 .det-sep{border:none;border-top:1px solid #dde;margin:5px 0}
 .det-formula{color:#2471a3;font-size:10px;text-align:center;margin-top:3px;font-style:italic}
-#btn-tama{background:#1a2535;color:#7ecfff;border:1px solid #2d4060}
-#btn-tama:hover{background:#243d54}
-#btn-tama.active{background:#1a3a5a;border-color:#2980b9}
 
 /* ===== PROGRAM PANEL ===== */
 #prog-panel{display:none;flex:1;flex-direction:column;overflow:hidden;background:#141e2c}
@@ -346,9 +380,6 @@ details[open].prog-collapsible .prog-collapsible-hint{display:none}
 .prog-cell-chip{font-size:10px;color:#7ecfff;background:#111e2e;border:1px solid #2d4060;border-radius:3px;padding:1px 5px;display:inline-block;margin:1px;white-space:nowrap}
 .prog-note{font-size:10px;color:#9aabbb;cursor:help}
 .prog-no-data{text-align:center;padding:60px 20px;color:#556677;font-size:13px}
-#btn-prog{background:#1a2535;color:#7ecfff;border:1px solid #2d4060}
-#btn-prog:hover{background:#243d54}
-#btn-prog.active{background:#1a3a5a;border-color:#2980b9}
 .prog-summ-bar{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;direction:rtl}
 .prog-summ-card{flex:1;min-width:120px;background:#111e2e;border:1px solid #2d4060;border-radius:6px;padding:9px 12px}
 .prog-summ-lbl{font-size:9px;color:#6688aa;margin-bottom:4px;letter-spacing:.3px}
@@ -506,7 +537,7 @@ body.theme-light .fv2-cell{border-color:#c8d8ea}
 .gas-knob:active,.gas-knob.dragging{cursor:grabbing;background:#5a9aee}
 .gas-lbl{font-size:10px;color:#7ecfff;min-width:30px;text-align:center;font-family:monospace;user-select:none}
 /* ── Basemap picker ── */
-#bm-panel{position:fixed;top:52px;left:10px;z-index:320;width:212px;background:#101a28;border:1px solid #2d4060;border-radius:10px;box-shadow:0 8px 22px rgba(0,0,0,.5);padding:11px;display:none;direction:rtl}
+#bm-panel{position:fixed;top:var(--tbh,88px);left:10px;z-index:320;width:212px;background:#101a28;border:1px solid #2d4060;border-radius:10px;box-shadow:0 8px 22px rgba(0,0,0,.5);padding:11px;display:none;direction:rtl}
 #bm-panel.vis{display:block}
 .bm-hdr{display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:700;color:#7ecfff;margin-bottom:9px}
 .bm-x{background:none;border:none;color:#8aa;cursor:pointer;font-size:13px}
@@ -541,7 +572,7 @@ body.theme-light #bm-panel{background:#fff;border-color:#c4d4e6}
 body.theme-light .bm-opt{background:#eef3fa;border-color:#d0dcec;color:#25517a}
 body.theme-light .bm-opt.on{background:#d8ebfb;border-color:#5a9adc;color:#154a78}
 /* ── Overlay plans ── */
-#ov-panel{position:fixed;top:52px;left:10px;z-index:320;width:260px;max-height:70vh;overflow-y:auto;background:#101a28;border:1px solid #2d4060;border-radius:10px;box-shadow:0 8px 22px rgba(0,0,0,.5);padding:11px;display:none;direction:rtl}
+#ov-panel{position:fixed;top:var(--tbh,88px);left:10px;z-index:320;width:260px;max-height:70vh;overflow-y:auto;background:#101a28;border:1px solid #2d4060;border-radius:10px;box-shadow:0 8px 22px rgba(0,0,0,.5);padding:11px;display:none;direction:rtl}
 #ov-panel.vis{display:block}
 .ov-hdr{display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:700;color:#7ecfff;margin-bottom:9px}
 .ov-x{background:none;border:none;color:#8aa;cursor:pointer;font-size:13px}
@@ -584,7 +615,7 @@ body.theme-light .ov-item-txt{color:#25405c}
 body.theme-light .ov-sub-hdr{border-top-color:#e2e9f2}
 body.theme-light .ov-refresh{border-color:#bcd;color:#3a6a9a}
 /* ── PDF georeference overlay ── */
-#pdfov-panel{position:fixed;top:52px;left:10px;z-index:320;width:260px;background:#101a28;border:1px solid #2d4060;border-radius:10px;box-shadow:0 8px 22px rgba(0,0,0,.5);padding:11px;display:none;direction:rtl}
+#pdfov-panel{position:fixed;top:var(--tbh,88px);left:10px;z-index:320;width:260px;background:#101a28;border:1px solid #2d4060;border-radius:10px;box-shadow:0 8px 22px rgba(0,0,0,.5);padding:11px;display:none;direction:rtl}
 #pdfov-panel.vis{display:block}
 .pdfov-hdr{display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:700;color:#7ecfff;margin-bottom:9px}
 .pdfov-panel-x{background:none;border:none;color:#8aa;cursor:pointer;font-size:13px}
@@ -625,7 +656,7 @@ body.theme-light .pdfov-active-name{color:#25405c}
 .pdfov-point-actions button{flex:1;background:#1a3a5a;border:1px solid #4a8acc;color:#bfe6ff;border-radius:6px;padding:6px;font-size:11.5px;cursor:pointer}
 .pdfov-point-actions button:hover{background:#204a70}
 /* ── Projects ── */
-#proj-panel{position:fixed;top:52px;left:10px;z-index:320;width:340px;max-height:70vh;overflow-y:auto;background:#101a28;border:1px solid #2d4060;border-radius:10px;box-shadow:0 8px 26px rgba(0,0,0,.55);padding:12px;display:none;direction:rtl}
+#proj-panel{position:fixed;top:var(--tbh,88px);left:10px;z-index:320;width:340px;max-height:70vh;overflow-y:auto;background:#101a28;border:1px solid #2d4060;border-radius:10px;box-shadow:0 8px 26px rgba(0,0,0,.55);padding:12px;display:none;direction:rtl}
 #proj-panel.vis{display:block}
 .proj-panel-hdr{display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:700;color:#7ecfff;margin-bottom:8px}
 .proj-x{background:none;border:none;color:#8aa;cursor:pointer;font-size:14px}
@@ -1142,50 +1173,46 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 <!-- ===== MAP PAGE ===== -->
 <div id="map-page">
   <div id="toolbar">
-    <div id="plan-head">
-      <h1 id="plan-title">תצוגת תשריט</h1>
-      <div id="plan-docs" title="המסמכים שנטענו לתוכנית הזו"></div>
+    <!-- ▸ שורה 1: איפה אני — חזרה, שם התוכנית + מסמכים, פרויקטים, ערכת צבעים -->
+    <div class="tb-row tb-top">
+      <button class="tb-btn tb-icon" id="btn-back" onclick="backToUpload()" title="חזרה לעמוד הטעינה">⇨</button>
+      <div id="plan-head">
+        <h1 id="plan-title">תצוגת תשריט</h1>
+        <div id="plan-docs" title="המסמכים שנטענו לתוכנית הזו"></div>
+      </div>
+      <span style="flex:1"></span>
+      <button class="tb-btn" id="btn-projects" onclick="_projTogglePanel()" title="פרויקטים — מעבר בין תוכניות שמורות">📁 פרויקטים</button>
+      <button id="btn-theme" onclick="toggleTheme()" title="החלפה בין תצוגה בהירה לכהה">
+        <span id="theme-icon">🌙</span><span id="theme-lbl">כהה</span>
+      </button>
     </div>
-
-    <!-- ▸ מודולים / תצוגות -->
-    <div class="tb-sep"></div>
-    <button class="tb-btn active t5-hide" id="btn-tsharit" onclick="closeRoadNetPanel()" title="חזור לתצוגת תשריט">🗺 תשריט</button>
-    <button class="tb-btn t5-hide" id="btn-road-net" onclick="onRoadNetClick()" title="בניית ועריכת רשת דרכים">🛣 רשת דרכים</button>
-    <button class="tb-btn" id="btn-t5" onclick="openTable5View()" title="תצוגת טבלה 5 — זכויות בניה">📋 טבלה 5</button>
-    <button class="tb-btn" id="btn-tama" onclick="openTamaView()" title="בדיקת תאימות תמ״א 35/4">📐 תמ״א 35/4</button>
-    <button class="tb-btn" id="btn-prog" onclick="(window.openProgReader||openProgView)()" title="קורא הפרוגרמה — הבנת נספח הפרוגרמה על גבי התשריט">📊 פרוגרמה</button>
-    <button class="tb-btn" id="btn-word" style="display:none" onclick="openWordDoc()">📝 תקנון</button>
-
-    <!-- ▸ שכבות ותצוגה -->
-    <div class="tb-sep t5-hide"></div>
-    <button class="tb-btn active t5-hide" id="btn-labels" onclick="toggleLabels()" title="הצג/הסתר תגיות תאי שטח">🏷 תגיות</button>
-    <button class="tb-btn t5-hide" id="btn-grid" onclick="toggleGrid()" title="הצג/הסתר רשת 100מ׳">⊞ גריד</button>
-    <button class="tb-btn t5-hide" id="btn-basemap" onclick="_bmTogglePanel()" title="מפת רקע גאוגרפית (תצלום אוויר / רחובות)">🌍 רקע</button>
-    <button class="tb-btn t5-hide" id="btn-overlay" onclick="_ovTogglePanel()" title="הצגת תוכניות נוספות (לפי מספר) כשכבת רקע להשוואה">🗂 תוכניות נוספות</button>
-    <button class="tb-btn t5-hide" id="btn-pdfov" onclick="_pdfOvTogglePanel()" title="עיגון מסמך PDF (נספח) על גבי התשריט לפי גריד קואורדינטות">📄 עיגון PDF</button>
-    <button class="tb-btn t5-hide" id="btn-rachak" onclick="toggleRachakMode()" title="מפת רח״ק לפי טבלה 5">🏢 רח״ק</button>
-    <button class="tb-btn t5-hide" id="btn-density" onclick="toggleDensityMode()" title="מפת צפיפות יח״ד/דונם לפי טבלה 5">🏘 צפיפות</button>
-
-    <!-- ▸ כלים -->
-    <div class="tb-sep t5-hide"></div>
-    <button class="tb-btn t5-hide" id="btn-search" onclick="openSearch()" title="חיפוש תא שטח (Ctrl+F)">🔍 חיפוש</button>
-    <button class="tb-btn t5-hide" id="btn-meas-dist" onclick="setMeasMode('distance')" title="מדידת מרחק — לחץ להצבת נקודות, לחץ פעמיים לסיום">📏 מרחק</button>
-    <button class="tb-btn t5-hide" id="btn-meas-area" onclick="setMeasMode('area')" title="מדידת שטח — לחץ להצבת נקודות, לחץ פעמיים לסיום">⬡ שטח</button>
-    <button class="tb-btn t5-hide" onclick="resetView()" title="איפוס תצוגת המפה">↩ איפוס תצוגה</button>
-    <span id="zoom-info" class="t5-hide"></span>
-
-    <span style="flex:1"></span>
-
-    <!-- ▸ קבצים -->
-    <div class="tb-sep"></div>
-    <button class="tb-btn" id="btn-projects" onclick="_projTogglePanel()" title="פרויקטים — מעבר בין תוכניות שמורות">📁 פרויקטים</button>
-    <button class="tb-btn" id="btn-back" onclick="backToUpload()" title="חזרה לעמוד טעינת הקבצים">⇦ טעינת קבצים</button>
-
-    <!-- ▸ הגדרות -->
-    <div class="tb-sep"></div>
-    <button id="btn-theme" onclick="toggleTheme()" title="החלפה בין תצוגה בהירה לכהה">
-      <span id="theme-icon">🌙</span><span id="theme-lbl">כהה</span>
-    </button>
+    <!-- ▸ שורה 2: מצבי עבודה (לשוניות) · צביעת המפה · שכבות -->
+    <div class="tb-row tb-tabs">
+      <button class="tb-tab active" id="btn-tsharit" onclick="_tbTab('tsharit')" title="התשריט">🗺 תשריט</button>
+      <button class="tb-tab" id="btn-t5" onclick="_tbTab('t5')" title="טבלה 5 — זכויות בנייה">📋 טבלה 5</button>
+      <button class="tb-tab" id="btn-prog" onclick="_tbTab('prog')" title="קורא הפרוגרמה — הבנת נספח הפרוגרמה על גבי התשריט">📊 פרוגרמה</button>
+      <button class="tb-tab" id="btn-tama" onclick="_tbTab('tama')" title="בדיקת תאימות תמ״א 35/4">📐 תמ״א 35/4</button>
+      <button class="tb-tab" id="btn-road-net" onclick="_tbTab('road')" title="בניית ועריכת רשת דרכים">🛣 רשת דרכים</button>
+      <button class="tb-btn" id="btn-word" style="display:none" onclick="openWordDoc()">📝 תקנון</button>
+      <span style="flex:1"></span>
+      <span class="tb-lbl t5-hide">צביעה:</span>
+      <span class="tb-seg t5-hide" title="איך לצבוע את תאי השטח">
+        <button id="btn-color-yiud" class="active" onclick="_tbColor('yiud')" title="לפי ייעוד הקרקע">ייעוד</button>
+        <button id="btn-rachak" onclick="_tbColor('rachak')" title="מפת רח״ק לפי טבלה 5">רח״ק</button>
+        <button id="btn-density" onclick="_tbColor('density')" title="מפת צפיפות יח״ד/דונם לפי טבלה 5">צפיפות</button>
+      </span>
+      <div class="tb-dd t5-hide" id="tb-layers">
+        <button class="tb-btn" id="btn-layers" onclick="_tbLayersToggle(event)" title="שכבות ותצוגה">🗂 שכבות ▾</button>
+        <div class="tb-menu" id="tb-layers-menu">
+          <button class="tb-btn tb-mi tb-chk active" id="btn-labels" onclick="toggleLabels()" title="הצג/הסתר תגיות תאי שטח">תגיות תאי שטח</button>
+          <button class="tb-btn tb-mi tb-chk" id="btn-grid" onclick="toggleGrid()" title="הצג/הסתר רשת 100מ׳">גריד 100 מ׳</button>
+          <div class="tb-msep"></div>
+          <button class="tb-btn tb-mi" id="btn-basemap" onclick="_tbLayersClose();_bmTogglePanel()" title="מפת רקע גאוגרפית (תצלום אוויר / רחובות)">🌍 מפת רקע…</button>
+          <button class="tb-btn tb-mi" id="btn-overlay" onclick="_tbLayersClose();_ovTogglePanel()" title="הצגת תוכניות נוספות (לפי מספר) כשכבת רקע להשוואה">🗂 תוכניות נוספות…</button>
+          <button class="tb-btn tb-mi" id="btn-pdfov" onclick="_tbLayersClose();_pdfOvTogglePanel()" title="עיגון מסמך PDF (נספח) על גבי התשריט לפי גריד קואורדינטות">📄 עיגון PDF…</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Projects panel (floating) -->
@@ -1554,6 +1581,18 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
     <div id="canvas-wrap">
       <canvas id="c"></canvas>
 
+      <!-- כלי מפה צפים -->
+      <div id="map-tools">
+        <button class="mt-btn" id="btn-search" onclick="openSearch()" title="חיפוש תא שטח (Ctrl+F)">🔍</button>
+        <button class="mt-btn" id="btn-meas-dist" onclick="setMeasMode('distance')" title="מדידת מרחק — לחצו להצבת נקודות, לחיצה כפולה לסיום">📏</button>
+        <button class="mt-btn" id="btn-meas-area" onclick="setMeasMode('area')" title="מדידת שטח — לחצו להצבת נקודות, לחיצה כפולה לסיום">⬡</button>
+        <div class="mt-gap"></div>
+        <button class="mt-btn" onclick="zoomIn()" title="התקרבות">＋</button>
+        <button class="mt-btn" onclick="zoomOut()" title="התרחקות">－</button>
+        <button class="mt-btn" onclick="resetView()" title="איפוס תצוגה — כל התוכנית">⤢</button>
+        <span id="zoom-info" title="רמת הזום"></span>
+      </div>
+
       <!-- info panel (click on zone) -->
       <div id="info-panel">
         <div id="info-hdr" onmousedown="_infoDragStart(event)">
@@ -1743,7 +1782,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 // ── App version — bump on EVERY deploy (date + that day's deploy number), so the
 //    user and Claude can confirm they're looking at the same build. Shown in the
 //    map toolbar and the loading-page footer.
-const APP_VERSION='2026.09.24-15';
+const APP_VERSION='2026.09.24-16';
 // Version of the road-network DETECTION ALGORITHM only — bump when _rnDetect's
 // output changes, so a network saved from an older run is flagged as stale
 // (networks are saved per project and are NOT re-detected on load).
@@ -2192,6 +2231,7 @@ async function launchMap(){
     // (applied via _projApplyInputs on project load). We intentionally do NOT
     // auto-load the legacy global road-net key here — that leaked old nets into
     // unrelated plans.
+    try{ document.getElementById('plan-title').textContent=_projDefaultName(); }catch(e){} // שם התוכנית (מהנספח / קובץ ה-SHP)
     if(!_projLoading){ // תוכנית חדשה מקבצים: אם יש לה פרויקט שמור — משחזרים את הנתונים שהוזנו
       const saved=await _projFindSaved();
       if(saved) await _projRestoreSaved(saved); else _projAfterLaunch();
@@ -3172,6 +3212,50 @@ async function _mavatApplyDocs(kinds,d,url){
   if(!failed.length) setTimeout(()=>{const b=document.getElementById('mavat-status');if(b&&b.className==='ms-ok')_mavatStatus(null);},9000);
   if(ok) await _projAfterLaunch(); // לשמור את הקבצים בפרויקט
 }
+// ── סרגל הכלים הדו-שורתי: לשוניות מצב, צביעה, תפריט שכבות ──
+function _tbIsOn(id){ const e=document.getElementById(id); return !!e&&e.classList.contains('active'); }
+function _tbCloseAll(){
+  try{ const t=document.getElementById('t5-panel'); if(t&&t.classList.contains('vis')) closeTable5View(); }catch(e){}
+  try{ const t=document.getElementById('tama-panel'); if(t&&t.classList.contains('vis')) closeTamaView(); }catch(e){}
+  try{ const t=document.getElementById('prog-panel'); if(t&&t.classList.contains('vis')) closeProgView(); }catch(e){}
+  try{ if(window.PR&&PR.open) PR.close(); }catch(e){}
+  try{ if(document.getElementById('toolbar').classList.contains('rn-mode')) closeRoadNetPanel(); }catch(e){}
+}
+function _tbTab(t){
+  const ids={t5:'btn-t5',prog:'btn-prog',tama:'btn-tama',road:'btn-road-net'};
+  if(t!=='tsharit'&&_tbIsOn(ids[t])){ _tbCloseAll(); _tbSync(); return; } // לחיצה על הלשונית הפעילה = חזרה לתשריט
+  if(t==='t5'&&!state.table5){ _showToast('טבלה 5 לא נטענה לתוכנית הזו — ר׳ החיווי מתחת לשם התוכנית',4000); return; }
+  _tbCloseAll();
+  if(t==='t5') openTable5View();
+  else if(t==='prog') (window.openProgReader||openProgView)();
+  else if(t==='tama') openTamaView();
+  else if(t==='road') onRoadNetClick();
+  _tbSync();
+}
+function _tbColor(m){
+  if(m==='yiud'){ if(state.rachakMode) toggleRachakMode(); if(state.densityMode) toggleDensityMode(); }
+  else if(!state.table5){ _showToast('צביעה לפי '+(m==='rachak'?'רח״ק':'צפיפות')+' דורשת טבלה 5',3500); return; }
+  else if(m==='rachak'&&!state.rachakMode) toggleRachakMode();
+  else if(m==='density'&&!state.densityMode) toggleDensityMode();
+  _tbSync();
+}
+function _tbSync(){
+  const any=['btn-t5','btn-prog','btn-tama','btn-road-net'].some(_tbIsOn);
+  const ts=document.getElementById('btn-tsharit'); if(ts) ts.classList.toggle('active',!any);
+  const cy=document.getElementById('btn-color-yiud'); if(cy) cy.classList.toggle('active',!state.rachakMode&&!state.densityMode);
+  const tb=document.getElementById('toolbar');
+  if(tb&&tb.offsetHeight) document.documentElement.style.setProperty('--tbh',(tb.getBoundingClientRect().bottom+6)+'px');
+}
+function _tbLayersToggle(ev){
+  ev&&ev.stopPropagation();
+  const m=document.getElementById('tb-layers-menu'), b=document.getElementById('btn-layers');
+  if(m.classList.toggle('vis')){ const r=b.getBoundingClientRect(); m.style.top=(r.bottom+4)+'px'; m.style.left=Math.max(6,r.right-m.offsetWidth)+'px'; }
+}
+function _tbLayersClose(){ const m=document.getElementById('tb-layers-menu'); if(m) m.classList.remove('vis'); }
+document.addEventListener('click',e=>{ if(!e.target.closest('#tb-layers')) _tbLayersClose(); });
+setInterval(()=>{ try{ if(_mapVisible()) _tbSync(); }catch(e){} },400);
+addEventListener('resize',()=>{ try{ _tbSync(); }catch(e){} });
+
 // ── חיווי בסרגל הכלים: אילו מסמכים נטענו לתוכנית המוצגת (טבלה 5 / תקנון / נספח פרוגרמה) ──
 let _planDocsSig='';
 function _planDocsUpdate(){
@@ -6319,7 +6403,7 @@ function closeRoadNetPanel(){
   document.getElementById('rn-panel').style.display='none';
   document.getElementById('legend').style.display='';
   document.getElementById('toolbar').classList.remove('rn-mode');
-  document.getElementById('plan-title').textContent='תצוגת תשריט';
+  /* שם התוכנית נשאר בכותרת — המצב מוצג בלשוניות */
   document.getElementById('btn-tsharit').classList.add('active');
   document.getElementById('btn-road-net').classList.remove('active');
   _updateRoadNetLegend();
@@ -6346,7 +6430,7 @@ function _rnShowPanel(section){
   document.getElementById('rn-edit-section').style.display=section==='edit'?'flex':'none';
   document.getElementById('rn-view-section').style.display=section==='view'?'flex':'none';
   document.getElementById('toolbar').classList.add('rn-mode');
-  document.getElementById('plan-title').textContent='תצוגת רשת דרכים';
+  /* המצב מוצג בלשונית "רשת דרכים" */
   document.getElementById('btn-road-net').classList.add('active');
   document.getElementById('btn-tsharit').classList.remove('active');
 }
@@ -6354,7 +6438,7 @@ function _rnHidePanel(){
   document.getElementById('rn-panel').style.display='none';
   document.getElementById('legend').style.display='';
   document.getElementById('toolbar').classList.remove('rn-mode');
-  document.getElementById('plan-title').textContent='תצוגת תשריט';
+  /* שם התוכנית נשאר בכותרת */
   document.getElementById('btn-tsharit').classList.add('active');
   document.getElementById('btn-road-net').classList.remove('active');
 }
