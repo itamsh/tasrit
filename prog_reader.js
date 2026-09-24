@@ -738,14 +738,14 @@ function _renderAssump(){
   const segs=`<div class="pr-sec"><h3>הנחות מוצא — מקטעים
       <span class="pr-hint">מקטע אחד = מספר אחיד לכל התכנית. הוסיפו מקטעים אם הנספח מפצל (גודל דירה, חדרים, כללי/חרדי, דיור מוגן, רשות)</span></h3>
     <table class="pr-tbl">${head}${rows}${tot}</table>
+    <div data-out="addition" class="pr-small" style="margin-top:6px"></div>
     <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
       <button class="pr-btn" onclick="PR.addSegment()">+ מקטע</button>
       <span class="pr-small">אחוז מימוש ריק = 100%. ילדים בשנתון = אוכלוסייה × שנתון%. דיור מוגן/מיוחד — מקטע נפרד עם ☑ "דיור מיוחד".</span>
     </div></div>`;
 
-  const chain=`<div class="pr-sec"><h3>שרשרת ההנחות</h3><div class="pr-chain" data-out="chain"></div>
-    <div data-out="addition" class="pr-small" style="margin-top:6px"></div></div>`;
-  return _renderPlanDocs()+idh+ctx+segs+chain;
+  // "שרשרת ההנחות" הוסרה — טבלת המקטעים כבר מציגה יח"ד → אוכלוסייה → ילדים בשנתון (הערת המשתמש)
+  return _renderPlanDocs()+idh+ctx+segs;
 }
 
 // מסמכי התוכנית שנמשכו מ"מידע תכנוני" (דרך התוסף) — לפתיחה לצד התשריט בזמן ההזנה
