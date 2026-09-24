@@ -676,6 +676,33 @@ body.theme-light #hover-tip .ht-sub{color:#4a5d74}
 #mavat-status .ms-trace div{max-height:160px;overflow:auto;direction:rtl;margin-top:4px;padding:6px;background:rgba(0,0,0,.25);border-radius:6px;font-family:Consolas,monospace}
 .ms-spin{display:inline-block;width:12px;height:12px;border:2px solid #7ecfff;border-top-color:transparent;border-radius:50%;animation:msSpin .8s linear infinite;vertical-align:-2px;margin-left:4px}
 @keyframes msSpin{to{transform:rotate(360deg)}}
+#resume-box{width:100%;max-width:760px;display:flex;align-items:center;gap:10px;background:#15283d;border:1px solid #3a6a9a;border-radius:10px;padding:9px 14px;color:#cfe3fa;font-size:13.5px;flex-shrink:0}
+#resume-box>span:first-child{flex:1}
+#resume-box .rs-go{background:#2a6ab0;border:none;color:#fff;border-radius:7px;padding:6px 14px;cursor:pointer;font-size:13px;font-weight:600}
+#resume-box .rs-go:hover{background:#3580d0}
+#resume-box .rs-x{background:none;border:none;color:#7899bb;cursor:pointer;font-size:14px}
+body.theme-light #resume-box{background:#e8f1fb;border-color:#9dbde0;color:#1a3560}
+#plannum-wrap{position:relative;flex:1;min-width:200px;max-width:420px;display:flex}
+#plannum-wrap #plannum-input{max-width:none;width:100%}
+#plannum-sug{position:absolute;top:100%;left:0;right:0;margin-top:3px;background:#0f1c2b;border:1px solid #3a6a9a;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.4);z-index:50;max-height:320px;overflow:auto;display:none;text-align:right}
+#plannum-sug.vis{display:block}
+#plannum-sug .sg{padding:7px 12px;cursor:pointer;border-bottom:1px solid #1e3148;display:flex;flex-direction:column;gap:1px}
+#plannum-sug .sg:last-child{border-bottom:none}
+#plannum-sug .sg.on,#plannum-sug .sg:hover{background:#1d3553}
+#plannum-sug .sg b{direction:rtl;unicode-bidi:plaintext;color:#e8eef4;font-size:14px}
+#plannum-sug .sg span{font-size:11.5px;color:#8fa6c0}
+#plannum-sug .sg .mine{color:#5ecf99;font-size:10.5px}
+#plannum-sug .sg-msg{padding:8px 12px;font-size:12px;color:#7899bb}
+body.theme-light #plannum-sug{background:#fff;border-color:#9dbde0}
+body.theme-light #plannum-sug .sg{border-bottom-color:#e3ebf5}
+body.theme-light #plannum-sug .sg.on,body.theme-light #plannum-sug .sg:hover{background:#e8f1fb}
+body.theme-light #plannum-sug .sg b{color:#1a2535}
+.plannum-ext-row{display:flex;justify-content:center;margin-top:8px}
+#ext-btn{background:none;border:1px solid #2d4060;color:#8fb0d6;border-radius:7px;padding:4px 12px;cursor:pointer;font-size:12px}
+#ext-btn:hover{border-color:#4a7ab0;color:#cfe3fa}
+#ext-btn.on{border-color:#2f7a55;color:#5ecf99}
+body.theme-light #ext-btn{border-color:#c8d8ea;color:#2a5a90}
+#plannum-box .ext-body{text-align:right}
 #ext-box{width:100%;max-width:760px;background:#16233480;border:1px solid #2a3f58;border-radius:10px;overflow:hidden;flex-shrink:0}
 .ext-hdr{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;cursor:pointer;font-size:13px;font-weight:700;color:#8ab6d8;user-select:none}
 .ext-toggle{transition:transform .2s;color:#5a7a9a}
@@ -980,13 +1007,23 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 <div id="upload-page" ondrop="onPageDrop(event)" ondragover="onPageDragOver(event)" ondragleave="onPageDragLeave(event)">
   <h1>ממשק הצגת תוכניות</h1>
 
+  <!-- חיווי: התוכנית האחרונה שנפתחה (אחרי ריענון לא עוברים אוטומטית למפה) -->
+  <div id="resume-box" style="display:none">
+    <span>↩ התוכנית האחרונה שנפתחה: <b class="rs-lbl"></b><span class="rs-name"></span></span>
+    <button class="rs-go">פתח שוב ←</button>
+    <button class="rs-x" title="הסתר" onclick="this.parentNode.style.display='none'">✕</button>
+  </div>
+
   <!-- Load directly by plan number (no files, no download) -->
   <div id="plannum-box">
     <div class="plannum-title">⚡ טעינה מהירה לפי מספר תוכנית — תשריט בלבד</div>
     <div class="plannum-sub">הזן מספר תוכנית והממשק ימשוך את התשריט ישירות ממערכת "מידע תכנוני"</div>
     <div class="plannum-row">
-      <input id="plannum-input" type="text" placeholder="למשל: 410-1186295" autocomplete="off"
-             onkeydown="if(event.key==='Enter')launchFromPlanNumber()">
+      <div id="plannum-wrap">
+        <input id="plannum-input" type="text" placeholder="מספר או שם תוכנית — למשל: תמל 3006" autocomplete="off"
+               oninput="_pnSuggest(this.value)" onkeydown="_pnKey(event)" onblur="setTimeout(_pnHide,180)" onfocus="if(this.value)_pnSuggest(this.value)">
+        <div id="plannum-sug"></div>
+      </div>
       <button id="plannum-btn" onclick="launchFromPlanNumber()">הצג תשריט ←</button>
     </div>
     <div id="plannum-t5-row" class="plannum-t5-row" style="display:none">
@@ -997,6 +1034,20 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
       <span class="plannum-ext-tag">🧩 באמצעות התוסף</span>
     </div>
     <div class="plannum-note" id="plannum-note">מושך רק את התשריט הגרפי — ללא מידע על זכויות בנייה מתוך טבלה 5</div>
+    <div class="plannum-ext-row"><button id="ext-btn" type="button" onclick="document.getElementById('ext-body').classList.toggle('vis')">🧩 תוסף לכרום — התקנה והורדה ▾</button></div>
+    <div class="ext-body" id="ext-body">
+      <p>אתר <b>מידע תכנוני (mavat)</b> מגן על הורדת מסמכים מפני גישה אוטומטית, ולכן אתר זה לא יכול למשוך משם את <b>טבלה 5</b> בעצמו.
+        התוסף עושה זאת בדפדפן שלכם: אחרי <b>טעינה מהירה לפי מספר תוכנית</b>, הוא פותח את עמוד התוכנית בלשונית רקע, לוחץ על כפתור ההורדה של האתר עצמו, מעביר את הקובץ לכאן וסוגר את הלשונית.
+        בנוסף, בעמוד תוכנית ב"מידע תכנוני" מופיע כפתור "📤 שלח לתצוגת תשריטים".</p>
+      <p class="ext-note">התקנה ידנית (עדיין לא בחנות התוספים של כרום):</p>
+      <ol>
+        <li>הורידו את קובץ ה-ZIP וחלצו אותו לתיקייה במחשב</li>
+        <li>בכרום: <code>chrome://extensions</code> ← הפעילו "מצב מפתח" (Developer mode)</li>
+        <li>לחצו "טען מפוזר" (Load unpacked) ובחרו את התיקייה שחילצתם</li>
+      </ol>
+      <p class="ext-note">כבר מותקנת גרסה קודמת? מחקו את התיקייה הישנה, חלצו את החדשה לאותו מקום, ולחצו 🔄 (טעינה מחדש) בכרטיס התוסף ב-<code>chrome://extensions</code>. אחר כך רעננו את העמוד הזה.</p>
+      <a class="ext-dl-btn" href="tasrit-mavat-bridge-v0.3.3.zip" download>⬇ הורדת התוסף (ZIP, גרסה 0.3.3)</a>
+    </div>
   </div>
 
   <div class="page-divider"></div>
@@ -1058,27 +1109,6 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
   </div>
 
   <div class="page-divider"></div>
-
-  <!-- Optional companion browser extension -->
-  <div id="ext-box">
-    <div class="ext-hdr" onclick="document.getElementById('ext-body').classList.toggle('vis')">
-      <span>🧩 תוסף לכרום — טעינת טבלה 5 אוטומטית מ"מידע תכנוני"</span>
-      <span class="ext-toggle">▾</span>
-    </div>
-    <div class="ext-body" id="ext-body">
-      <p>אתר <b>מידע תכנוני (mavat)</b> מגן על הורדת מסמכים מפני גישה אוטומטית, ולכן אתר זה לא יכול למשוך משם את <b>טבלה 5</b> בעצמו.
-        התוסף עושה זאת בדפדפן שלכם: אחרי <b>טעינה מהירה לפי מספר תוכנית</b>, הוא פותח את עמוד התוכנית בלשונית רקע, לוחץ על כפתור ההורדה של האתר עצמו, מעביר את הקובץ לכאן וסוגר את הלשונית.
-        בנוסף, בעמוד תוכנית ב"מידע תכנוני" מופיע כפתור "📤 שלח לתצוגת תשריטים".</p>
-      <p class="ext-note">התקנה ידנית (עדיין לא בחנות התוספים של כרום):</p>
-      <ol>
-        <li>הורידו את קובץ ה-ZIP וחלצו אותו לתיקייה במחשב</li>
-        <li>בכרום: <code>chrome://extensions</code> ← הפעילו "מצב מפתח" (Developer mode)</li>
-        <li>לחצו "טען מפוזר" (Load unpacked) ובחרו את התיקייה שחילצתם</li>
-      </ol>
-      <p class="ext-note">כבר מותקנת גרסה קודמת? מחקו את התיקייה הישנה, חלצו את החדשה לאותו מקום, ולחצו 🔄 (טעינה מחדש) בכרטיס התוסף ב-<code>chrome://extensions</code>. אחר כך רעננו את העמוד הזה.</p>
-      <a class="ext-dl-btn" href="tasrit-mavat-bridge-v0.3.3.zip" download>⬇ הורדת התוסף (ZIP, גרסה 0.3.3)</a>
-    </div>
-  </div>
 
   <!-- Saved projects on the upload page -->
   <div id="proj-upload-box">
@@ -1702,7 +1732,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 // ── App version — bump on EVERY deploy (date + that day's deploy number), so the
 //    user and Claude can confirm they're looking at the same build. Shown in the
 //    map toolbar and the loading-page footer.
-const APP_VERSION='2026.09.24-10';
+const APP_VERSION='2026.09.24-11';
 // Version of the road-network DETECTION ALGORITHM only — bump when _rnDetect's
 // output changes, so a network saved from an older run is flagged as stale
 // (networks are saved per project and are NOT re-detected on load).
@@ -2228,9 +2258,14 @@ async function _xplanQuery(layerId,planNum){
     const url=`${XPLAN_BASE}/${layerId}/query?where=${encodeURIComponent(where)}`+
       `&outFields=*&returnGeometry=true&outSR=2039&f=geojson`+
       `&resultOffset=${offset}&resultRecordCount=${page}`;
-    const r=await fetch(url);
-    if(!r.ok) throw new Error(`שגיאת רשת (שכבה ${layerId}, קוד ${r.status})`);
-    const j=await r.json();
+    // שרת Xplan מחזיר לפעמים שגיאה זמנית בלי כותרת CORS ("Failed to fetch") — עד 2 ניסיונות חוזרים
+    let r,j,lastErr;
+    for(let a=0;a<3;a++){
+      try{ r=await fetch(url); if(r.ok){ j=await r.json(); break; } lastErr=new Error(`שגיאת רשת (שכבה ${layerId}, קוד ${r.status})`); }
+      catch(e){ lastErr=e; }
+      await new Promise(res=>setTimeout(res,700*(a+1)));
+    }
+    if(!j) throw new Error(`שרת Xplan לא הגיב (שכבה ${layerId}) — נסו שוב בעוד רגע. ${lastErr&&lastErr.message||''}`);
     if(j&&j.error) console.warn(`Xplan layer ${layerId} query failed:`,j.error); // השרת מחזיר 200 עם error — שלא ייראה כ"אין נתונים" בשקט
     const fs=(j&&j.features)||[];
     feats.push(...fs);
@@ -2886,6 +2921,64 @@ function _showMapUI(title){
   resize(); setTimeout(resetView,80);
 }
 
+// ── השלמה אוטומטית בשדה "טעינה מהירה": פרויקטים שמורים (מיידי) + רשימת התוכניות ב-Xplan ──
+let _pnTimer=null,_pnAbort=null,_pnItems=[],_pnSel=-1,_pnSeq=0;
+function _pnWhere(q){
+  const e=s=>s.replace(/'/g,"''");
+  const heb=(q.match(/[֐-׿]+/)||[''])[0], digits=(q.match(/\d[\d\-\/ ]*/g)||[]).join('').replace(/[\s\/]+/g,'%');
+  if(heb&&digits) return [`pl_number LIKE '${e(heb)}%${e(digits)}%'`];                    // "תמל 3006" / "תמל/3006"
+  if(digits) return [`pl_number LIKE '${e(digits)}%'`,`pl_number LIKE '%${e(digits)}%'`]; // קודם התאמת-התחלה (מהיר), אחר כך בכל מקום
+  if(heb.length>=2) return [`pl_number LIKE '${e(q.trim())}%' OR pl_name LIKE '%${e(q.trim())}%'`];
+  return [];
+}
+function _pnSuggest(v){
+  const q=String(v||'').trim(); clearTimeout(_pnTimer);
+  if(q.length<2){ _pnHide(); return; }
+  _pnTimer=setTimeout(()=>_pnRun(q),300);
+}
+async function _pnRun(q){
+  const seq=++_pnSeq; if(_pnAbort) _pnAbort.abort(); _pnAbort=new AbortController(); const sig=_pnAbort.signal;
+  const norm=s=>String(s||'').replace(/[\s\/]+/g,'').toLowerCase(), nq=norm(q);
+  // פרויקטים שמורים — תוכניות שכבר עבדת עליהן
+  let mine=[]; try{ mine=(await _projAll()).filter(p=>!p.unnamed&&p.xplanNumber&&(norm(p.xplanNumber).includes(nq)||norm(p.name).includes(nq))).map(p=>({num:p.xplanNumber,name:p.name,mine:true})); }catch(e){}
+  if(seq!==_pnSeq) return;
+  _pnItems=mine; _pnRender('מחפש ברשימת התוכניות…');
+  const seen=new Set(mine.map(m=>m.num));
+  const wh=_pnWhere(q);
+  for(const [wi,where] of wh.entries()){
+    if(wi>0&&_pnItems.length) break;        // חיפוש "בכל מקום" איטי מאוד בשרת — רק אם התאמת-ההתחלה לא מצאה כלום
+    if(wi>0) _pnRender('מחפש גם באמצע מספרי התוכניות…');
+    try{
+      const p=new URLSearchParams({where,outFields:'pl_number,pl_name',returnGeometry:'false',returnDistinctValues:'true',orderByFields:'pl_number',f:'json'});
+      const t=setTimeout(()=>{ try{_pnAbort.abort();}catch(e){} },9000);
+      const j=await (await fetch(`${XPLAN_BASE}/4/query?${p}`,{signal:sig})).json(); clearTimeout(t);
+      if(seq!==_pnSeq) return;
+      for(const f of (j.features||[])){ const a=f.attributes||{}; if(!a.pl_number||seen.has(a.pl_number)) continue; seen.add(a.pl_number); _pnItems.push({num:a.pl_number,name:a.pl_name||''}); }
+      if(_pnItems.length>=8) break;
+    }catch(e){ if(seq!==_pnSeq) return; break; }
+  }
+  if(seq!==_pnSeq) return;
+  _pnRender(_pnItems.length?'':'לא נמצאו תוכניות עם תשריט דיגיטלי');
+}
+function _pnRender(msg){
+  const box=document.getElementById('plannum-sug'); if(!box) return;
+  const items=_pnItems.slice(0,12); _pnSel=-1;
+  box.innerHTML=items.map((it,i)=>`<div class="sg" data-i="${i}" onmousedown="_pnPick(${i})"><b>${esc(it.num)}</b><span>${esc(it.name)}${it.mine?' <span class="mine">· 📁 שמור אצלך</span>':''}</span></div>`).join('')
+    +(msg?`<div class="sg-msg">${esc(msg)}</div>`:'');
+  box.classList.toggle('vis',!!(items.length||msg));
+}
+function _pnHide(){ const b=document.getElementById('plannum-sug'); if(b) b.classList.remove('vis'); }
+function _pnPick(i){ const it=_pnItems[i]; if(!it) return; const inp=document.getElementById('plannum-input'); inp.value=it.num; _pnHide(); clearTimeout(_pnTimer); _pnSeq++; launchFromPlanNumber(); }
+function _pnKey(ev){
+  const box=document.getElementById('plannum-sug'), open=box&&box.classList.contains('vis'), rows=box?box.querySelectorAll('.sg'):[];
+  if(ev.key==='ArrowDown'&&open&&rows.length){ ev.preventDefault(); _pnSel=(_pnSel+1)%rows.length; }
+  else if(ev.key==='ArrowUp'&&open&&rows.length){ ev.preventDefault(); _pnSel=(_pnSel-1+rows.length)%rows.length; }
+  else if(ev.key==='Enter'){ ev.preventDefault(); if(open&&_pnSel>=0) _pnPick(_pnSel); else { _pnHide(); _pnSeq++; launchFromPlanNumber(); } return; }
+  else if(ev.key==='Escape'){ _pnHide(); return; }
+  else return;
+  rows.forEach((r,i)=>r.classList.toggle('on',i===_pnSel)); if(rows[_pnSel]) rows[_pnSel].scrollIntoView({block:'nearest'});
+}
+
 async function launchFromPlanNumber(){
   const inp=document.getElementById('plannum-input');
   const num=(inp&&inp.value||'').trim();
@@ -2895,6 +2988,8 @@ async function launchFromPlanNumber(){
   if(btn){ btn.disabled=true; btn.textContent='טוען…'; }
   try{
     await _projStashCurrent();   // הנתונים של התוכנית הקודמת נשמרים בפרויקטים
+    await _projStashWorkingSlot(); // (גם אם נשארה ממושב קודם, לפני ריענון)
+    _projSetActive(null);          // אין פרויקט פעיל בזמן הטעינה — שהשמירה האוטומטית לא תכתוב שדות ריקים לפרויקט הקודם
     _projClearAllInputs();       // ומתחילים נקי — בלי שאריות מהתוכנית הקודמת
     await loadPlanByNumber(num);
     _showMapUI('תוכנית '+num);
@@ -3152,11 +3247,13 @@ document.addEventListener('tasrit-bridge-ready',e=>{try{const v=_bridgeDetail(e)
 setTimeout(()=>{try{_plannumBridgeUI();}catch(e){} const c=document.getElementById('chk-hover-tip'); if(c) c.checked=!!state.hoverTip;},0);
 function _plannumBridgeUI(){
   const on=!!_bridgeVersion();
+  const eb=document.getElementById('ext-btn');
+  if(eb){ eb.classList.toggle('on',on); eb.textContent=on?`🧩 התוסף מותקן (גרסה ${_bridgeVersion()}) · עדכון ▾`:'🧩 תוסף לכרום — התקנה והורדה ▾'; }
   const row=document.getElementById('plannum-t5-row'); if(row) row.style.display=on?'flex':'none';
   const note=document.getElementById('plannum-note');
   if(note) note.innerHTML=on
     ?'התשריט נמשך מיידית; המסמכים נמשכים ברקע באמצעות התוסף (לשונית "מידע תכנוני" נפתחת ונסגרת מעצמה). לתקנון ולנספח — הגרסה האחרונה שהועלתה.'
-    :'מושך רק את התשריט הגרפי. לטעינת טבלה 5, תקנון ונספח פרוגרמה אוטומטית — התקינו את <a href="#ext-box" onclick="document.getElementById(\'ext-body\').classList.add(\'vis\')">התוסף לכרום</a>';
+    :'מושך רק את התשריט הגרפי. לטעינת טבלה 5, תקנון ונספח פרוגרמה אוטומטית — התקינו את <a href="#plannum-box" onclick="document.getElementById(\'ext-body\').classList.add(\'vis\')">התוסף לכרום</a> (כפתור 🧩 למטה)';
 }
 
 // ============================================================
@@ -11947,16 +12044,32 @@ async function _projAfterLaunch(){
 }
 
 // ── זיכרון לפי תוכנית: כל תוכנית שהוזנו לה נתונים נשמרת אוטומטית כפרויקט בשמה, ונטענת שוב כשפותחים אותה ──
-function _projHasUserInputs(){
+// המפה מוצגת? (בטעינת העמוד היא מוסתרת ע"י ה-CSS, לא ע"י style.display — לכן בודקים את המצב המחושב)
+function _mapVisible(){ const m=document.getElementById('map-page'); return !!m&&getComputedStyle(m).display!=='none'; }
+function _inputsHaveUser(inp){
   try{
-    const s=window.PR?PR.getSpec():window._PR_PENDING;
+    const s=inp&&inp.programSpec;
     if(s){
       if((s.provision||[]).length) return true;
       if(Object.values(s.demand||{}).some(d=>d&&Object.values(Object.assign({},d.declared,d.keys)).some(v=>v!=null&&v!==''))) return true;
       if(((s.assumptions||{}).segments||[]).some(g=>g.units!=null&&g.units!=='')) return true;
     }
-    return !!(RE.nodes&&RE.nodes.length);
+    return !!(inp&&inp.roadNet&&inp.roadNet.nodes&&inp.roadNet.nodes.length);
   }catch(e){ return false; }
+}
+function _projHasUserInputs(){ return _inputsHaveUser(_projCollectInputs()); }
+// אחרי ריענון (בלי לפתוח את המפה) — משבצת העבודה עדיין מחזיקה את התוכנית הקודמת. לפני שתידרס — שומרים אותה בשם.
+async function _projStashWorkingSlot(){
+  const w=await _projGet(_PROJ_WORKING); if(!w||!_inputsHaveUser(w.inputs)) return;
+  if(state.layers&&state.layers.plan&&_mapVisible()) return; // היא התוכנית הפתוחה — _projStashCurrent מטפל
+  const shp=w.files&&w.files.shp&&w.files.shp[0]&&w.files.shp[0].name;
+  const all=(await _projAll()).filter(p=>!p.unnamed&&p.id!==_PROJ_WORKING);
+  const ex=all.find(p=>(w.xplanNumber&&p.xplanNumber===w.xplanNumber)||(shp&&p.files&&p.files.shp&&p.files.shp[0]&&p.files.shp[0].name===shp));
+  const name=ex?ex.name:(w.xplanNumber?'תוכנית '+w.xplanNumber:(shp?shp.replace(/\.[^.]+$/,''):'תוכנית שמורה'));
+  if(ex){ Object.assign(ex,{inputs:w.inputs,files:w.files,progData:w.progData||ex.progData||null,updatedAt:Date.now()}); await _projPut(ex); }
+  else await _projPut(Object.assign({},w,{id:'p_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),name,unnamed:false,updatedAt:Date.now()}));
+  await _projDelete(_PROJ_WORKING); if(_projActiveId()===_PROJ_WORKING) _projSetActive(null);
+  try{ _showToast(`הנתונים שהוזנו ל"${name}" נשמרו ב📁 פרויקטים`,4000); }catch(e){}
 }
 // פרויקט בשם (לא משבצת העבודה) של אותה תוכנית — לפי מספר תוכנית או שם קובץ ה-SHP
 async function _projFindSaved(){
@@ -11969,7 +12082,7 @@ async function _projFindSaved(){
 // לפני מעבר לתוכנית אחרת: לשמור את מה שהוזן לתוכנית הנוכחית
 async function _projStashCurrent(){
   if(_projLoading||!state.layers||!state.layers.plan) return;
-  if(document.getElementById('map-page').style.display==='none') return; // כבר עזבנו את התוכנית (נשמר ביציאה)
+  if(!_mapVisible()) return; // כבר עזבנו את התוכנית (נשמר ביציאה)
   const active=_projActiveId();
   if(active&&active!==_PROJ_WORKING){ await _projSaveInputs(); _projSetActive(null); return; } // פרויקט בשם — שמירה אחרונה
   _projSetActive(null); // מכאן — אין פרויקט פעיל עד שהתוכנית הבאה נטענת (השמירה האוטומטית לא תדרוס)
@@ -12010,7 +12123,7 @@ async function _projRestoreSaved(obj){
   try{ _showToast(`נטענו הנתונים ששמרת לתוכנית זו (פרויקט "${obj.name}")`,4500); }catch(e){}
   _projRenderList();
 }
-async function launchFromUpload(){ await launchMap(); }
+async function launchFromUpload(){ await _projStashWorkingSlot(); _projSetActive(null); _projClearAllInputs(); await launchMap(); }
 
 async function switchToProject(id){
   const active=_projActiveId();
@@ -12117,7 +12230,7 @@ function _projClosePanel(){const p=document.getElementById('proj-panel');if(p)p.
 setInterval(async()=>{
   if(_projLoading) return;
   if(!_projActiveId()) return;
-  if(document.getElementById('map-page').style.display==='none') return;
+  if(!_mapVisible()) return;
   const h=JSON.stringify({i:_projCollectInputs(),
     p:state.progData?(state.progData.title_block&&state.progData.title_block.plan_number||1):0});
   if(h===_projLastHash) return;
@@ -12128,17 +12241,17 @@ setInterval(async()=>{
 // ============================================================
 // Auto-restore on page load: prefer active project, else legacy 'last'
 // ============================================================
+// ריענון = נשארים בעמוד הראשי. לא עוברים אוטומטית למפה — מוצג רק חיווי "התוכנית האחרונה" עם כפתור לפתיחה.
 (async()=>{
   const activeId=_projActiveId();
   if(activeId){
     const obj=await _projGet(activeId);
     if(obj&&((obj.files&&obj.files.shp)||obj.xplanNumber)){
-      await loadProjectById(activeId);
-      _projRenderList();
-      return;
+      _resumeShow(obj.xplanNumber||obj.planNumber||obj.name,obj.unnamed?'':obj.name,()=>loadProjectById(activeId));
+      _projRenderList(); return;
     }
   }
-  // Legacy fallback: restore last raw file set
+  // Legacy fallback: last raw file set — מסמנים את הקבצים באזורי הגרירה, בלי לפתוח את המפה
   const data=await loadFromCache();
   if(!data||!data.shp){ _projRenderList(); return; }
   for(const[z,arr] of Object.entries(data)){
@@ -12147,22 +12260,25 @@ setInterval(async()=>{
     markZone(z,state.files[z]);
   }
   checkReady();
-  await launchMap(); // auto-launch without user interaction
-  _restoreTamaState(); // restore TAMA settings from previous session
-
-  // Restore parsed progData if it matches the current prog file (avoids re-parsing via DeepSeek)
-  const pd=await loadProgDataCache();
-  if(pd&&pd.data){
-    const prog=state.files.prog?.[0];
-    const fileKey=prog?`${prog.name}|${prog.size}`:'__json__';
-    if(pd.fileKey===fileKey){
-      state.progData=pd.data;
-      const pb=document.getElementById('btn-prog');
-      if(pb){pb.style.background='';pb.style.borderColor='#44aa77';}
+  _resumeShow(data.shp[0]&&data.shp[0].name||'קבצי SHP','',async()=>{
+    await launchMap(); _restoreTamaState();
+    const pd=await loadProgDataCache();
+    if(pd&&pd.data){
+      const prog=state.files.prog?.[0];
+      const fileKey=prog?`${prog.name}|${prog.size}`:'__json__';
+      if(pd.fileKey===fileKey){ state.progData=pd.data; const pb=document.getElementById('btn-prog'); if(pb){pb.style.background='';pb.style.borderColor='#44aa77';} }
     }
-  }
+  });
   _projRenderList();
 })();
+function _resumeShow(label,name,fn){
+  const box=document.getElementById('resume-box'); if(!box) return;
+  box.querySelector('.rs-lbl').textContent=label;
+  box.querySelector('.rs-name').textContent=name&&name!==('תוכנית '+label)?' · '+name:'';
+  box.style.display='flex';
+  box.querySelector('.rs-go').onclick=async()=>{ const b=box.querySelector('.rs-go'); b.disabled=true; b.textContent='טוען…';
+    try{ await fn(); box.style.display='none'; }finally{ b.disabled=false; b.textContent='פתח שוב ←'; } };
+}
 
 // ===== THEME TOGGLE =====
 function applyTheme(th){
