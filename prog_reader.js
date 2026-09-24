@@ -465,7 +465,7 @@ body.theme-light .pr-wbig,body.theme-light .pr-wq{color:#1a3560}
 body.theme-light .pr-whdr{color:#4a5d74}
 body.theme-light .pr-wnum{color:#0088aa}
 body.theme-light .pr-wt{background:#fff;color:#1c2b3c;border-color:#bfccdb}
-body.theme-light .pr-wt.on{color:#fff}
+body.theme-light .pr-wt.on{background:var(--c);border-color:var(--c);color:#fff}
 body.theme-light .pr-wrow{background:#f4f7fb}
 body.theme-light .pr-step input{background:#fff;color:#1c2b3c;border-color:#bfccdb}
 body.theme-light .pr-step button{background:#dcebfb;color:#1a3560;border-color:#8fb0d6}
@@ -1602,7 +1602,7 @@ PR.walkSet=function(id,f,v){
 };
 PR.walkMeta=function(f,v){
   const cn=_walk().cur; if(!cn) return; const m=_wCell(cn);
-  if(f==='other'){ m.other=m.other.includes(v)?m.other.filter(x=>x!==v):[...m.other,v]; }
+  if(f==='other'){ if(typeof v==='number') v=OTHER_USES[v]; m.other=m.other.includes(v)?m.other.filter(x=>x!==v):[...m.other,v]; }
   else if(f==='reserve'){ m.reserve=!m.reserve; }
   else if(f==='alt'){ m.alt=!m.alt; for(const a of _walkAllocs(cn)) a.alt=m.alt||undefined; }
   else m[f]=v;
@@ -1651,7 +1651,7 @@ function _walkAllocRows(cn,lines,phase){
 function _walkOtherRow(cn){
   const m=_wCell(cn);
   return `<div class="pr-wq" style="margin-top:10px">ולא-חינוך:</div><div class="pr-wts sm">
-    ${OTHER_USES.map(u=>`<button class="pr-wt${m.other.includes(u)?' on':''}" style="--c:#7f8c8d" onclick="PR.walkMeta('other','${u}')">🏛 ${E(u)}</button>`).join('')}
+    ${OTHER_USES.map((u,i)=>`<button class="pr-wt${m.other.includes(u)?' on':''}" style="--c:#7f8c8d" onclick="PR.walkMeta('other',${i})">🏛 ${E(u)}</button>`).join('')}
     <button class="pr-wt${m.reserve?' on':''}" style="--c:#95a5a6" onclick="PR.walkMeta('reserve')">⬜ עתודה / לא מוגדר</button></div>
     <label class="pr-walt"><input type="checkbox" ${m.alt?'checked':''} onchange="PR.walkMeta('alt')"> <b>?</b> הנספח מציע כאן <b>כמה שימושים חלופיים</b> (למשל "גנים / מעונות / בית כנסת") — לא ודאי</label>`;
 }
