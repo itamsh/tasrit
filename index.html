@@ -642,6 +642,8 @@ body.theme-light .pdfov-active-name{color:#25405c}
    it to zero height whenever total page content exceeds the viewport. */
 .plannum-t5-row{display:flex;align-items:center;gap:7px;justify-content:center;margin-top:10px;font-size:13px;color:#a9c4e0;cursor:pointer}
 .plannum-t5-row input{accent-color:#2980b9;cursor:pointer}
+.plannum-t5-row label{display:inline-flex;align-items:center;gap:4px;cursor:pointer}
+.plannum-t5-row{flex-wrap:wrap;cursor:default}
 .plannum-ext-tag{font-size:11px;background:#1d3350;color:#9cc8f0;border:1px solid #3d6a9a;border-radius:10px;padding:1px 8px}
 body.theme-light .plannum-t5-row{color:#2a4a70}
 body.theme-light .plannum-ext-tag{background:#e3eefa;color:#1a5590;border-color:#bcd3ec}
@@ -979,9 +981,13 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
              onkeydown="if(event.key==='Enter')launchFromPlanNumber()">
       <button id="plannum-btn" onclick="launchFromPlanNumber()">הצג תשריט ←</button>
     </div>
-    <label id="plannum-t5-row" class="plannum-t5-row" style="display:none">
-      <input type="checkbox" id="plannum-t5" checked> משוך גם את טבלה 5 מ"מידע תכנוני" <span class="plannum-ext-tag">🧩 באמצעות התוסף</span>
-    </label>
+    <div id="plannum-t5-row" class="plannum-t5-row" style="display:none">
+      <span>משוך גם מ"מידע תכנוני":</span>
+      <label><input type="checkbox" id="plannum-t5" checked> טבלה 5</label>
+      <label><input type="checkbox" id="plannum-takanon" checked> תקנון</label>
+      <label><input type="checkbox" id="plannum-prog" checked> נספח פרוגרמה</label>
+      <span class="plannum-ext-tag">🧩 באמצעות התוסף</span>
+    </div>
     <div class="plannum-note" id="plannum-note">מושך רק את התשריט הגרפי — ללא מידע על זכויות בנייה מתוך טבלה 5</div>
   </div>
 
@@ -1062,7 +1068,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
         <li>לחצו "טען מפוזר" (Load unpacked) ובחרו את התיקייה שחילצתם</li>
       </ol>
       <p class="ext-note">כבר מותקנת גרסה קודמת? מחקו את התיקייה הישנה, חלצו את החדשה לאותו מקום, ולחצו 🔄 (טעינה מחדש) בכרטיס התוסף ב-<code>chrome://extensions</code>. אחר כך רעננו את העמוד הזה.</p>
-      <a class="ext-dl-btn" href="tasrit-mavat-bridge-v0.2.0.zip" download>⬇ הורדת התוסף (ZIP, גרסה 0.2.0)</a>
+      <a class="ext-dl-btn" href="tasrit-mavat-bridge-v0.3.0.zip" download>⬇ הורדת התוסף (ZIP, גרסה 0.3.0)</a>
     </div>
   </div>
 
@@ -1688,7 +1694,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 // ── App version — bump on EVERY deploy (date + that day's deploy number), so the
 //    user and Claude can confirm they're looking at the same build. Shown in the
 //    map toolbar and the loading-page footer.
-const APP_VERSION='2026.09.24-1';
+const APP_VERSION='2026.09.24-2';
 // Version of the road-network DETECTION ALGORITHM only — bump when _rnDetect's
 // output changes, so a network saved from an older run is flagged as stale
 // (networks are saved per project and are NOT re-detected on load).
@@ -2876,8 +2882,11 @@ async function launchFromPlanNumber(){
     await loadPlanByNumber(num);
     _showMapUI('תוכנית '+num);
     await _projAfterLaunch();
-    const wantT5=document.getElementById('plannum-t5');
-    if(_bridgeVersion()&&(!wantT5||wantT5.checked)) _mavatFetchT5(); // ברקע — התשריט כבר מוצג
+    if(_bridgeVersion()){ // ברקע — התשריט כבר מוצג
+      const kinds=[['t5','plannum-t5'],['takanon','plannum-takanon'],['prog','plannum-prog']]
+        .filter(([k,id])=>{const c=document.getElementById(id);return !c||c.checked;}).map(([k])=>k);
+      if(kinds.length) _mavatFetchDocs(kinds);
+    }
   }catch(e){
     alert(e.message||'שגיאה בטעינת התוכנית');
   }finally{
@@ -2913,44 +2922,78 @@ function _mavatStatus(kind,html){
   box.innerHTML=`<div class="ms-txt">${html}</div><button class="ms-x" title="סגירה" onclick="_mavatStatus(null)">✕</button>`;
 }
 let _mavatReq=null;
-function _mavatFetchT5(){
+const MAVAT_DOC_LABEL={t5:'טבלה 5',takanon:'תקנון',prog:'נספח פרוגרמה'};
+// מושך מסמכים מ"מידע תכנוני" דרך התוסף. לתקנון ולנספח הפרוגרמה התוסף בוחר את הגרסה
+// האחרונה (תאריך עריכה אחרון; בשוויון — שלב מתקדם יותר: מאושרים > מופקדים > בתהליך).
+function _mavatFetchDocs(kinds){
+  kinds=(kinds&&kinds.length)?kinds:['t5'];
   const url=_planMavatUrl();
-  if(!url){_mavatStatus('err','לא נמצא קישור לעמוד התוכנית ב"מידע תכנוני" — טבלה 5 לא נטענה.');return;}
+  if(!url){_mavatStatus('err','לא נמצא קישור לעמוד התוכנית ב"מידע תכנוני" — המסמכים לא נטענו.');return;}
   if(_mavatReq) return;
   const reqId='m'+Date.now();
   const planNum=state.planNumber||'';
   _mavatReq=reqId;
-  _mavatStatus('busy',`<span class="ms-spin"></span> מושך את טבלה 5 מ"מידע תכנוני"… <small>(נפתחת לשונית רקע ונסגרת מעצמה, עד כדקה)</small>`);
-  const timer=setTimeout(()=>onResp({detail:JSON.stringify({reqId,ok:false,error:'אין תשובה מהתוסף'})}),150000);
+  _mavatStatus('busy',`<span class="ms-spin"></span> מושך מ"מידע תכנוני": ${kinds.map(k=>MAVAT_DOC_LABEL[k]).join(', ')}… <small>(נפתחת לשונית רקע ונסגרת מעצמה)</small>`);
+  const timer=setTimeout(()=>onResp({detail:JSON.stringify({reqId,ok:false,error:'אין תשובה מהתוסף'})}),330000);
   function onResp(e){
     const d=_bridgeDetail(e);
     if(d.reqId!==reqId) return;
     document.removeEventListener('tasrit-mavat-response',onResp);
     clearTimeout(timer); _mavatReq=null;
     if(state.planNumber!==planNum) return; // המשתמש כבר עבר לתוכנית אחרת
-    if(!d.ok||!d.files||!d.files.length){
-      _mavatStatus('err',`טבלה 5 לא נטענה: ${esc(d.error||'שגיאה לא ידועה')}
-        <button class="ms-btn" onclick="_mavatFetchT5()">נסה שוב</button>
-        <a class="ms-btn" href="${esc(url)}" target="_blank" rel="noopener">פתח את עמוד התוכנית</a>`);
-      return;
-    }
-    _mavatApplyT5(d.files).catch(err=>_mavatStatus('err','הקובץ התקבל אך לא נקרא כטבלה 5: '+esc(err.message||err)));
+    _mavatApplyDocs(kinds,d,url).catch(err=>_mavatStatus('err','שגיאה בקליטת המסמכים: '+esc(err.message||err)));
   }
   document.addEventListener('tasrit-mavat-response',onResp);
-  document.dispatchEvent(new CustomEvent('tasrit-mavat-request',{detail:JSON.stringify({reqId,url,docs:['t5'],planLabel:planNum})}));
+  document.dispatchEvent(new CustomEvent('tasrit-mavat-request',{detail:JSON.stringify({reqId,url,docs:kinds,planLabel:planNum})}));
 }
-async function _mavatApplyT5(items){
-  const files=items.map(f=>new File([_b64ToBytes(f.b64)],f.name,{type:''}));
-  state.table5=null;
-  await parseTable5Files(files);
-  if(!state.table5) throw new Error('המבנה לא זוהה');
-  state.files.t5=files;
-  markZone('t5',files);
+function _mavatFetchT5(){ _mavatFetchDocs(['t5']); } // תאימות לאחור
+async function _mavatApplyDocs(kinds,d,url){
+  const res=d.results||{};
+  const byKind={};
+  for(const f of (d.files||[])){ const k=f.kind||'t5'; (byKind[k]=byKind[k]||[]).push(new File([_b64ToBytes(f.b64)],f.name,{type:''})); }
+  state.mavatDocs=state.mavatDocs||{};
+  const lines=[]; const failed=[];
+  for(const k of kinds){
+    const files=byKind[k]||[], r=res[k]||{}, m=r.meta||{};
+    if(!files.length){ failed.push(k); lines.push(`✗ ${MAVAT_DOC_LABEL[k]}: ${esc(r.error||d.error||'לא התקבל')}`); continue; }
+    if(k==='t5'){
+      state.table5=null;
+      await parseTable5Files(files);
+      if(!state.table5){ failed.push(k); lines.push('✗ טבלה 5: הקובץ התקבל אך המבנה לא זוהה'); continue; }
+      state.files.t5=files; markZone('t5',files);
+      lines.push(`✓ טבלה 5 — ${Object.keys(state.table5).length} תאי שטח`);
+    }else{
+      if(k==='takanon'){
+        const isWord=files.some(f=>/\.docx?$/i.test(f.name));
+        if(isWord){ state.files.word=files; state.wordFile=files[0]; markZone('word',files); state.files.takanon=null; }
+        else{ state.files.takanon=files; }
+      }else{ state.files.prog=files; markZone('prog',files); }
+      const fmt=(m.format||files[0].name.split('.').pop()||'').toUpperCase();
+      const ver=m.set?` · ${esc(m.set)}${m.date?' '+esc(m.date):''}`:'';
+      const more=m.versions>1?` <small>(נמצאו ${m.versions} גרסאות — נבחרה האחרונה)</small>`:'';
+      const note=(k==='takanon'&&fmt==='PDF')?' <small>(DOC לא קיים באתר)</small>':'';
+      lines.push(`✓ ${MAVAT_DOC_LABEL[k]} — ${esc(fmt)}${ver}${more}${note}`);
+    }
+    state.mavatDocs[k]={set:m.set||'',date:m.date||'',format:m.format||'',versions:m.versions||1,title:m.title||'',names:files.map(f=>f.name),at:Date.now()};
+  }
   try{redraw();}catch(e){}
-  const n=Object.keys(state.table5).length;
-  _mavatStatus('ok',`✓ טבלה 5 נטענה מ"מידע תכנוני" — ${n} תאי שטח`);
-  setTimeout(()=>{const b=document.getElementById('mavat-status');if(b&&b.className==='ms-ok')_mavatStatus(null);},6000);
-  await _projAfterLaunch(); // לשמור את הקובץ בפרויקט
+  if(window.PR&&PR.open) PR.render();
+  const ok=failed.length<kinds.length;
+  const retry=failed.length?` <button class="ms-btn" onclick='_mavatFetchDocs(${JSON.stringify(failed)})'>נסה שוב (${failed.map(k=>MAVAT_DOC_LABEL[k]).join(', ')})</button>
+    <a class="ms-btn" href="${esc(url)}" target="_blank" rel="noopener">פתח את עמוד התוכנית</a>`:'';
+  _mavatStatus(failed.length?(ok?'busy':'err'):'ok',`${ok?'מסמכים מ"מידע תכנוני":':'המסמכים לא נטענו:'}<br>${lines.join('<br>')}${retry}`);
+  if(!failed.length) setTimeout(()=>{const b=document.getElementById('mavat-status');if(b&&b.className==='ms-ok')_mavatStatus(null);},9000);
+  if(ok) await _projAfterLaunch(); // לשמור את הקבצים בפרויקט
+}
+// פתיחת מסמך שנמשך (PDF/DOC) בלשונית חדשה
+function openPlanDoc(kind){
+  const files=kind==='takanon'?(state.files.takanon||state.files.word):state.files[kind];
+  const f=files&&files[0]; if(!f) return;
+  const type=/\.pdf$/i.test(f.name)?'application/pdf':(f.type||'application/octet-stream');
+  const u=URL.createObjectURL(new Blob([f],{type}));
+  if(type==='application/pdf') window.open(u,'_blank','noopener');
+  else{ const a=document.createElement('a'); a.href=u; a.download=f.name; document.body.appendChild(a); a.click(); a.remove(); }
+  setTimeout(()=>URL.revokeObjectURL(u),60000);
 }
 document.addEventListener('tasrit-bridge-ready',()=>{try{_plannumBridgeUI();}catch(e){}});
 setTimeout(()=>{try{_plannumBridgeUI();}catch(e){} const c=document.getElementById('chk-hover-tip'); if(c) c.checked=!!state.hoverTip;},0);
@@ -2959,8 +3002,8 @@ function _plannumBridgeUI(){
   const row=document.getElementById('plannum-t5-row'); if(row) row.style.display=on?'flex':'none';
   const note=document.getElementById('plannum-note');
   if(note) note.innerHTML=on
-    ?'התשריט נמשך מיידית; טבלה 5 נמשכת ברקע באמצעות התוסף (לשונית "מידע תכנוני" נפתחת ונסגרת מעצמה)'
-    :'מושך רק את התשריט הגרפי. לטעינת טבלה 5 אוטומטית — התקינו את <a href="#ext-box" onclick="document.getElementById(\'ext-body\').classList.add(\'vis\')">התוסף לכרום</a>';
+    ?'התשריט נמשך מיידית; המסמכים נמשכים ברקע באמצעות התוסף (לשונית "מידע תכנוני" נפתחת ונסגרת מעצמה). לתקנון ולנספח — הגרסה האחרונה שהועלתה.'
+    :'מושך רק את התשריט הגרפי. לטעינת טבלה 5, תקנון ונספח פרוגרמה אוטומטית — התקינו את <a href="#ext-box" onclick="document.getElementById(\'ext-body\').classList.add(\'vis\')">התוסף לכרום</a>';
 }
 
 // ============================================================
@@ -11541,6 +11584,7 @@ function _projClearAllInputs(){
   _sensOvr={hs:null,cPct:null,modelYes:null,modelAl:null,mixedMode:false,perInstModels:{}};
   Object.assign(T5_PARAMS,{serviceMarkami:15,serviceMigdali:25,ahuzMode:'ahuz'});
   if(window.PR) PR.reset(); else window._PR_PENDING=null;
+  state.mavatDocs=null;
   // Grid overlay
   state.gridAngle=0;
   // Close any open analysis panels so stale content isn't shown
@@ -11565,6 +11609,7 @@ function _projCollectInputs(){
     },
     program:{flowInputs:_flowInputs,sensOvr:_sensOvr,t5params:T5_PARAMS},
     programSpec:window.PR?PR.getSpec():(window._PR_PENDING||null), // קורא הפרוגרמה
+    mavatDocs:state.mavatDocs||null, // איזו גרסה נמשכה מ"מידע תכנוני" (סט + תאריך)
     gridAngle:state.gridAngle||0
   };
 }
@@ -11609,12 +11654,13 @@ function _projApplyInputs(inp){
   }
   if(inp.gridAngle!=null)state.gridAngle=inp.gridAngle;
   // קורא הפרוגרמה — אם הסקריפט עוד לא נטען, נשמר להחלה בטעינתו
+  state.mavatDocs=inp.mavatDocs||null;
   if(window.PR) PR.setSpec(inp.programSpec||null); else window._PR_PENDING=inp.programSpec||null;
   try{redraw();}catch(e){}
 }
 async function _projCollectFiles(){
   const data={};
-  for(const z of['shp','t5','word','prog']){
+  for(const z of['shp','t5','word','prog','takanon']){ // takanon = תקנון PDF שנמשך מ"מידע תכנוני"
     const files=state.files[z]; if(!files) continue;
     const arr=[];
     for(const f of files) arr.push({name:f.name,type:f.type,buf:await f.arrayBuffer()});
@@ -11695,9 +11741,11 @@ async function loadProjectById(id){
     checkReady();
     state.progData=obj.progData||null;
     if(!state.files.shp && obj.xplanNumber){
-      const keepT5=state.files.t5;               // loadPlanByNumber resets state.files
+      const keep=Object.assign({},state.files);  // loadPlanByNumber resets state.files
       await loadPlanByNumber(obj.xplanNumber);   // re-fetch geometry from Xplan
-      if(keepT5&&keepT5.length){ state.files.t5=keepT5; await parseTable5Files(keepT5); } // טבלה 5 שנמשכה מ"מידע תכנוני"
+      for(const z of ['t5','word','prog','takanon']) if(keep[z]&&keep[z].length) state.files[z]=keep[z]; // מסמכים שנמשכו מ"מידע תכנוני"
+      if(state.files.word) state.wordFile=state.files.word[0];
+      if(state.files.t5) await parseTable5Files(state.files.t5);
       _showMapUI('תוכנית '+obj.xplanNumber);
     } else {
       await launchMap();

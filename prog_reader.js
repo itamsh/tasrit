@@ -326,6 +326,12 @@ const CSS=`
 .pr-cat{font-size:11.5px;color:#f5d58a}
 .pr-na{color:#5d7087;font-size:11.5px}
 .pr-small{font-size:11px;color:#7899bb}
+.pr-docrow{display:flex;align-items:center;gap:8px;padding:6px 8px;background:#18263a;border:1px solid #2d4060;border-radius:7px;margin-bottom:5px}
+.pr-docname{font-weight:600;min-width:92px}
+.pr-docfmt{font-size:10.5px;background:#2d2a45;color:#c4b5ff;border-radius:6px;padding:1px 6px}
+.pr-docver{flex:1;font-size:11.5px;color:#a9bdd3}
+body.theme-light .pr-docrow{background:#fff;border-color:#bfccdb}
+body.theme-light .pr-docver{color:#4a5d74}
 body.theme-light #pr-panel{background:#f4f7fb;color:#1c2b3c;border-left-color:#bfccdb}
 body.theme-light #pr-hdr{background:#dde5ef;border-bottom-color:#bfccdb}
 body.theme-light #pr-hdr h2,body.theme-light .pr-sec h3{color:#1a3560}
@@ -502,7 +508,31 @@ function _renderAssump(){
 
   const chain=`<div class="pr-sec"><h3>שרשרת ההנחות</h3><div class="pr-chain" data-out="chain"></div>
     <div data-out="addition" class="pr-small" style="margin-top:6px"></div></div>`;
-  return idh+ctx+segs+chain;
+  return _renderPlanDocs()+idh+ctx+segs+chain;
+}
+
+// מסמכי התוכנית שנמשכו מ"מידע תכנוני" (דרך התוסף) — לפתיחה לצד התשריט בזמן ההזנה
+function _renderPlanDocs(){
+  if(typeof state==='undefined') return '';
+  const md=state.mavatDocs||{};
+  const has=k=>k==='takanon'?!!((state.files.takanon&&state.files.takanon.length)||(state.files.word&&state.files.word.length))
+    :!!(state.files[k]&&state.files[k].length);
+  const row=(k,label)=>{
+    const m=md[k]||{};
+    if(!has(k)) return `<div class="pr-docrow"><span class="pr-docname">${label}</span><span class="pr-small">לא נטען</span></div>`;
+    const f=(k==='takanon'?(state.files.takanon||state.files.word):state.files[k])[0];
+    const fmt=(m.format||f.name.split('.').pop()||'').toUpperCase();
+    const ver=m.set?`${E(m.set)}${m.date?' · '+E(m.date):''}${m.versions>1?` <span class="pr-src calc" title="באתר נמצאו ${m.versions} גרסאות — נבחרה האחרונה">האחרונה מתוך ${m.versions}</span>`:''}`:'<span class="pr-small">נטען ידנית</span>';
+    return `<div class="pr-docrow"><span class="pr-docname">${label}</span><span class="pr-docfmt">${E(fmt)}</span>
+      <span class="pr-docver">${ver}</span><button class="pr-btn" onclick="openPlanDoc('${k}')">${fmt==='PDF'?'פתח':'הורד'}</button></div>`;
+  };
+  const canFetch=typeof _bridgeVersion==='function'&&_bridgeVersion()&&typeof _planMavatUrl==='function'&&_planMavatUrl();
+  const missing=['takanon','prog'].filter(k=>!has(k));
+  const fetchBtn=canFetch?`<button class="pr-btn" onclick="_mavatFetchDocs(${E(JSON.stringify(missing.length?missing:['takanon','prog']))})">⟳ ${missing.length?'משוך מ"מידע תכנוני"':'משוך שוב (בדיקת גרסה חדשה)'}</button>`
+    :`<span class="pr-small">למשיכה אוטומטית — טעינה מהירה לפי מספר תוכנית + התוסף לכרום</span>`;
+  return `<div class="pr-sec"><h3>מסמכי התוכנית <span class="pr-hint">הנספח והתקנון — לפתיחה לצד התשריט בזמן ההזנה</span></h3>
+    ${row('prog','נספח פרוגרמה')}${row('takanon','תקנון')}
+    <div style="margin-top:6px">${fetchBtn}</div></div>`;
 }
 
 function _refreshComputed(){
