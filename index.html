@@ -1779,7 +1779,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 // ── App version — bump on EVERY deploy (date + that day's deploy number), so the
 //    user and Claude can confirm they're looking at the same build. Shown in the
 //    map toolbar and the loading-page footer.
-const APP_VERSION='2026.09.24-17';
+const APP_VERSION='2026.09.24-18';
 // Version of the road-network DETECTION ALGORITHM only — bump when _rnDetect's
 // output changes, so a network saved from an older run is flagged as stale
 // (networks are saved per project and are NOT re-detected on load).
@@ -7445,7 +7445,7 @@ function _reKeyDown(e){
 // ============================================================
 wrap.addEventListener('mousedown',e=>{
   if(e.target.closest('#info-panel')) return; // info panel handles its own drag
-  if(RE.active){_reMouseDown(e);return;}
+  if(RE.active&&!meas.mode){_reMouseDown(e);return;} // כלי מדידה פעיל — גובר על עורך רשת הדרכים
   if(CALC.polyMode){
     if(e.button!==0) return;
     const rect=canvas.getBoundingClientRect();
@@ -7466,7 +7466,7 @@ function scheduleRedraw(){
 }
 wrap.addEventListener('mousemove',e=>{
   if(_infoDrag) return; // info panel dragging — don't move map
-  if(RE.active){_reMouseMove(e);return;}
+  if(RE.active&&!meas.mode){_reMouseMove(e);return;}
   if(CALC.polyMode){
     const rect=canvas.getBoundingClientRect();
     CALC.hoverPt=cd(e.clientX-rect.left,e.clientY-rect.top);
@@ -7581,7 +7581,7 @@ function hitTestDim(dx,dy){
 }
 
 wrap.addEventListener('mouseup',e=>{
-  if(RE.active){_reMouseUp(e);return;}
+  if(RE.active&&!meas.mode){_reMouseUp(e);return;}
   if(meas.mode){
     // single click → add point (ignore the 2nd mouseup from dblclick)
     if(e.detail===1){
@@ -7631,7 +7631,7 @@ wrap.addEventListener('mouseup',e=>{
   }
 });
 wrap.addEventListener('dblclick',e=>{
-  if(RE.active){_reDblClick();return;}
+  if(RE.active&&!meas.mode){_reDblClick();return;}
   if(CALC.polyMode){
     // remove the extra point added by the second mousedown of dblclick
     if(CALC.polyPts.length>0) CALC.polyPts.pop();
@@ -7654,7 +7654,7 @@ document.getElementById('pdfov-canvas').addEventListener('click',_pdfOvCanvasCli
 document.getElementById('pdfov-x-input').addEventListener('focus',()=>{_pdfOvLastField='x';});
 document.getElementById('pdfov-y-input').addEventListener('focus',()=>{_pdfOvLastField='y';});
 window.addEventListener('keydown',e=>{
-  if(RE.active){_reKeyDown(e);return;}
+  if(RE.active&&!meas.mode){_reKeyDown(e);return;}
   if(e.key==='Escape'&&CALC.polyMode){cancelPolyDraw();return;}
   if(e.key==='Escape'&&meas.mode){clearMeas();}
   if(e.key==='Escape'){
