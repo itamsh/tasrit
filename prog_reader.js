@@ -759,10 +759,13 @@ function _renderPlanDocs(){
     const m=md[k]||{};
     if(!has(k)) return `<div class="pr-docrow"><span class="pr-docname">${label}</span><span class="pr-small">לא נטען</span></div>`;
     const f=(k==='takanon'?(state.files.takanon||state.files.word):state.files[k])[0];
-    const fmt=(m.format||f.name.split('.').pop()||'').toUpperCase();
+    const hasW=k==='takanon'&&state.files.word&&state.files.word.length, hasP=k!=='takanon'||(state.files.takanon&&state.files.takanon.length);
+    const fmt=k==='takanon'?[hasP?'PDF':'',hasW?'DOC':''].filter(Boolean).join(' · '):(m.format||f.name.split('.').pop()||'').toUpperCase();
     const ver=m.set?`${E(m.set)}${m.date?' · '+E(m.date):''}${m.versions>1?` <span class="pr-src calc" title="באתר נמצאו ${m.versions} גרסאות — נבחרה האחרונה">האחרונה מתוך ${m.versions}</span>`:''}`:'<span class="pr-small">נטען ידנית</span>';
     return `<div class="pr-docrow"><span class="pr-docname">${label}</span><span class="pr-docfmt">${E(fmt)}</span>
-      <span class="pr-docver">${ver}</span><button class="pr-btn" onclick="openPlanDoc('${k}')">${fmt==='PDF'?'פתח':'הורד'}</button></div>`;
+      <span class="pr-docver">${ver}${k==='takanon'&&!hasW&&m.set?' <span class="pr-small">(Word לא קיים באתר)</span>':''}</span>
+      ${hasP?`<button class="pr-btn" onclick="openPlanDoc('${k}')">${/^PDF/.test(fmt)||k==='takanon'?'פתח':'הורד'}</button>`:''}
+      ${hasW?`<button class="pr-btn" onclick="openPlanDoc('word')" title="הורדת קובץ ה-Word של התקנון">⬇ Word</button>`:''}</div>`;
   };
   // הקישור עצמו נמצא בעת הלחיצה (_resolveMavatUrl) — גם לתוכנית שנטענה מקובצי SHP
   const canFetch=typeof _bridgeVersion==='function'&&_bridgeVersion()&&typeof _planNumberForMavat==='function'
