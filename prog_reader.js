@@ -285,6 +285,29 @@ function dunamPerClass(inst,stream,model){
   const v=/בנים/.test(stream||'')?t[model].haredi_boys:t[model].regular;
   return v==null?null:v;
 }
+// ── מכסות שטח לכיתות לפי התדריך (מדריך 2018 עמ' 54-55; חנ"מ — school_area_tables.json) ──
+// גן ילדים: 1-3 כיתות = 0.5 ד׳ לכיתה · 4 = 1.5 · 5-6 = 2.0 (אשכול); מעבר ל-6 — אשכולות נוספים
+function ganLandDunam(n){ let d=0; n=Math.max(0,Math.round(n)); while(n>6){ d+=2; n-=6; } return d+(n<=3?0.5*n:n===4?1.5:2.0); }
+// קרקע נדרשת לסוג מוסד ומספר כיתות: {d, f} או null כשאין תקן (או שחסר דגם לבית ספר)
+function landNeed(lineId,n,model,line){
+  n=num(n); if(!n) return null;
+  const b=eduBase(lineId), se=/_se$/.test(lineId);
+  if(b==='maon'&&!se){ const d=Math.max(1,n/3); return {d,f:`${n} כיתות × 1.0 ד׳ לכל 3 כיתות${n<3?' (מינימום 1.0)':''} = ${fmtN(d,1)} ד׳`}; }
+  if(b==='gan'&&!se){ const d=ganLandDunam(n); return {d,f:`${n} כיתות גן — ${n<=3?'0.5 ד׳ לכיתה':n===4?'4 כיתות = 1.5 ד׳':n<=6?'5-6 כיתות = 2.0 ד׳':'אשכולות של עד 6 כיתות (2.0 ד׳ לאשכול)'} = ${fmtN(d,1)} ד׳`}; }
+  if(se){ const per={maon:0.375,gan:0.5,elem:0.3}[b]; if(!per) return null; return {d:n*per,f:`${n} × ${per} ד׳ לכיתה (חנ"מ) = ${fmtN(n*per,1)} ד׳`}; }
+  if((b==='elem'||b==='sec')&&line){ const dpc=dunamPerClass(line.inst,line.stream,model); if(!dpc) return null;
+    return {d:n*dpc,f:`${n} × ${dpc} ד׳ לכיתה (דגם ${String(model).replace('model_','')}) = ${fmtN(n*dpc,1)} ד׳`}; }
+  return null;
+}
+// שטח בנוי נדרש (הקצאה מבונה): מעון 147 מ"ר ל-3 הכיתות הראשונות + 125 לכל נוספת · גן 130 מ"ר לכיתה (+ חצר)
+function builtNeed(lineId,n){
+  n=num(n); if(!n) return null;
+  const b=eduBase(lineId), se=/_se$/.test(lineId);
+  if(b==='maon'&&!se){ const m=147*Math.min(n,3)+125*Math.max(0,n-3); return {m,f:`${n} כיתות: 147 מ"ר × ${Math.min(n,3)}${n>3?` + 125 × ${n-3}`:''} = ${fmtN(m)} מ"ר`}; }
+  if(b==='gan'){ return {m:130*n,f:`${n} × 130 מ"ר לכיתה = ${fmtN(130*n)} מ"ר (+ חצר/מרפסת ${se?'':'200 מ"ר לכיתה'})`}; }
+  if(b==='maon'&&se){ return {m:187.5*n,f:`${n} × 187.5 מ"ר (750 מ"ר ל-4 כיתות חנ"מ) = ${fmtN(187.5*n)} מ"ר`}; }
+  return null;
+}
 // חישוב לפי מפתח היועץ (שכבות / תלמידים בכיתה / שיעור ביקוש) — ריק = כמו בתדריך
 function keysClasses(line,keys){
   const k=keys||{};
@@ -318,7 +341,7 @@ function eduRowStatus(line,d){
 
 const Engine={num,round,emptySpec,newSegment,normalizeSpec,computeAssumptions,compare,
   eduDemand,publicDemand,openSpaceDemand,fmtN,SECTORS,DOMAINS,
-  EDU_META,eduBase,eduShort,dunamPerClass,keysClasses,eduRowStatus,evalSupply,MARGIN};
+  EDU_META,eduBase,eduShort,dunamPerClass,keysClasses,eduRowStatus,evalSupply,MARGIN,ganLandDunam,landNeed,builtNeed};
 
 if(typeof module!=='undefined'&&module.exports){ module.exports={NORMS,Engine}; return; }
 
@@ -338,6 +361,7 @@ const PR={
 const TABS=[
   {id:'assump',  label:'זהות והנחות'},
   {id:'demand',  label:'ביקוש'},
+  {id:'walk',    label:'🎯 תא אחר תא'},
   {id:'supply',  label:'מענה ושיבוץ'},
   {id:'checks',  label:'בדיקות'},
 ];
@@ -396,6 +420,61 @@ const CSS=`
 .pr-cat{font-size:11.5px;color:#f5d58a}
 .pr-na{color:#5d7087;font-size:11.5px}
 .pr-small{font-size:11px;color:#7899bb}
+.pr-wprog{display:flex;gap:4px;margin-bottom:10px}
+.pr-wprog span{flex:1;text-align:center;padding:6px 4px;border-radius:7px;background:#18263a;border:1px solid #2d4060;font-size:12px;cursor:pointer;color:#8fa6c0}
+.pr-wprog span.on{background:#1d3a57;border-color:#5aa0e0;color:#fff;font-weight:600}
+.pr-wcard{background:#18263a;border:1px solid #2d4060;border-radius:11px;padding:12px 14px;margin-bottom:10px}
+.pr-wcard.intro p{line-height:1.7;margin:6px 0;color:#c4d4e6;font-size:13px}
+.pr-wbig{font-size:17px;font-weight:700;color:#fff;margin-bottom:6px}
+.pr-wgo{background:linear-gradient(135deg,#1e8f5e,#27ae60);border:none;color:#fff;border-radius:8px;padding:8px 18px;font-size:14px;font-weight:700;cursor:pointer;margin-top:6px}
+.pr-wgo:hover{filter:brightness(1.12)}
+.pr-whdr{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;font-size:12.5px;color:#a9bdd3}
+.pr-wnum{font-size:20px;font-weight:800;color:#00e0ff}
+.pr-wb{background:#3a2a4a;color:#e0c8f5;border-radius:8px;padding:1px 8px;font-size:11.5px}
+.pr-wq{font-size:13px;font-weight:600;color:#dbe8f6;margin:4px 0 6px}
+.pr-wts{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;align-items:center}
+.pr-wt{background:#0f1824;border:2px solid #2d4060;color:#cfe3fa;border-radius:20px;padding:5px 12px;font-size:13px;cursor:pointer;transition:all .12s}
+.pr-wts.sm .pr-wt{font-size:11.5px;padding:3px 9px;border-width:1.5px}
+.pr-wt:hover{border-color:var(--c);transform:translateY(-1px)}
+.pr-wt.on{background:var(--c);border-color:var(--c);color:#fff;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+.pr-wt.on .pr-dot{border-color:#fff}
+.pr-wrows{display:flex;flex-direction:column;gap:6px;margin:8px 0}
+.pr-wrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-right:4px solid;background:#132033;border-radius:6px;padding:6px 10px}
+.pr-step{display:inline-flex;align-items:center;gap:3px}
+.pr-step button{width:26px;height:26px;border-radius:50%;border:1px solid #3d6a9a;background:#1f3350;color:#fff;font-size:15px;cursor:pointer;line-height:1}
+.pr-step input{width:44px;text-align:center;font-size:15px;font-weight:700;background:#0f1824;border:1px solid #2d4060;color:#fff;border-radius:6px;padding:2px}
+.pr-wm{display:inline-flex;gap:3px;align-items:center}
+.pr-wmb{background:#0f1824;border:1px solid #2d4060;color:#9ab;border-radius:5px;padding:2px 8px;cursor:pointer;font-size:12px}
+.pr-wmb.on{background:#3498db;border-color:#3498db;color:#fff;font-weight:700}
+.pr-walt{display:block;font-size:12px;color:#a9bdd3;margin-top:8px;cursor:pointer}
+.pr-wlive{margin-top:8px;min-height:6px}
+.pr-wnav{display:flex;justify-content:space-between;align-items:center;margin-top:12px;border-top:1px solid #2d4060;padding-top:10px}
+.pr-wdots{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
+.pr-wd{min-width:34px;padding:2px 5px;border-radius:6px;border:1.5px solid var(--c,#2d4060);background:#0f1824;color:#8fa6c0;font-size:11px;cursor:pointer}
+.pr-wd.done{background:color-mix(in srgb,var(--c,#3aa06a) 35%,#0f1824);color:#fff}
+.pr-wd.cur{outline:2px solid #00e0ff;color:#fff;font-weight:700}
+.pr-wsplit{display:flex;flex-wrap:wrap;gap:16px;margin:6px 0 10px;font-size:13px}
+.pr-covs{display:flex;flex-wrap:wrap;gap:8px}
+.pr-covb{font-size:12px;padding:2px 8px;border-radius:8px;border:1px solid #2d4060}
+.pr-covb.ok{border-color:#3aa06a}.pr-covb.bad{border-color:#c0892b}
+body.theme-light .pr-wprog span{background:#fff;border-color:#bfccdb;color:#4a5d74}
+body.theme-light .pr-wprog span.on{background:#dcebfb;border-color:#5a8fd0;color:#1a3560}
+body.theme-light .pr-wcard{background:#fff;border-color:#bfccdb}
+body.theme-light .pr-wcard.intro p{color:#2a3d52}
+body.theme-light .pr-wbig,body.theme-light .pr-wq{color:#1a3560}
+body.theme-light .pr-whdr{color:#4a5d74}
+body.theme-light .pr-wnum{color:#0088aa}
+body.theme-light .pr-wt{background:#fff;color:#1c2b3c;border-color:#bfccdb}
+body.theme-light .pr-wt.on{color:#fff}
+body.theme-light .pr-wrow{background:#f4f7fb}
+body.theme-light .pr-step input{background:#fff;color:#1c2b3c;border-color:#bfccdb}
+body.theme-light .pr-step button{background:#dcebfb;color:#1a3560;border-color:#8fb0d6}
+body.theme-light .pr-wmb{background:#fff;color:#4a5d74;border-color:#bfccdb}
+body.theme-light .pr-wmb.on{background:#3498db;color:#fff}
+body.theme-light .pr-walt{color:#4a5d74}
+body.theme-light .pr-wd{background:#fff;color:#4a5d74}
+body.theme-light .pr-wd.done{background:color-mix(in srgb,var(--c,#3aa06a) 45%,#fff);color:#1a2535}
+body.theme-light .pr-wb{background:#f1e6f8;color:#5b2c6f}
 .pr-spc{display:flex;align-items:center;gap:4px;font-size:10.5px;color:#8fa6c0;margin-top:3px;white-space:nowrap;cursor:pointer}
 .pr-docrow{display:flex;align-items:center;gap:8px;padding:6px 8px;background:#18263a;border:1px solid #2d4060;border-radius:7px;margin-bottom:5px}
 .pr-docname{font-weight:600;min-width:92px}
@@ -537,7 +616,14 @@ PR.stashForeign=async function(){
   PR.clearSpec();
 };
 PR.setDomain=function(d){ PR.domain=d; PR.render(); };
-PR.setTab=function(t){ PR.tab=t; PR.render(); };
+PR.setTab=function(t){
+  PR.tab=t;
+  // בלשונית "תא אחר תא" — לחיצה על תא במפה קופצת אליו
+  if(t==='walk'){ if(!PR.pick||PR.pick==='__walk'){ PR.pick='__walk'; try{ wrap.style.cursor='pointer'; }catch(e){} } }
+  else if(PR.pick==='__walk'){ PR.pick=null; try{ wrap.style.cursor=''; }catch(e){} }
+  PR.render(); safeRedraw();
+  if(t==='walk'){ const w=_walk(); if(w.cur) PR.walkFocus(w.cur); }
+};
 
 // ── עדכון שדות ──
 function _setPath(obj,path,val){
@@ -578,6 +664,7 @@ PR.render=function(){
   const sc=body.scrollTop;
   const eduDom=PR.domain==='edu'||PR.domain==='all';
   body.innerHTML=_mismatchBanner()+(PR.tab==='assump'?_renderAssump():PR.tab==='demand'?_renderDemand()
+    :PR.tab==='walk'?(eduDom?_renderWalk():_renderSoon('supply'))
     :PR.tab==='supply'?(eduDom?_renderSupplyEdu():_renderSoon('supply'))
     :PR.tab==='checks'?(eduDom?_renderChecks():_renderSoon('checks')):'');
   body.scrollTop=sc;
@@ -853,10 +940,13 @@ function allocChecks(a,line){
   if(missing.length) out.push({ok:false,txt:`תאים שלא קיימים בתשריט: ${missing.join(', ')}`});
   if(a.mode==='land'){
     const area=a.cells.filter(c=>idx[c]).reduce((t,c)=>t+cellAreaM2(idx[c]),0)/1000;
-    const cls=num(a.classes), dpc=line&&!isShared(a)?dunamPerClass(line.inst,line.stream,a.model):null;
-    if(cls&&dpc){
-      const need=cls*dpc, ev=evalSupply(area,need,need*0.03);
-      const base=`שטח התאים ${fmtN(area,1)} ד׳ · נדרש לפי ${a.model.replace('model_','דגם ')}: ${cls} × ${dpc} = ${fmtN(need,1)} ד׳`;
+    const cls=num(a.classes), ln=line&&!isShared(a)?landNeed(line.id,cls,a.model,line):null;
+    const co=(PR.spec.provision||[]).filter(o=>o!==a&&o.mode==='land'&&o.cells.some(c=>a.cells.includes(c)));
+    if(co.length){ // כמה מוסדות באותו תא — השטח נבדק לתא כולו (סכום המכסות)
+      for(const c of a.cells.filter(c=>idx[c])){ const cc=cellLandCheck(c); if(cc) out.push(cc); }
+    } else if(cls&&ln){
+      const need=ln.d, ev=evalSupply(area,need,need*0.03);
+      const base=`שטח ${a.cells.length>1?'התאים':'התא'} ${fmtN(area,1)} ד׳ · נדרש לפי התדריך: ${ln.f}`;
       out.push(ev.cls==='short'?{ok:false,txt:base+' — חסר'}
         :ev.cls==='surplus'?{info:true,txt:base+` — עודף ניכר (${fmtN(ev.pct,0)}%)`}
         :{ok:true,txt:base+(ev.cls==='margin'?` — מרווח ביטחון (+${fmtN(ev.pct,0)}%)`:'')});
@@ -1023,6 +1113,7 @@ PR.startPick=function(id){ PR.pick=id; PR.tab='supply'; PR.render(); try{ wrap.s
 PR.endPick=function(){ PR.pick=null; try{ wrap.style.cursor=''; }catch(e){} PR.render(); safeRedraw(); };
 // נקרא מהממשק הראשי בלחיצה על תא בתשריט כשמצב שיבוץ פעיל
 PR.onCellPick=function(cn){
+  if(PR.pick==='__walk'){ PR.walkGo(cn); return true; }
   const a=_alloc(PR.pick); if(!a) return false;
   cn=String(cn);
   if(a.cells.includes(cn)) a.cells=a.cells.filter(c=>c!==cn); else a.cells.push(cn);
@@ -1420,16 +1511,248 @@ PR.drawLayer=function(ctx){
       y+=h+gap;
     }
   }
+  // 5. התא הנוכחי במעבר תא-אחר-תא
+  if(PR.tab==='walk'&&PR.spec.walk&&PR.spec.walk.cur&&idx[PR.spec.walk.cur]){ const fs=idx[PR.spec.walk.cur];
+    _pathCell(ctx,fs); ctx.lineWidth=9; ctx.strokeStyle='rgba(0,224,255,.35)'; ctx.stroke(); ctx.lineWidth=3.5; ctx.strokeStyle='#00e0ff'; ctx.stroke(); }
   // 4. הדגשת תאים מריחוף על רשימת "מבונה בטבלה 5"
   if(PR.hlCellList) for(const k of PR.hlCellList){ const fs=idx[k]; if(!fs) continue; _pathCell(ctx,fs); ctx.lineWidth=4; ctx.strokeStyle='#ffd400'; ctx.stroke(); }
   ctx.restore();
 };
 
-// ── שמירה בפרויקט ──
+// ════════════════════════════════════════════════════════════════════════════
+// 🎯 מעבר תא-אחר-תא: כמו בתדריך — עוברים על תאי השטח (חומים, ואז סחירים עם הקצאה מבונה),
+// ולכל תא מזינים מה הנספח מציע בו. בסוף — "תמונת הנספח" מול הדרישות.
+// ════════════════════════════════════════════════════════════════════════════
+const OTHER_USES=['בית כנסת','מועדון / מתנ"ס','מרפאה / טיפת חלב','רווחה','ספורט','מקווה','אחר'];
+function _walk(){ const w=PR.spec.walk||(PR.spec.walk={}); w.done=w.done||{}; w.cells=w.cells||{}; w.split=w.split||{}; w.phase=w.phase||'intro'; return w; }
+function _wCell(cn){ const w=_walk(); return w.cells[cn]||(w.cells[cn]={other:[],reserve:false,alt:false,note:''}); }
+function walkQueue(){
+  const idx=cellIndex();
+  const land=Object.keys(idx).filter(k=>isPublicCell(idx[k])).sort((a,b)=>(+a)-(+b));
+  const built=(builtScan()||[]).map(s=>s.cn).filter(c=>!land.includes(c));
+  return {land,built};
+}
+const _cellAllocs=cn=>(PR.spec.provision||[]).filter(a=>a.cells.includes(String(cn)));
+const _walkAllocs=cn=>_cellAllocs(cn).filter(a=>a.src==='walk');
+// בדיקת שטח לתא: סכום מכסות הקרקע של כל המוסדות שבו מול שטח התא
+function cellLandCheck(cn){
+  const idx=cellIndex(); if(!idx[cn]) return null;
+  const lines=_eduLines();
+  const al=_cellAllocs(cn).filter(a=>a.mode==='land'&&!isShared(a)&&num(a.classes));
+  if(!al.length) return null;
+  const parts=[],miss=[]; let tot=0;
+  for(const a of al){ const L=lines.find(l=>l.id===a.line); const ln=landNeed(a.line,a.classes,a.model,L);
+    if(ln){ tot+=ln.d; parts.push(`${_lineShortById(a.line,lines)} ${num(a.classes)} כ׳ → ${fmtN(ln.d,1)}`); }
+    else miss.push(_lineShortById(a.line,lines)+(/ספר/.test(L&&L.inst||'')?' (בחרו דגם)':'')); }
+  const area=cellAreaM2(idx[cn])/1000;
+  if(!tot) return {info:true,txt:`תא ${cn}: ${fmtN(area,1)} ד׳${miss.length?` · אין תקן להשוואה: ${miss.join(', ')}`:''}`};
+  const ev=evalSupply(area,tot,Math.max(0.05,tot*0.03));
+  const t=`תא ${cn}: נדרש ${fmtN(tot,1)} ד׳ (${parts.join(' + ')})${miss.length?` + ${miss.join(', ')}`:''} · בתא ${fmtN(area,1)} ד׳`;
+  return ev.cls==='short'?{ok:false,txt:t+` — חסר ${fmtN(tot-area,1)} ד׳`}:ev.cls==='surplus'?{info:true,txt:t+` — עודף ניכר (${fmtN(ev.pct,0)}%)`}:{ok:true,txt:t+(ev.cls==='margin'?' — מרווח ביטחון':'')};
+}
+function cellBuiltCheck(cn){
+  const lines=_eduLines();
+  const al=_cellAllocs(cn).filter(a=>a.mode==='built'&&!isShared(a)&&num(a.classes));
+  if(!al.length) return null;
+  let need=0; const parts=[];
+  for(const a of al){ const b=builtNeed(a.line,a.classes); if(b){ need+=b.m; parts.push(`${_lineShortById(a.line,lines)} ${num(a.classes)} כ׳ → ${fmtN(b.m)}`); } }
+  const decl=al.reduce((t,a)=>t+(num(a.built)||0),0), t5=t5PublicSqm(t5Of(cn)), have=decl||t5;
+  if(!need||!have) return null;
+  const ev=evalSupply(have,need,need*0.03);
+  const t=`תא ${cn}: נדרש ${fmtN(need)} מ"ר בנוי (${parts.join(' + ')}) · ${decl?'בנספח':'בטבלה 5'} ${fmtN(have)} מ"ר`;
+  return ev.cls==='short'?{ok:false,txt:t+' — חסר'}:ev.cls==='surplus'?{info:true,txt:t+` — עודף (${fmtN(ev.pct,0)}%)`}:{ok:true,txt:t+(ev.cls==='margin'?' — מרווח ביטחון':'')};
+}
+
+PR.walkGo=function(cn){
+  const w=_walk(); cn=String(cn);
+  const Q=walkQueue(); w.cur=cn; w.phase=Q.built.includes(cn)&&!Q.land.includes(cn)?'built':'land';
+  PR.tab='walk'; PR.render(); PR.walkFocus(cn); safeRedraw();
+};
+PR.walkStart=function(phase){
+  const w=_walk(), Q=walkQueue(), list=phase==='built'?Q.built:Q.land;
+  if(!list.length){ w.phase=phase==='built'?'summary':'built'; if(w.phase==='built'&&!Q.built.length) w.phase='summary'; w.cur=null; PR.render(); return; }
+  PR.walkGo(list.find(c=>!w.done[c])||list[0]);
+};
+PR.walkNext=function(dir){
+  const w=_walk(), Q=walkQueue(), list=w.phase==='built'?Q.built:Q.land;
+  if(w.cur&&dir>0) w.done[w.cur]=true;
+  const i=list.indexOf(w.cur), j=i+(dir||1);
+  if(j>=0&&j<list.length) return PR.walkGo(list[j]);
+  if(dir<0) return;
+  // סוף השלב: חומים → סחירים → סיכום
+  w.cur=null; w.phase=w.phase==='land'&&Q.built.length?'builtIntro':'summary';
+  PR.render(); safeRedraw();
+};
+PR.walkPhase=function(p){ const w=_walk(); w.phase=p; if(p!=='land'&&p!=='built') w.cur=null; PR.render(); safeRedraw(); };
+PR.walkToggleType=function(lineId){
+  const w=_walk(), cn=w.cur; if(!cn) return;
+  const ex=_walkAllocs(cn).find(a=>a.line===lineId&&!isShared(a));
+  if(ex) PR.spec.provision=PR.spec.provision.filter(a=>a!==ex);
+  else { const t5=w.phase==='built'?t5PublicSqm(t5Of(cn)):0;
+    PR.spec.provision.push({id:'a'+Date.now().toString(36)+(_aSeq++),line:lineId,mode:w.phase==='built'?'built':'land',cells:[cn],
+      classes:'',land:'',built:'',model:'',note:'',src:'walk',alt:_wCell(cn).alt||undefined}); }
+  const m=_wCell(cn); m.reserve=false;
+  PR.render(); safeRedraw();
+};
+PR.walkSet=function(id,f,v){
+  const a=_alloc(id); if(!a) return;
+  if(f==='classesStep'){ a.classes=String(Math.max(0,(num(a.classes)||0)+v)); if(a.classes==='0') a.classes=''; PR.render(); safeRedraw(); return; }
+  a[f]=v; if(f==='model') { PR.render(); safeRedraw(); return; }
+  _walkRefresh(); safeRedraw();
+};
+PR.walkMeta=function(f,v){
+  const cn=_walk().cur; if(!cn) return; const m=_wCell(cn);
+  if(f==='other'){ m.other=m.other.includes(v)?m.other.filter(x=>x!==v):[...m.other,v]; }
+  else if(f==='reserve'){ m.reserve=!m.reserve; }
+  else if(f==='alt'){ m.alt=!m.alt; for(const a of _walkAllocs(cn)) a.alt=m.alt||undefined; }
+  else m[f]=v;
+  PR.render(); safeRedraw();
+};
+PR.walkSplit=function(base,v){ const w=_walk(); w.split[base]=v===''?null:v; _walkRefresh(); };
+// מיקוד המפה בתא הנוכחי
+PR.walkFocus=function(cn){
+  try{
+    const fs=cellIndex()[cn]; if(!fs||typeof dc!=='function') return;
+    // קנה מידה מוחלט (לא יחסי — שלא יצטבר): התא תופס ~30% מהמסך, אבל רואים לפחות 350 מ׳ סביבו (הקשר)
+    let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+    for(const f of fs){ const g=f.geometry; const P=g.type==='Polygon'?[g.coordinates]:g.coordinates; for(const p of P) for(const [x,y] of p[0]){ x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);} }
+    const W=wrap.clientWidth,H=wrap.clientHeight, mpu=_mPerUnit()||1;
+    const span=Math.max((x1-x0)/0.3,(y1-y0)/0.3*W/H,350/mpu); // יחידות נתונים לרוחב המסך
+    const target=W/span;
+    const p=cellCentroid(fs)||[(x0+x1)/2,(y0+y1)/2];
+    let [sx,sy]=dc(p[0],p[1]); zoomAt(sx,sy,target/scale);
+    [sx,sy]=dc(p[0],p[1]); viewX+=W/2-sx; viewY+=H/2-sy; redraw();
+  }catch(e){}
+};
+
+// ── תצוגה ──
+function _walkTypeButtons(cn,lines,phase){
+  const al=_walkAllocs(cn);
+  const btn=(L)=>{ const on=al.some(a=>a.line===L.id&&!isShared(a)); const c=(EDU_META[eduBase(L.id)]||{}).color;
+    return `<button class="pr-wt${on?' on':''}" style="--c:${c}" onclick="PR.walkToggleType('${L.id}')"><span class="pr-dot" style="background:${c}"></span>${E(eduShort(L))}</button>`; };
+  const main=lines.filter(L=>!L.special), se=lines.filter(L=>L.special);
+  return `<div class="pr-wq">מה הנספח מציע ${phase==='built'?'להקצאה המבונה ב':'ב'}תא הזה? <span class="pr-small">(אפשר לבחור כמה)</span></div>
+    <div class="pr-wts">${main.map(btn).join('')}</div>
+    ${se.length?`<div class="pr-wts sm"><span class="pr-small">חינוך מיוחד:</span>${se.map(btn).join('')}</div>`:''}`;
+}
+function _walkAllocRows(cn,lines,phase){
+  return _walkAllocs(cn).filter(a=>!isShared(a)).map(a=>{
+    const L=lines.find(l=>l.id===a.line)||{id:a.line,inst:''}; const c=(EDU_META[eduBase(a.line)]||{}).color;
+    const school=/ספר/.test(L.inst||'')&&!L.special;
+    const models=school?`<div class="pr-wm"><span class="pr-small">דגם:</span>${['A','B','C','model_1','model_2'].map(m=>`<button class="pr-wmb${a.model===m?' on':''}" onclick="PR.walkSet('${a.id}','model','${a.model===m?'':m}')">${m.replace('model_','דגם ')}</button>`).join('')}</div>`:'';
+    return `<div class="pr-wrow" style="border-color:${c}">
+      <b style="min-width:70px"><span class="pr-dot" style="background:${c}"></span>${E(eduShort(L))}</b>
+      <div class="pr-step"><button onclick="PR.walkSet('${a.id}','classesStep',-1)">−</button>
+        <input value="${E(a.classes??'')}" placeholder="?" oninput="PR.walkSet('${a.id}','classes',this.value)"><button onclick="PR.walkSet('${a.id}','classesStep',1)">+</button><span class="pr-small">כיתות</span></div>
+      ${phase==='built'?`<label class="pr-small">מ"ר בנוי <input class="pr-in-s" value="${E(a.built??'')}" placeholder="${fmtN(t5PublicSqm(t5Of(cn)))}" oninput="PR.walkSet('${a.id}','built',this.value)" title="לפי הנספח (ריק = לפי טבלה 5)"></label>`:''}
+      ${models}</div>`;
+  }).join('');
+}
+function _walkOtherRow(cn){
+  const m=_wCell(cn);
+  return `<div class="pr-wq" style="margin-top:10px">ולא-חינוך:</div><div class="pr-wts sm">
+    ${OTHER_USES.map(u=>`<button class="pr-wt${m.other.includes(u)?' on':''}" style="--c:#7f8c8d" onclick="PR.walkMeta('other','${u}')">🏛 ${E(u)}</button>`).join('')}
+    <button class="pr-wt${m.reserve?' on':''}" style="--c:#95a5a6" onclick="PR.walkMeta('reserve')">⬜ עתודה / לא מוגדר</button></div>
+    <label class="pr-walt"><input type="checkbox" ${m.alt?'checked':''} onchange="PR.walkMeta('alt')"> <b>?</b> הנספח מציע כאן <b>כמה שימושים חלופיים</b> (למשל "גנים / מעונות / בית כנסת") — לא ודאי</label>`;
+}
+function _walkLive(cn,phase){
+  const out=[];
+  if(phase==='built'){ const b=cellBuiltCheck(cn); if(b) out.push(b); }
+  else { const l=cellLandCheck(cn); if(l) out.push(l); const t=t5CellCheck(cn,'land'); if(t&&!t.ok) out.push(t); }
+  return out.map(chk).join('');
+}
+function _walkRefresh(){ const el=$('pr-wlive'); const w=_walk(); if(el&&w.cur) el.innerHTML=_walkLive(w.cur,w.phase); const s=$('pr-wsum'); if(s&&w.phase==='summary') s.innerHTML=_walkSummaryBody(); }
+function _walkDots(list,w){
+  return `<div class="pr-wdots">${list.map(c=>{ const al=_cellAllocs(c), m=w.cells[c]||{};
+    const col=al.length?(EDU_META[eduBase(al[0].line)]||{}).color:(m.other&&m.other.length)?'#7f8c8d':m.reserve?'#95a5a6':'';
+    return `<button class="pr-wd${c===w.cur?' cur':''}${w.done[c]?' done':''}" style="${col?`--c:${col}`:''}" onclick="PR.walkGo('${c}')" title="תא ${c}">${c}</button>`; }).join('')}</div>`;
+}
+function _renderWalk(){
+  const A=computeAssumptions(PR.spec);
+  if(A.T.pop==null) return `<div class="pr-note">מלאו קודם את ההנחות (לשונית <b>זהות והנחות</b>) — כך הממשק ידע כמה כיתות נדרשות.</div>`;
+  if(typeof state==='undefined'||!state.layers||!state.layers.plan) return `<div class="pr-note">טענו תשריט.</div>`;
+  const w=_walk(), Q=walkQueue(), lines=_eduLines();
+  const nDone=l=>l.filter(c=>w.done[c]).length;
+  const prog=`<div class="pr-wprog"><span class="${w.phase==='land'?'on':''}" onclick="PR.walkStart('land')">① חומים ${nDone(Q.land)}/${Q.land.length}</span>
+    <span class="${w.phase==='built'||w.phase==='builtIntro'?'on':''}" onclick="PR.walkPhase('builtIntro')">② הקצאות מבונות ${nDone(Q.built)}/${Q.built.length}</span>
+    <span class="${w.phase==='summary'?'on':''}" onclick="PR.walkPhase('summary')">③ תמונת הנספח</span></div>`;
+  if(w.phase==='intro') return prog+`<div class="pr-wcard intro"><div class="pr-wbig">🎯 נעבור על התשריט תא אחר תא</div>
+    <p>לכל תא — מסתכלים בנספח ולוחצים מה היועץ הציע בו (מעון, גן, בית ספר…) וכמה כיתות. המפה תתמקד בכל תא בתורו.</p>
+    <p>① <b>${Q.land.length} תאים חומים</b> (מבנים ומוסדות ציבור) · ② <b>${Q.built.length} מגרשים סחירים עם שטח ציבורי מבונה</b> בטבלה 5${state.table5?'':' (טענו טבלה 5 כדי לאתר אותם)'} · ③ תמונה מסכמת מול הדרישות.</p>
+    <p class="pr-small">טיפ: אפשר גם ללחוץ על תא במפה כדי לקפוץ אליו. Enter = הבא.</p>
+    <button class="pr-wgo" onclick="PR.walkStart('land')">בואו נתחיל ←</button></div>`;
+  if(w.phase==='builtIntro'){
+    const sp=b=>`<input class="pr-in-s" value="${E(w.split[b]??'')}" placeholder="?" oninput="PR.walkSplit('${b}',this.value)">`;
+    return prog+`<div class="pr-wcard intro"><div class="pr-wbig">② הקצאות מבונות במגרשים סחירים</div>
+      <p>לפני שעוברים על המגרשים: <b>איך הנספח מחלק בין קרקע למבונה?</b> <span class="pr-small">(לא חובה — אם הנספח מציין)</span></p>
+      <div class="pr-wsplit"><span><span class="pr-dot" style="background:${EDU_META.maon.color}"></span>מעונות: ${sp('maon')} % בקרקע (השאר במבונה)</span>
+        <span><span class="pr-dot" style="background:${EDU_META.gan.color}"></span>גנים: ${sp('gan')} % בקרקע</span></div>
+      <p class="pr-small">התדריך ממליץ: במתחמים עם 10 כיתות מעון ויותר — כשליש מהן במבנה ציבורי אחר או במגרש סחיר.</p>
+      ${Q.built.length?`<button class="pr-wgo" onclick="PR.walkStart('built')">למגרשים הסחירים (${Q.built.length}) ←</button>`:'<p>אין בטבלה 5 מגרשים סחירים עם שטח ציבורי.</p>'}
+      <button class="pr-btn" onclick="PR.walkPhase('summary')">דלג לתמונת הנספח</button></div>`;
+  }
+  if(w.phase==='summary') return prog+`<div id="pr-wsum">${_walkSummaryBody()}</div>`;
+  // צעד: תא אחד
+  const cn=w.cur, list=w.phase==='built'?Q.built:Q.land, i=list.indexOf(cn);
+  const fs=cellIndex()[cn]; const area=fs?cellAreaM2(fs)/1000:null;
+  const t5=t5Of(cn), yi=t5&&t5.length?t5[0].yiud:(fs?cellLandUse(fs):'');
+  const pubB=w.phase==='built'?t5PublicSqm(t5):null;
+  const other=_cellAllocs(cn).filter(a=>a.src!=='walk');
+  return prog+_walkDots(list,w)+`<div class="pr-wcard">
+    <div class="pr-whdr"><span class="pr-wnum">תא ${E(cn)}</span><span>${E(yi)}</span><span>${area!=null?fmtN(area,2)+' ד׳':''}</span>
+      ${pubB?`<span class="pr-wb">🏢 ${fmtN(pubB)} מ"ר ציבורי בטבלה 5</span>`:''}<span class="pr-small" style="margin-right:auto">${i+1} מתוך ${list.length}</span></div>
+    ${other.length?`<div class="pr-small" style="margin-bottom:6px">שויך קודם (בלשונית "מענה ושיבוץ"): ${other.map(a=>E(_allocLabel(a,lines))).join(', ')}</div>`:''}
+    ${_walkTypeButtons(cn,lines,w.phase)}
+    <div class="pr-wrows">${_walkAllocRows(cn,lines,w.phase)}</div>
+    ${_walkOtherRow(cn)}
+    <div id="pr-wlive" class="pr-wlive">${_walkLive(cn,w.phase)}</div>
+    <div class="pr-wnav"><button class="pr-btn" onclick="PR.walkNext(-1)" ${i<=0?'disabled':''}>→ הקודם</button>
+      <button class="pr-wgo" onclick="PR.walkNext(1)">${i===list.length-1?(w.phase==='land'?'סיום החומים ✓':'לתמונת הנספח ✓'):'הבא ←'}</button></div></div>`;
+}
+// תמונת הנספח: כמה כיתות בקרקע / במבונה / חלופי לכל סוג, מול הנדרש; בדיקות התאים; כיסוי
+function _walkSummaryBody(){
+  const w=_walk(), lines=_eduLines(), Q=walkQueue();
+  const rows=lines.map(L=>{
+    const d=_dem(L.id), need=num(d.declared&&d.declared.classes)??L.classesRounded;
+    const al=_allocsOf(L.id).filter(a=>!isShared(a));
+    const sum=f=>al.filter(f).reduce((t,a)=>t+(num(a.classes)||0),0);
+    const land=sum(a=>a.mode==='land'&&!a.alt), built=sum(a=>a.mode==='built'&&!a.alt), alt=sum(a=>a.alt), other=sum(a=>a.mode==='combined'||a.mode==='outside');
+    const shared=_allocsOf(L.id).some(isShared);
+    const tot=land+built+other, ev=evalSupply(tot,need,0);
+    const st=!al.length&&!shared?'<span class="pr-st diff">⚠ לא נמצא מענה</span>'
+      :ev.cls==='short'?(tot+alt>=need?'<span class="pr-st info">◐ נסגר רק עם תאים חלופיים</span>':shared?'<span class="pr-st keys">⟷ חלק באשכול משותף</span>':`<span class="pr-st diff">⚠ חסרות ${fmtN(need-tot)}</span>`)
+      :ev.cls==='surplus'?'<span class="pr-st info">ℹ עודף ניכר</span>':`<span class="pr-st ok">✓${ev.cls==='margin'?' מרווח ביטחון':''}</span>`;
+    // חלוקה קרקע/מבונה שהנספח הצהיר
+    let spl=''; const b=eduBase(L.id), p=num(w.split[b]);
+    if(p!=null&&!L.special&&(b==='maon'||b==='gan')){ const exp=need*p/100;
+      spl=Math.abs(land-exp)<=1?`<span class="pr-st ok" title="לפי ${p}% בקרקע">✓ ${p}% בקרקע</span>`:`<span class="pr-st diff" title="לפי ${p}% בקרקע צפויות ${fmtN(exp,1)} כיתות בקרקע">⚠ צפויות ${fmtN(exp,0)} בקרקע</span>`; }
+    const cls=v=>v?fmtN(v):'<span class="pr-small">—</span>';
+    return `<tr><td><span class="pr-dot" style="background:${(EDU_META[b]||{}).color}"></span>${E(eduShort(L))}</td><td class="num"><b>${fmtN(need)}</b></td>
+      <td class="num">${cls(land)}</td><td class="num">${cls(built)}</td><td class="num">${cls(other)}</td><td class="num">${alt?`<span class="pr-small">+${fmtN(alt)}</span>`:''}</td><td>${st} ${spl}</td></tr>`;
+  }).join('');
+  const cellsChk=[...Q.land.map(cellLandCheck),...Q.built.map(cellBuiltCheck)].filter(Boolean);
+  const bad=cellsChk.filter(c=>!c.ok&&!c.info), good=cellsChk.filter(c=>c.ok);
+  const skipped=[...Q.land,...Q.built].filter(c=>!_cellAllocs(c).length&&!((w.cells[c]||{}).other||[]).length&&!(w.cells[c]||{}).reserve);
+  const cov=Object.keys(EDU_META).map(b=>{ const c=coverage(b); return c.pct==null?'':`<span class="pr-covb ${c.pct>=90?'ok':'bad'}"><span class="pr-dot" style="background:${EDU_META[b].color}"></span>${EDU_META[b].short} ${fmtN(c.pct,0)}%${c.pctAlt!=null?` <span class="pr-small">(${fmtN(c.pctAlt,0)}% עם חלופיים)</span>`:''}</span>`; }).join('');
+  return `<div class="pr-wcard"><div class="pr-wbig">ההקצאה שהנספח מציע — מול הדרישות</div>
+    <table class="pr-tbl"><tr><th>סוג</th><th>נדרש</th><th>בקרקע</th><th>במבונה</th><th>אחר</th><th>חלופי</th><th></th></tr>${rows}</table>
+    <div class="pr-small" style="margin:4px 0 10px">נדרש = מה שהוזן כ"הנספח אומר" בלשונית ביקוש (או התדריך). "אחר" = בשילוב במוסד אחר / מחוץ לתכנית (דרך לשונית "מענה ושיבוץ").</div>
+    <div class="pr-cg"><div class="pr-cg-h">שטח התאים מול מכסות התדריך <span class="pr-small">${good.length} ✓ · ${bad.length} ⚠</span></div>
+      ${cellsChk.length?cellsChk.sort((a,b)=>(a.ok?1:0)-(b.ok?1:0)).map(c=>chk(c)).join(''):'<div class="pr-small">אין עדיין תאים עם כיתות.</div>'}</div>
+    ${cov?`<div class="pr-cg"><div class="pr-cg-h">כיסוי רדיוסי שירות <span class="pr-small">(% מיח"ד בטווח — ראו "מענה ושיבוץ" להצגה במפה)</span></div><div class="pr-covs">${cov}</div></div>`:''}
+    ${skipped.length?`<div class="pr-cg"><div class="pr-cg-h">תאים בלי הזנה (${skipped.length})</div><div class="pr-wdots">${skipped.map(c=>`<button class="pr-wd" onclick="PR.walkGo('${c}')">${c}</button>`).join('')}</div></div>`:''}
+  </div>`;
+}
 PR.getSpec=function(){ return PR.spec; };
 PR.setSpec=function(s){ PR.spec=normalizeSpec(s); if(PR.open) PR.render(); };
 PR.reset=function(){ PR.spec=emptySpec(); PR.close(); };
 
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Enter'||!PR.open||PR.tab!=='walk') return;
+  const w=PR.spec.walk; if(!w||!w.cur||!(w.phase==='land'||w.phase==='built')) return;
+  if(e.target&&(e.target.tagName==='TEXTAREA'||e.target.tagName==='BUTTON')) return;
+  e.preventDefault(); PR.walkNext(1);
+});
 PR.NORMS=NORMS; PR.Engine=Engine;
 root.PR=PR;
 root.openProgReader=function(){ PR.toggle(); };
