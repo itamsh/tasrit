@@ -129,7 +129,8 @@ function emptySpec(){
     },
     keys:{},
     demand:{},     // {lineId: {declared:{classes,institutions,land,model}, keys:{rate,grades,perClass}}} — מה שהנספח אומר
-    provision:[],  // [{id,line,mode,cells:[],classes,land,built,model,note}] — המענה שהיועץ הציע ושיבוצו בתאים
+    provision:[],  // [{id,line,lines?,alt?,mode,cells:[],classes,land,built,model,note}] — המענה שהיועץ הציע ושיבוצו בתאים
+                   // lines = אשכול משותף לכמה סוגים (למשל מעון+גן) · alt = תאים חלופיים ("אחד מכמה שימושים אפשריים")
     radii:null, open_space:{}, notes:[],
   };
 }
@@ -283,19 +284,32 @@ function keysClasses(line,keys){
   const any=num(k.rate)!=null||num(k.grades)!=null||num(k.perClass)!=null;
   return {any,rate,grades,perClass:per,classes:per?line.coh*line.share*grades*rate/per:null};
 }
-// סטטוס שורה: ok = תואם לתדריך (±1) · keys = תואם למפתח היועץ אך לא לתדריך · diff = פער
+// מרווח ביטחון: עודף קטן מעל הנדרש (כיתות/שטח) הוא נוהג מקובל ואף רצוי — לא פער.
+// עד +20% = "מרווח ביטחון" (✓); מעבר לכך = "עודף ניכר" (ℹ, לא אזהרה); חוסר = ⚠.
+const MARGIN=0.2;
+function evalSupply(given,need,tolAbs){
+  if(given==null||need==null) return {cls:'none'};
+  const t=tolAbs??0; const d=given-need; const pct=need?d/need*100:null;
+  if(d< -t) return {cls:'short',d,pct};
+  if(d<=t) return {cls:'ok',d,pct};
+  if(given<=need*(1+MARGIN)+t) return {cls:'margin',d,pct};
+  return {cls:'surplus',d,pct};
+}
+// סטטוס שורה: ok = תואם לתדריך (±1) · margin = מעט מעל התדריך (מרווח ביטחון) ·
+// keys = תואם למפתח היועץ אך לא לתדריך · surplus = עודף ניכר · diff = חוסר
 function eduRowStatus(line,d){
   const decl=num(d&&d.declared&&d.declared.classes);
   if(decl==null) return {status:'none'};
   const kc=keysClasses(line,d&&d.keys);
-  const okGuide=Math.abs(decl-line.classesRounded)<=1;
+  const ev=evalSupply(decl,line.classesRounded,1);
   const okKeys=kc.any&&kc.classes!=null&&Math.abs(decl-Math.round(kc.classes))<=1;
-  return {status:okGuide?'ok':okKeys?'keys':'diff',diff:decl-line.classesRounded,keysClasses:kc.any?kc.classes:null};
+  const status=ev.cls==='ok'?'ok':ev.cls==='margin'?'margin':okKeys?'keys':ev.cls==='surplus'?'surplus':'diff';
+  return {status,diff:decl-line.classesRounded,pct:ev.pct,keysClasses:kc.any?kc.classes:null};
 }
 
 const Engine={num,round,emptySpec,newSegment,normalizeSpec,computeAssumptions,compare,
   eduDemand,publicDemand,openSpaceDemand,fmtN,SECTORS,DOMAINS,
-  EDU_META,eduBase,eduShort,dunamPerClass,keysClasses,eduRowStatus};
+  EDU_META,eduBase,eduShort,dunamPerClass,keysClasses,eduRowStatus,evalSupply,MARGIN};
 
 if(typeof module!=='undefined'&&module.exports){ module.exports={NORMS,Engine}; return; }
 
@@ -394,8 +408,23 @@ const CSS=`
 .pr-arow label{font-size:11.5px;color:#8fa6c0;display:inline-flex;align-items:center;gap:4px}
 .pr-arow select{background:#0f1824;border:1px solid #2d4060;color:#e6eef8;border-radius:5px;padding:3px 5px;font-size:12px}
 .pr-in-cells,.pr-in-note{flex:1;min-width:140px;background:#0f1824;border:1px solid #2d4060;color:#e6eef8;border-radius:5px;padding:3px 6px;font-size:12px}
-.pr-chip{display:inline-flex;align-items:center;gap:3px;background:#243a57;border:1px solid #3d6a9a;border-radius:10px;padding:1px 8px;font-size:11.5px;direction:ltr}
-.pr-chip button{background:none;border:none;color:#e88;cursor:pointer;font-size:10px;padding:0}
+.pr-chip{display:inline-flex;align-items:center;gap:3px;background:#243a57;border:1px solid #3d6a9a;border-radius:10px;padding:1px 8px;font-size:11.5px;direction:ltr;color:#fff}
+.pr-chip button{background:none;border:none;color:#ffb3b3;cursor:pointer;font-size:10px;padding:0}
+.pr-st.info{color:#9fb7d0}
+.pr-exp{font-size:11px;white-space:nowrap}
+.pr-alloc.alt{border-style:dotted;background:repeating-linear-gradient(135deg,transparent 0 7px,rgba(120,150,190,.07) 7px 9px),#132033}
+.pr-atag{font-size:11.5px;color:#cfe3fa;margin-bottom:4px}
+.pr-opts{gap:4px}
+.pr-tog{background:#0f1824;border:1px solid #2d4060;color:#8fa6c0;border-radius:10px;padding:1px 8px 1px 4px;font-size:11px;cursor:pointer;display:inline-flex;align-items:center}
+.pr-tog .pr-dot{margin-left:4px;width:8px;height:8px}
+.pr-tog.on{background:#1d3a57;border-color:#6aa6e0;color:#fff}
+.pr-altlbl{margin-right:auto}
+.pr-legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;color:#8fa6c0;margin-bottom:8px}
+.pr-legend i{display:inline-block;width:16px;height:11px;margin-left:4px;vertical-align:-1px;border:1.5px solid #3498db;border-radius:2px}
+.pr-legend .lg-fill{background:rgba(52,152,219,.5)}
+.pr-legend .lg-stripe{border-color:#e74c3c;background:repeating-linear-gradient(135deg,rgba(231,76,60,.7) 0 4px,rgba(241,196,15,.7) 4px 8px)}
+.pr-legend .lg-alt{border-style:dashed;background:repeating-linear-gradient(135deg,transparent 0 4px,rgba(52,152,219,.8) 4px 5px)}
+.pr-legend .lg-free{border:1.5px dashed #c0392b}
 .pr-chips{display:flex;flex-wrap:wrap;gap:4px}
 .pr-chip.free{border-style:dashed;border-color:#c0392b;background:#2a1a1a}
 .pr-chip.used{background:#1d3a2b;border-color:#3aa06a}
@@ -408,6 +437,13 @@ body.theme-light .pr-card,body.theme-light .pr-alloc,body.theme-light .pr-edet t
 body.theme-light .pr-in-s,body.theme-light .pr-in-cells,body.theme-light .pr-in-note,body.theme-light .pr-arow select{background:#fff;color:#1c2b3c;border-color:#bfccdb}
 body.theme-light .pr-chk.ok{color:#1e7a4a}body.theme-light .pr-chk.bad{color:#9a6400}
 body.theme-light .pr-cg-h{color:#1a3560}
+body.theme-light .pr-chk.i,body.theme-light .pr-st.info{color:#4a6380}
+body.theme-light .pr-alloc.alt{background:repeating-linear-gradient(135deg,transparent 0 7px,rgba(60,90,130,.06) 7px 9px),#fff}
+body.theme-light .pr-atag{color:#1a3560}
+body.theme-light .pr-tog{background:#fff;border-color:#bfccdb;color:#4a5d74}
+body.theme-light .pr-tog.on{background:#dcebfb;border-color:#5a8fd0;color:#1a3560}
+body.theme-light .pr-legend{color:#4a5d74}
+body.theme-light .pr-exp{color:#4a5d74;border-color:#bfccdb}
 body.theme-light .pr-docrow{background:#fff;border-color:#bfccdb}
 body.theme-light .pr-docver{color:#4a5d74}
 body.theme-light #pr-panel{background:#f4f7fb;color:#1c2b3c;border-left-color:#bfccdb}
@@ -657,7 +693,28 @@ const safeRedraw=()=>{ try{ (typeof scheduleRedraw==='function'?scheduleRedraw:r
 
 function _dem(id){ const D=PR.spec.demand||(PR.spec.demand={}); return D[id]||(D[id]={declared:{},keys:{}}); }
 function _eduLines(){ return eduDemand(PR.spec,computeAssumptions(PR.spec)); }
-function _allocsOf(lineId){ return (PR.spec.provision||[]).filter(p=>p.line===lineId); }
+// הסוגים שהקצאה משרתת (אשכול משותף = יותר מסוג אחד)
+function aLines(a){ return Array.isArray(a.lines)&&a.lines.length?a.lines:[a.line]; }
+const isShared=a=>aLines(a).length>1;
+function _allocsOf(lineId){ return (PR.spec.provision||[]).filter(p=>aLines(p).includes(lineId)); }
+function _lineShortById(id,lines){ const L=(lines||_eduLines()).find(l=>l.id===id)||{id,inst:''}; return eduShort(L); }
+function _allocLabel(a,lines){ return aLines(a).map(id=>_lineShortById(id,lines)).join('+'); }
+// קבוצות של סוגים שמחוברים באשכולות משותפים (למשל {מעון, גן}) — לבדיקת שטח משותפת
+function sharedGroups(){
+  const prov=PR.spec.provision||[]; const parent={};
+  const f=x=>parent[x]===x?x:(parent[x]=f(parent[x]));
+  for(const a of prov) if(isShared(a)){ const ls=aLines(a); ls.forEach(l=>{ if(!parent[l]) parent[l]=l; }); ls.slice(1).forEach(l=>{ parent[f(l)]=f(ls[0]); }); }
+  const g={}; for(const l of Object.keys(parent)) (g[f(l)]=g[f(l)]||[]).push(l);
+  return Object.values(g).map(lines=>({lines,allocs:prov.filter(a=>aLines(a).some(l=>lines.includes(l)))}));
+}
+function _stHtml(s){
+  const sg=v=>(v>0?'+':'')+fmtN(v);
+  return s.status==='ok'?'<span class="pr-st ok">✓ תואם</span>'
+    :s.status==='margin'?`<span class="pr-st ok" title="מעט מעל התדריך — מרווח ביטחון מקובל">✓ ${sg(s.diff)} מרווח ביטחון</span>`
+    :s.status==='keys'?`<span class="pr-st keys" title="תואם לחישוב לפי מפתח היועץ, אך שונה מהתדריך">✓ לפי מפתח היועץ · ${sg(s.diff)} מהתדריך</span>`
+    :s.status==='surplus'?`<span class="pr-st info" title="עודף של יותר מ-${MARGIN*100}% מעל התדריך — לא בהכרח בעיה, כדאי להבין למה">ℹ ${sg(s.diff)} עודף ניכר (${fmtN(s.pct,0)}%)</span>`
+    :s.status==='diff'?`<span class="pr-st diff">⚠ ${sg(s.diff)} — חסר מול התדריך</span>`:'';
+}
 function _alloc(id){ return (PR.spec.provision||[]).find(p=>p.id===id); }
 let _aSeq=0;
 
@@ -741,13 +798,20 @@ function allocChecks(a,line){
   if(missing.length) out.push({ok:false,txt:`תאים שלא קיימים בתשריט: ${missing.join(', ')}`});
   if(a.mode==='land'){
     const area=a.cells.filter(c=>idx[c]).reduce((t,c)=>t+cellAreaM2(idx[c]),0)/1000;
-    const cls=num(a.classes), dpc=line?dunamPerClass(line.inst,line.stream,a.model):null;
+    const cls=num(a.classes), dpc=line&&!isShared(a)?dunamPerClass(line.inst,line.stream,a.model):null;
     if(cls&&dpc){
-      const need=cls*dpc;
-      out.push({ok:area>=need*0.97,txt:`שטח התאים ${fmtN(area,1)} ד׳ · נדרש לפי ${a.model.replace('model_','דגם ')}: ${cls} × ${dpc} = ${fmtN(need,1)} ד׳`});
-    } else out.push({info:true,txt:`שטח התאים ${fmtN(area,1)} ד׳`+(cls&&!a.model&&/ספר/.test(line?line.inst:'')?' · בחרו דגם להשוואה לתדריך':'')});
+      const need=cls*dpc, ev=evalSupply(area,need,need*0.03);
+      const base=`שטח התאים ${fmtN(area,1)} ד׳ · נדרש לפי ${a.model.replace('model_','דגם ')}: ${cls} × ${dpc} = ${fmtN(need,1)} ד׳`;
+      out.push(ev.cls==='short'?{ok:false,txt:base+' — חסר'}
+        :ev.cls==='surplus'?{info:true,txt:base+` — עודף ניכר (${fmtN(ev.pct,0)}%)`}
+        :{ok:true,txt:base+(ev.cls==='margin'?` — מרווח ביטחון (+${fmtN(ev.pct,0)}%)`:'')});
+    } else out.push({info:true,txt:`שטח התאים ${fmtN(area,1)} ד׳`+(cls&&!a.model&&!isShared(a)&&/ספר/.test(line?line.inst:'')?' · בחרו דגם להשוואה לתדריך':'')});
+    // שטח שהנספח מציין מול שטח התאים בתשריט: תשריט גדול מעט = תקין (התא שיצא); תשריט קטן = ⚠
     const decl=num(a.land);
-    if(decl!=null&&Math.abs(decl-area)>Math.max(0.2,area*0.03)) out.push({ok:false,txt:`הנספח מציין ${fmtN(decl,1)} ד׳, שטח התאים בתשריט ${fmtN(area,1)} ד׳`});
+    if(decl!=null){ const ev=evalSupply(area,decl,Math.max(0.2,decl*0.03));
+      if(ev.cls==='short') out.push({ok:false,txt:`הנספח מציין ${fmtN(decl,1)} ד׳, אך שטח התאים בתשריט רק ${fmtN(area,1)} ד׳`});
+      else if(ev.cls==='surplus') out.push({info:true,txt:`שטח התאים בתשריט (${fmtN(area,1)} ד׳) גדול בהרבה מהמצוין בנספח (${fmtN(decl,1)} ד׳)`});
+      else if(ev.cls==='margin') out.push({ok:true,txt:`שטח התאים בתשריט ${fmtN(area,1)} ד׳ — מעט יותר מהמצוין בנספח (${fmtN(decl,1)} ד׳)`}); }
     // מסכמים: שורה אחת כשהכל תקין, ופירוט רק לתאים הבעייתיים
     const cells=a.cells.filter(c=>idx[c]);
     const notPub=cells.filter(c=>!isPublicCell(idx[c]));
@@ -793,7 +857,7 @@ function _eduDemandTable(lines){
         <td class="num" title="${E(L.formula)}"><b>${fmtN(L.classesRounded)}</b> <span class="pr-small">(${fmtN(L.classes,1)})</span></td>
         <td><input class="pr-in-s" data-d="${L.id}.declared.classes" value="${E(dc.classes??'')}" oninput="PR.onDem(this)" placeholder="כיתות"></td>
         <td data-out="est-${L.id}"></td>
-        <td><button class="pr-exp" onclick="PR.toggleExp('${L.id}')" title="פרטים: שטח, דגם, מפתח היועץ">${open?'▴':'▾'}</button></td>
+        <td><button class="pr-exp" onclick="PR.toggleExp('${L.id}')" title="פרטים (לא חובה): שטח, דגם, מפתח היועץ">פרטים ${open?'▴':'▾'}</button></td>
       </tr>
       <tr class="pr-edet"${open?'':' style="display:none"'}><td colspan="5">
         <div class="pr-grid3">
@@ -816,13 +880,11 @@ function _eduDemandTable(lines){
 function _refreshEdu(){
   const body=$('pr-body'); if(!body) return;
   const set=(k,h)=>{ const el=body.querySelector(`[data-out="${k}"]`); if(el) el.innerHTML=h; };
-  const lines=_eduLines(); let ok=0,warn=0,landSum=0,landAny=false;
+  const lines=_eduLines(); let ok=0,warn=0,info=0,landSum=0,landAny=false;
   for(const L of lines){
     const d=_dem(L.id), s=eduRowStatus(L,d);
-    set('est-'+L.id,s.status==='ok'?'<span class="pr-st ok">✓ תואם</span>'
-      :s.status==='keys'?`<span class="pr-st keys" title="תואם לחישוב לפי מפתח היועץ, אך שונה מהתדריך">✓ לפי מפתח היועץ · ⚠ ${s.diff>0?'+':''}${fmtN(s.diff)} מהתדריך</span>`
-      :s.status==='diff'?`<span class="pr-st diff">⚠ ${s.diff>0?'+':''}${fmtN(s.diff)} מהתדריך</span>`:'');
-    if(s.status==='ok') ok++; else if(s.status==='diff'||s.status==='keys') warn++;
+    set('est-'+L.id,_stHtml(s));
+    if(s.status==='ok'||s.status==='margin'||s.status==='keys') ok++; else if(s.status==='surplus') info++; else if(s.status==='diff') warn++;
     const dc=d.declared||{}; const lines2=[];
     const kc=keysClasses(L,d.keys);
     if(kc.any) lines2.push(`לפי מפתח היועץ: ${fmtN(L.coh,1)} × ${L.share!==1?L.share+' × ':''}${Math.round(kc.rate*100)}% × ${kc.grades} ÷ ${kc.perClass} = <b>${fmtN(kc.classes,1)}</b> כיתות`);
@@ -831,7 +893,7 @@ function _refreshEdu(){
     if(num(dc.land)!=null){ landSum+=num(dc.land); landAny=true; }
     set('edet-'+L.id,lines2.join('<br>'));
   }
-  set('edu-sum',`${ok?`<span class="pr-st ok">✓ ${ok} תואמות</span> `:''}${warn?`<span class="pr-st diff">⚠ ${warn} בפער</span> `:''}${landAny?` · סה"כ שטח חינוך בנספח: <b>${fmtN(landSum,1)}</b> ד׳`:''}`);
+  set('edu-sum',`${ok?`<span class="pr-st ok">✓ ${ok} תקינות</span> `:''}${info?`<span class="pr-st info">ℹ ${info} בעודף ניכר</span> `:''}${warn?`<span class="pr-st diff">⚠ ${warn} בחוסר</span> `:''}${landAny?` · סה"כ שטח חינוך בנספח: <b>${fmtN(landSum,1)}</b> ד׳`:''}`);
 }
 
 function _renderDemand(){
@@ -841,8 +903,9 @@ function _renderDemand(){
     const lines=eduDemand(PR.spec,A);
     const eduT=`<div class="pr-sec"><h3>🎓 חינוך — כיתות נדרשות <span class="pr-hint">הקלידו לכל שורה את מספר הכיתות שהנספח מציין</span></h3>
       <div data-out="edu-sum" style="margin-bottom:6px"></div>${_eduDemandTable(lines)}
-      <div class="pr-small" style="margin-top:6px">"לפי התדריך" מחושב מההנחות שהוזנו בלשונית הראשונה. ✓ = עד כיתה אחת הפרש (עיגול).
-        אם היועץ חישב במפתח אחר (למשל 8 שכבות לת"ת), פתחו ▾ והזינו את המפתח שלו — כך רואים אם הנספח עקבי עם עצמו.</div></div>`;
+      <div class="pr-small" style="margin-top:6px">"לפי התדריך" מחושב מההנחות שהוזנו בלשונית הראשונה. ✓ = עד כיתה אחת הפרש (עיגול), או עד ${MARGIN*100}% מעל התדריך (מרווח ביטחון — מקובל).
+        ℹ = עודף ניכר (לא בהכרח בעיה). ⚠ = פחות מהתדריך.<br>
+        <b>פרטים</b> (לא חובה): שטח ודגם כפי שבנספח — השטח משמש לבדיקת אשכולות משותפים (למשל מעון+גן); ומפתח היועץ, אם חישב אחרת מהתדריך.</div></div>`;
     if(PR.domain==='edu') return eduT;
     return eduT+_publicTable(A)+_openTable(A);
   }
@@ -918,15 +981,24 @@ function _renderSupplyEdu(){
     const rows=allocs.map(a=>{
       const cells=a.cells.map(c=>`<span class="pr-chip">${E(c)}<button onclick="PR.removeCell('${a.id}','${E(c)}')" title="הסר">✕</button></span>`).join('');
       const needsCells=a.mode==='land'||a.mode==='built';
-      return `<div class="pr-alloc${PR.pick===a.id?' picking':''}">
+      const shared=isShared(a);
+      // אפשר לשתף רק בין סוגים מאותה משפחה: מעונות+גנים, או בתי ספר
+      const pre=id=>/^(maon|gan)/.test(id);
+      const partners=lines.filter(o=>o.id!==L.id&&pre(o.id)===pre(L.id));
+      const shareChips=partners.map(o=>{ const on=aLines(a).includes(o.id); const c=(EDU_META[eduBase(o.id)]||{}).color;
+        return `<button class="pr-tog${on?' on':''}" onclick="PR.toggleShare('${a.id}','${o.id}')" title="${on?'הסר מהאשכול':'צרף לאשכול משותף'}"><span class="pr-dot" style="background:${c}"></span>${E(eduShort(o))}</button>`; }).join('');
+      return `<div class="pr-alloc${PR.pick===a.id?' picking':''}${a.alt?' alt':''}">
+        ${shared||a.alt?`<div class="pr-atag">${shared?`⟷ אשכול משותף: <b>${E(_allocLabel(a,lines))}</b>`:''}${shared&&a.alt?' · ':''}${a.alt?'<b>?</b> תאים חלופיים — אחד מכמה שימושים אפשריים':''}</div>`:''}
         <div class="pr-arow">
           <select data-a="${a.id}.mode" onchange="PR.onAlloc(this)">${ALLOC_MODES.map(([v,l])=>`<option value="${v}"${a.mode===v?' selected':''}>${l}</option>`).join('')}</select>
-          <label>כיתות <input class="pr-in-s" data-a="${a.id}.classes" value="${E(a.classes??'')}" oninput="PR.onAlloc(this)"></label>
+          <label>${shared?'כיתות (סה"כ באשכול)':'כיתות'} <input class="pr-in-s" data-a="${a.id}.classes" value="${E(a.classes??'')}" oninput="PR.onAlloc(this)"${shared?' title="לא חובה — רק אם הנספח מציין"':''}></label>
           ${a.mode==='land'?`<label>ד׳ <input class="pr-in-s" data-a="${a.id}.land" value="${E(a.land??'')}" oninput="PR.onAlloc(this)" title="שטח קרקע כפי שבנספח (לא חובה)"></label>`:''}
           ${a.mode==='built'?`<label>מ"ר <input class="pr-in-s" data-a="${a.id}.built" value="${E(a.built??'')}" oninput="PR.onAlloc(this)" title="שטח מבונה כפי שבנספח"></label>`:''}
-          ${a.mode==='land'&&isSchool?`<select data-a="${a.id}.model" onchange="PR.onAlloc(this)" title="דגם">${MODEL_OPTS.map(([v,l])=>`<option value="${v}"${(a.model||'')===v?' selected':''}>${v?l:'דגם'}</option>`).join('')}</select>`:''}
+          ${a.mode==='land'&&isSchool&&!shared?`<select data-a="${a.id}.model" onchange="PR.onAlloc(this)" title="דגם">${MODEL_OPTS.map(([v,l])=>`<option value="${v}"${(a.model||'')===v?' selected':''}>${v?l:'דגם'}</option>`).join('')}</select>`:''}
           <button class="pr-del" onclick="PR.delAlloc('${a.id}')" title="מחיקת מענה">🗑</button>
         </div>
+        ${needsCells?`<div class="pr-arow pr-opts">${partners.length?`<span class="pr-small">משרת גם:</span>${shareChips}`:''}
+          <label class="pr-altlbl" title="התאים מוצעים לכמה שימושים חלופיים (למשל גנים/מעונות/בית כנסת/מועדון) — הם לא נספרים כמענה ודאי"><input type="checkbox" ${a.alt?'checked':''} onchange="PR.toggleAlt('${a.id}',this.checked)"> תאים חלופיים</label></div>`:''}
         ${needsCells?`<div class="pr-arow">${cells||'<span class="pr-small">טרם שובץ</span>'}
           ${PR.pick===a.id?`<button class="pr-btn on" onclick="PR.endPick()">✓ סיום</button>`:`<button class="pr-btn" onclick="PR.startPick('${a.id}')">📍 שבץ בתשריט</button>`}
           <input class="pr-in-cells" data-a="${a.id}.cellsText" value="${E(a.cells.join(', '))}" onchange="PR.onAlloc(this)" placeholder="או הקלידו מספרי תאים: 401, 402"></div>`
@@ -942,8 +1014,49 @@ function _renderSupplyEdu(){
       <button class="pr-btn" onclick="PR.addAlloc('${L.id}')">+ מענה</button>
     </div>`;
   }).join('');
-  return banner+`<div class="pr-sec"><h3>🎓 מענה ושיבוץ בתשריט <span class="pr-hint">לכל שורה: איך היועץ נתן מענה, ובאילו תאי שטח</span></h3>${cards}</div>`
-    +_renderPublicCells()+_renderRadii();
+  const legend=`<div class="pr-legend"><span><i class="lg-fill"></i>תא ייעודי</span><span><i class="lg-stripe"></i>אשכול משותף (פסים בצבעי הסוגים)</span>
+    <span><i class="lg-alt"></i>תא חלופי (קווקוו דק, "?" בתווית)</span><span><i class="lg-free"></i>תא ציבור בלי שיבוץ</span></div>`;
+  return banner+`<div class="pr-sec"><h3>🎓 מענה ושיבוץ בתשריט <span class="pr-hint">לכל שורה: איך היועץ נתן מענה, ובאילו תאי שטח</span></h3>
+    <div class="pr-small" style="margin-bottom:6px">גנים ומעונות מוקצים לרוב <b>באשכול משותף</b> — הוסיפו מענה אחד, וסמנו בו "משרת גם". תאים שהנספח מציע לכמה שימושים חלופיים — סמנו "תאים חלופיים".</div>
+    ${legend}${cards}</div>`+_renderGroups()+_renderPublicCells()+_renderRadii();
+}
+PR.toggleShare=function(id,lineId){
+  const a=_alloc(id); if(!a) return;
+  let ls=aLines(a).slice();
+  if(ls.includes(lineId)){ if(ls.length<2) return; ls=ls.filter(l=>l!==lineId); } else ls.push(lineId);
+  a.lines=ls.length>1?ls:undefined; a.line=ls[0];
+  if(ls.length>1) a.model='';
+  PR.render(); safeRedraw();
+};
+PR.toggleAlt=function(id,on){ const a=_alloc(id); if(!a) return; a.alt=!!on||undefined; PR.render(); safeRedraw(); };
+
+// ── אשכולות משותפים: בדיקת שטח לקבוצת סוגים (למשל מעון+גן) ──
+const _landArea=cells=>{ const idx=cellIndex(); return cells.filter(c=>idx[c]).reduce((t,c)=>t+cellAreaM2(idx[c]),0)/1000; };
+function groupChecks(){
+  const lines=_eduLines(), out=[];
+  for(const g of sharedGroups()){
+    const label=g.lines.map(id=>_lineShortById(id,lines)).join(' + ');
+    const parts=g.lines.map(id=>({id,land:num((_dem(id).declared||{}).land)}));
+    const missing=parts.filter(p=>p.land==null);
+    const need=missing.length?null:parts.reduce((t,p)=>t+p.land,0);
+    const firmCells=[...new Set(g.allocs.filter(a=>a.mode==='land'&&!a.alt).flatMap(a=>a.cells))];
+    const altCells=[...new Set(g.allocs.filter(a=>a.mode==='land'&&a.alt).flatMap(a=>a.cells))].filter(c=>!firmCells.includes(c));
+    const firm=_landArea(firmCells), alt=_landArea(altCells);
+    const have=`בתאים ייעודיים ${fmtN(firm,1)} ד׳ (${firmCells.length} תאים)${altCells.length?` · בתאים חלופיים עוד ${fmtN(alt,1)} ד׳ (${altCells.length})`:''}`;
+    if(need==null){ out.push({info:true,label,txt:`${have} · להשוואה: הזינו בלשונית "ביקוש" ▸ פרטים את השטח הנדרש ל${missing.map(p=>_lineShortById(p.id,lines)).join(', ')}`}); continue; }
+    const needTxt=`נדרש לפי הנספח ${fmtN(need,1)} ד׳ (${parts.map(p=>_lineShortById(p.id,lines)+' '+fmtN(p.land,1)).join(' + ')})`;
+    const ev=evalSupply(firm,need,Math.max(0.1,need*0.03));
+    if(ev.cls==='short'){
+      if(firm+alt>=need*0.97) out.push({info:true,label,txt:`${needTxt} · ${have} — נסגר רק בעזרת התאים החלופיים`});
+      else out.push({ok:false,label,txt:`${needTxt} · ${have} — חסר ${fmtN(need-firm-alt,1)} ד׳`});
+    } else out.push({ok:ev.cls!=='surplus',info:ev.cls==='surplus',label,txt:`${needTxt} · ${have}${ev.cls==='margin'?` — מרווח ביטחון (+${fmtN(ev.pct,0)}%)`:ev.cls==='surplus'?` — עודף ניכר (${fmtN(ev.pct,0)}%)`:''}`});
+  }
+  return out;
+}
+function _renderGroups(){
+  const gc=groupChecks(); if(!gc.length) return '';
+  return `<div class="pr-sec"><h3>⟷ אשכולות משותפים <span class="pr-hint">השטח של כל התאים יחד, מול סכום השטח הנדרש לסוגים</span></h3>
+    ${gc.map(c=>`<div class="pr-card"><b>${E(c.label)}</b>${chk(c)}</div>`).join('')}</div>`;
 }
 function _renderPublicCells(){
   const idx=cellIndex(); const used=new Set((PR.spec.provision||[]).flatMap(a=>a.cells||[]));
@@ -961,20 +1074,21 @@ function _mPerUnit(){ return (typeof state!=='undefined'&&state.spanMeters)?stat
 function coverage(base){
   const idx=cellIndex(), R=_radii(), mpu=_mPerUnit();
   const rM=num(R.r[base])??EDU_META[base].radius;
-  const centers=[];
-  for(const a of PR.spec.provision||[]){ if(eduBase(a.line)!==base||!(a.mode==='land'||a.mode==='built')) continue;
-    for(const c of a.cells){ if(idx[c]){ const p=cellCentroid(idx[c]); if(p) centers.push(p); } } }
-  if(!mpu||!centers.length) return {base,rM,centers,pct:null,uncovered:[]};
-  const rU=rM/mpu; let tot=0,cov=0; const uncovered=[];
+  const centers=[], altCenters=[];
+  for(const a of PR.spec.provision||[]){ if(!aLines(a).some(l=>eduBase(l)===base)||!(a.mode==='land'||a.mode==='built')) continue;
+    for(const c of a.cells){ if(idx[c]){ const p=cellCentroid(idx[c]); if(p) (a.alt?altCenters:centers).push(p); } } }
+  if(!mpu||!(centers.length||altCenters.length)) return {base,rM,centers,altCenters,pct:null,pctAlt:null,uncovered:[]};
+  const rU=rM/mpu; let tot=0,cov=0,covA=0; const uncovered=[];
   const useUnits=!!(state.table5);
+  const near=(cs,p)=>cs.some(c=>Math.hypot(c[0]-p[0],c[1]-p[1])<=rU);
   for(const [k,fs] of Object.entries(idx)){
     if(!isResidentialCell(fs)) continue;
     const p=cellCentroid(fs); if(!p) continue;
     const w=useUnits?(t5Units(k)||0):cellAreaM2(fs); if(!w) continue;
     tot+=w;
-    if(centers.some(c=>Math.hypot(c[0]-p[0],c[1]-p[1])<=rU)) cov+=w; else uncovered.push(k);
+    if(near(centers,p)){ cov+=w; covA+=w; } else { uncovered.push(k); if(near(altCenters,p)) covA+=w; }
   }
-  return {base,rM,rU,centers,pct:tot?cov/tot*100:null,uncovered,byUnits:useUnits};
+  return {base,rM,rU,centers,altCenters,pct:tot?cov/tot*100:null,pctAlt:tot&&altCenters.length?covA/tot*100:null,uncovered,byUnits:useUnits};
 }
 function _renderRadii(){
   const R=_radii();
@@ -983,7 +1097,7 @@ function _renderRadii(){
     const c=coverage(b);
     return `<tr><td><label><input type="radio" name="pr-rb" ${R.base===b?'checked':''} onchange="PR.setRadii('base','${b}')"> <span class="pr-dot" style="background:${EDU_META[b].color}"></span>${EDU_META[b].short}</label></td>
       <td><input class="pr-in-s" value="${E(R.r[b]??'')}" placeholder="${EDU_META[b].radius}" onchange="PR.setRadii('${b}',this.value)"> מ׳</td>
-      <td>${c.centers.length?(c.pct!=null?`<b>${fmtN(c.pct,0)}%</b> ${c.byUnits?'מיח"ד':'משטח המגורים'} בטווח`:'—'):'<span class="pr-small">אין שיבוץ</span>'}</td></tr>`;
+      <td>${c.centers.length||c.altCenters.length?(c.pct!=null?`<b>${fmtN(c.pct,0)}%</b> ${c.byUnits?'מיח"ד':'משטח המגורים'} בטווח${c.pctAlt!=null?` <span class="pr-small">(${fmtN(c.pctAlt,0)}% כולל חלופיים)</span>`:''}`:'—'):'<span class="pr-small">אין שיבוץ</span>'}</td></tr>`;
   }).join('');
   return `<div class="pr-sec"><h3>רדיוסי שירות <span class="pr-hint">מרחק אווירי ממרכז כל תא משובץ; מגרשי מגורים מחוץ לטווח מסומנים באדום</span></h3>
     <label class="pr-small"><input type="checkbox" ${R.on?'checked':''} onchange="PR.setRadii('on',this.checked)"> הצג בתשריט את הרדיוסים של הסוג המסומן</label>
@@ -997,12 +1111,29 @@ function _refreshSupply(){
   for(const L of lines){
     const allocs=_allocsOf(L.id), d=_dem(L.id);
     const need=num(d.declared&&d.declared.classes)??L.classesRounded;
-    const given=allocs.filter(a=>a.mode!=='none').reduce((t,a)=>t+(num(a.classes)||0),0);
-    const placed=allocs.filter(a=>(a.mode==='land'||a.mode==='built')&&a.cells.length).reduce((t,a)=>t+(num(a.classes)||0),0);
-    set('asum-'+L.id,!allocs.length?'<span class="pr-small">אין מענה</span>'
-      :`<span class="pr-st ${given>=need?'ok':'diff'}">${given>=need?'✓':'⚠'} מענה ל-${fmtN(given)}/${fmtN(need)}</span>${placed?` <span class="pr-small">· ${fmtN(placed)} משובצות בתשריט</span>`:''}`);
+    set('asum-'+L.id,_lineSupplyHtml(L,allocs,need));
     for(const a of allocs) set('achk-'+a.id,allocChecks(a,L).map(chk).join(''));
   }
+}
+// סיכום מענה לשורה: כיתות ייעודיות מול הנדרש; אשכולות משותפים ותאים חלופיים — בנפרד
+function lineSupply(L,allocs,need){
+  const own=allocs.filter(a=>a.mode!=='none'&&!isShared(a));
+  const given=own.filter(a=>!a.alt).reduce((t,a)=>t+(num(a.classes)||0),0);
+  const alt=own.filter(a=>a.alt).reduce((t,a)=>t+(num(a.classes)||0),0);
+  const shared=allocs.filter(a=>a.mode!=='none'&&isShared(a));
+  return {given,alt,shared,ev:evalSupply(given,need,0)};
+}
+function _lineSupplyHtml(L,allocs,need){
+  if(!allocs.length) return '<span class="pr-small">אין מענה</span>';
+  const s=lineSupply(L,allocs,need);
+  const altT=s.alt?` <span class="pr-small">(+${fmtN(s.alt)} בתאים חלופיים)</span>`:'';
+  if(s.shared.length&&s.ev.cls==='short')
+    return `<span class="pr-st keys" title="השטח נבדק יחד לכל האשכול — ראו 'אשכולות משותפים' למטה">⟷ באשכול משותף${s.given?` + ${fmtN(s.given)} כיתות ייעודיות`:''}</span>${altT}`;
+  const e=s.ev;
+  return (e.cls==='short'?`<span class="pr-st diff">⚠ מענה ל-${fmtN(s.given)}/${fmtN(need)}</span>`
+    :e.cls==='surplus'?`<span class="pr-st info">ℹ מענה ל-${fmtN(s.given)}/${fmtN(need)} — עודף ניכר</span>`
+    :`<span class="pr-st ok">✓ מענה ל-${fmtN(s.given)}/${fmtN(need)}${e.cls==='margin'?' — מרווח ביטחון':''}</span>`)+altT
+    +(s.shared.length?' <span class="pr-small">+ אשכול משותף</span>':'');
 }
 
 // ── לשונית בדיקות (חינוך) ──
@@ -1016,23 +1147,31 @@ function _renderChecks(){
   const lines=eduDemand(PR.spec,A);
   for(const L of lines){
     const d=_dem(L.id), s=eduRowStatus(L,d);
-    if(s.status==='ok') items.push({g:'כיתות מול התדריך',ok:true,txt:`${eduShort(L)}: ${num(d.declared.classes)} כיתות — תואם`});
-    else if(s.status==='keys') items.push({g:'כיתות מול התדריך',ok:false,txt:`${eduShort(L)}: עקבי עם מפתח היועץ, אך ${s.diff>0?'+':''}${s.diff} מהתדריך (${L.classesRounded})`});
-    else if(s.status==='diff') items.push({g:'כיתות מול התדריך',ok:false,txt:`${eduShort(L)}: הנספח ${num(d.declared.classes)}, התדריך ${L.classesRounded}`});
-    const allocs=_allocsOf(L.id), need=num(d.declared&&d.declared.classes)??L.classesRounded;
-    const given=allocs.filter(a=>a.mode!=='none').reduce((t,a)=>t+(num(a.classes)||0),0);
-    if(allocs.length&&given<need) items.push({g:'מענה',ok:false,txt:`${eduShort(L)}: מענה ל-${given} מתוך ${need} כיתות`});
-    for(const a of allocs) for(const c of allocChecks(a,L)) if(!c.info) items.push({g:c.txt.includes('טבלה 5')?'מול טבלה 5':'שיבוץ ושטח',ok:c.ok,txt:`${eduShort(L)} (${ALLOC_MODE_LABEL[a.mode]}): ${c.txt}`});
+    const G='כיתות מול התדריך', dcl=num(d.declared&&d.declared.classes);
+    if(s.status==='ok') items.push({g:G,ok:true,txt:`${eduShort(L)}: ${dcl} כיתות — תואם`});
+    else if(s.status==='margin') items.push({g:G,ok:true,txt:`${eduShort(L)}: ${dcl} כיתות (תדריך ${L.classesRounded}) — מרווח ביטחון`});
+    else if(s.status==='keys') items.push({g:G,ok:true,txt:`${eduShort(L)}: ${dcl} כיתות — עקבי עם מפתח היועץ (תדריך ${L.classesRounded})`});
+    else if(s.status==='surplus') items.push({g:G,info:true,txt:`${eduShort(L)}: ${dcl} כיתות מול ${L.classesRounded} בתדריך — עודף ניכר (${fmtN(s.pct,0)}%), כדאי להבין למה`});
+    else if(s.status==='diff') items.push({g:G,ok:false,txt:`${eduShort(L)}: הנספח ${dcl}, התדריך ${L.classesRounded} — חסר`});
+    const allocs=_allocsOf(L.id), need=dcl??L.classesRounded;
+    if(allocs.length){ const ls=lineSupply(L,allocs,need);
+      if(ls.ev.cls==='short'&&!ls.shared.length) items.push({g:'מענה',ok:false,txt:`${eduShort(L)}: מענה ודאי ל-${ls.given} מתוך ${need} כיתות${ls.alt?` (ועוד ${ls.alt} בתאים חלופיים)`:''}`}); }
+    for(const a of allocs){ if(isShared(a)&&aLines(a)[0]!==L.id) continue; // אשכול משותף — פעם אחת
+      const nm=isShared(a)?_allocLabel(a,lines):eduShort(L);
+      for(const c of allocChecks(a,L)) if(!c.info||/עודף/.test(c.txt)) items.push({g:c.txt.includes('טבלה 5')?'מול טבלה 5':'שיבוץ ושטח',ok:c.ok,info:c.info,txt:`${nm} (${ALLOC_MODE_LABEL[a.mode]}${a.alt?', חלופי':''}): ${c.txt}`}); }
   }
+  for(const c of groupChecks()) items.push({g:'אשכולות משותפים',ok:c.ok,info:c.info,txt:`${c.label}: ${c.txt}`});
   const idx=cellIndex(); const used=new Set((PR.spec.provision||[]).flatMap(a=>a.cells||[]));
   const free=Object.keys(idx).filter(k=>isPublicCell(idx[k])&&!used.has(k));
   if(PR.spec.provision.length&&free.length) items.push({g:'שיבוץ ושטח',ok:false,info:true,txt:`${free.length} תאי ציבור בתשריט בלי שיבוץ (ייתכן שמיועדים למוסדות שאינם חינוך): ${free.slice(0,15).join(', ')}${free.length>15?'…':''}`});
-  for(const b of Object.keys(EDU_META)){ const c=coverage(b); if(c.pct!=null) items.push({g:'כיסוי',ok:c.pct>=90,info:c.pct>=90?false:false,txt:`${EDU_META[b].short}: ${fmtN(c.pct,0)}% ${c.byUnits?'מיח"ד':'משטח המגורים'} בטווח ${fmtN(c.rM)} מ׳${c.uncovered.length?` · מחוץ לטווח: ${c.uncovered.slice(0,12).join(', ')}${c.uncovered.length>12?'…':''}`:''}`}); }
+  for(const b of Object.keys(EDU_META)){ const c=coverage(b); if(c.pct!=null) items.push({g:'כיסוי',ok:c.pct>=90,txt:`${EDU_META[b].short}: ${fmtN(c.pct,0)}% ${c.byUnits?'מיח"ד':'משטח המגורים'} בטווח ${fmtN(c.rM)} מ׳${c.pctAlt!=null?` (${fmtN(c.pctAlt,0)}% כולל תאים חלופיים)`:''}${c.uncovered.length?` · מחוץ לטווח: ${c.uncovered.slice(0,12).join(', ')}${c.uncovered.length>12?'…':''}`:''}`}); }
   if(!items.length) return `<div class="pr-note">עוד אין מה לבדוק — הזינו בלשונית <b>ביקוש</b> את מה שהנספח אומר, ובלשונית <b>מענה ושיבוץ</b> את המענים.</div>`;
   const groups=[...new Set(items.map(i=>i.g))];
-  const bad=items.filter(i=>!i.ok&&!i.info).length, good=items.filter(i=>i.ok).length;
-  return `<div class="pr-sec"><h3>בדיקות — חינוך <span class="pr-hint">${good} ✓ · ${bad} ⚠</span></h3>`+
-    groups.map(g=>`<div class="pr-cg"><div class="pr-cg-h">${E(g)}</div>${items.filter(i=>i.g===g).sort((a,b)=>(a.ok?1:0)-(b.ok?1:0)).map(chk).join('')}</div>`).join('')+`</div>`;
+  const bad=items.filter(i=>!i.ok&&!i.info).length, good=items.filter(i=>i.ok&&!i.info).length, inf=items.filter(i=>i.info).length;
+  const rank=i=>i.info?1:i.ok?2:0;
+  return `<div class="pr-sec"><h3>בדיקות — חינוך <span class="pr-hint">${good} ✓ · ${inf} ℹ · ${bad} ⚠</span></h3>
+    <div class="pr-small" style="margin-bottom:8px">⚠ = חוסר או אי-התאמה · ℹ = לתשומת לב (עודף ניכר, תאים חלופיים) · עודף של עד ${MARGIN*100}% נחשב מרווח ביטחון תקין.</div>`+
+    groups.map(g=>`<div class="pr-cg"><div class="pr-cg-h">${E(g)}</div>${items.filter(i=>i.g===g).sort((a,b)=>rank(a)-rank(b)).map(chk).join('')}</div>`).join('')+`</div>`;
 }
 
 function _renderSoon(tab){
@@ -1051,10 +1190,9 @@ PR.cellInfoHtml=function(cn){
   if(!list.length) return '';
   const lines=_eduLines();
   return `<div class="inf-sec">נספח הפרוגרמה — מוסדות בתא</div>`+list.map(a=>{
-    const L=lines.find(l=>l.id===a.line)||{id:a.line,inst:a.line};
-    const meta=EDU_META[eduBase(a.line)]||{};
-    return `<div style="display:flex;gap:6px;align-items:center;margin:3px 0"><span style="width:10px;height:10px;border-radius:50%;background:${meta.color};display:inline-block"></span>
-      <b>${E(eduShort(L))}</b> — ${num(a.classes)?fmtN(num(a.classes))+' כיתות · ':''}${E(ALLOC_MODE_LABEL[a.mode]||'')}${a.mode==='built'&&num(a.built)?` · ${fmtN(num(a.built))} מ"ר`:''}</div>`;
+    const dots=aLines(a).map(l=>`<span style="width:10px;height:10px;border-radius:50%;background:${(EDU_META[eduBase(l)]||{}).color};display:inline-block"></span>`).join('');
+    return `<div style="display:flex;gap:6px;align-items:center;margin:3px 0">${dots}
+      <b>${E(_allocLabel(a,lines))}</b> — ${isShared(a)?'אשכול משותף · ':''}${num(a.classes)?fmtN(num(a.classes))+' כיתות · ':''}${E(ALLOC_MODE_LABEL[a.mode]||'')}${a.mode==='built'&&num(a.built)?` · ${fmtN(num(a.built))} מ"ר`:''}${a.alt?' · <b>תא חלופי</b> (אחד מכמה שימושים)':''}</div>`;
   }).join('');
 };
 
@@ -1063,6 +1201,20 @@ function _pathCell(ctx,fs){
   ctx.beginPath();
   for(const f of fs){ const g=f.geometry; const polys=g.type==='Polygon'?[g.coordinates]:g.coordinates;
     for(const p of polys) for(const ring of p){ ring.forEach(([x,y],i)=>{ const [sx,sy]=dc(x,y); i?ctx.lineTo(sx,sy):ctx.moveTo(sx,sy); }); ctx.closePath(); } }
+}
+// פסים אלכסוניים בתוך תא: thin=false → פסים עבים לסירוגין בצבעים (אשכול); thin=true → קווקוו דק (חלופי)
+function _stripes(ctx,fs,cols,alpha,w,thin){
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  for(const f of fs){ const g=f.geometry; const polys=g.type==='Polygon'?[g.coordinates]:g.coordinates;
+    for(const p of polys) for(const [x,y] of p[0]){ const [sx,sy]=dc(x,y); if(sx<x0)x0=sx; if(sx>x1)x1=sx; if(sy<y0)y0=sy; if(sy>y1)y1=sy; } }
+  ctx.save(); _pathCell(ctx,fs); ctx.clip();
+  const step=thin?7:w, h=y1-y0; let i=0;
+  ctx.lineWidth=thin?w:w+0.5;
+  for(let x=x0-h;x<x1+step;x+=step,i++){
+    ctx.strokeStyle=_hexA(cols[i%cols.length],alpha);
+    ctx.beginPath(); ctx.moveTo(x,y1); ctx.lineTo(x+h,y0); ctx.stroke();
+  }
+  ctx.restore();
 }
 function _hexA(hex,a){ const h=hex.replace('#',''); const n=parseInt(h.length===3?h.split('').map(c=>c+c).join(''):h,16); return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`; }
 PR.drawLayer=function(ctx){
@@ -1083,30 +1235,40 @@ PR.drawLayer=function(ctx){
     if(c.rU){
       ctx.strokeStyle='rgba(231,76,60,.9)'; ctx.lineWidth=2; ctx.fillStyle='rgba(231,76,60,.18)';
       for(const k of c.uncovered){ const fs=idx[k]; if(!fs) continue; _pathCell(ctx,fs); ctx.fill(); ctx.stroke(); }
-      for(const p of c.centers){ const [sx,sy]=dc(p[0],p[1]); const r=c.rU*scale;
+      for(const p of c.centers){ const [sx,sy]=dc(p[0],p[1]); const r=Math.abs(c.rU*scale);
         ctx.beginPath(); ctx.arc(sx,sy,r,0,Math.PI*2); ctx.fillStyle=_hexA(col,.07); ctx.fill();
         ctx.setLineDash([8,5]); ctx.strokeStyle=_hexA(col,.9); ctx.lineWidth=1.8; ctx.stroke(); ctx.setLineDash([]); }
+      for(const p of c.altCenters||[]){ const [sx,sy]=dc(p[0],p[1]); const r=Math.abs(c.rU*scale); // תאים חלופיים — עיגול מנוקד וחלש
+        ctx.beginPath(); ctx.arc(sx,sy,r,0,Math.PI*2); ctx.setLineDash([2,5]); ctx.strokeStyle=_hexA(col,.6); ctx.lineWidth=1.4; ctx.stroke(); ctx.setLineDash([]); }
     }
   }
-  // 3. תאים משובצים
+  // 3. תאים משובצים: ייעודי = מילוי · אשכול משותף = פסים בצבעי הסוגים · חלופי = קווקוו דק ללא מילוי
   const pickA=provision.find(a=>a.id===PR.pick);
   const L=Object.keys(byCell).length?_eduLines():[];
+  const colOf=l=>(EDU_META[eduBase(l)]||{}).color||'#888';
   for(const [k,list] of Object.entries(byCell)){
     const fs=idx[k]; if(!fs) continue;
     const land=list.filter(a=>a.mode==='land');
-    const hl=PR.hlLine&&list.some(a=>a.line===PR.hlLine);
+    const firm=land.filter(a=>!a.alt), alt=land.filter(a=>a.alt);
+    const hl=PR.hlLine&&list.some(a=>aLines(a).includes(PR.hlLine));
     const picked=pickA&&pickA.cells.includes(k);
-    if(land.length){
-      const col=(EDU_META[eduBase(land[0].line)]||{}).color||'#888';
-      _pathCell(ctx,fs); ctx.fillStyle=_hexA(col,hl?.7:.5); ctx.fill();
-      ctx.lineWidth=hl||picked?4:2.5; ctx.strokeStyle=picked?'#00e0ff':col; ctx.stroke();
+    if(firm.length){
+      const cols=[...new Set(firm.flatMap(aLines).map(colOf))];
+      if(cols.length===1){ _pathCell(ctx,fs); ctx.fillStyle=_hexA(cols[0],hl?.7:.5); ctx.fill(); }
+      else _stripes(ctx,fs,cols,hl?.8:.6,9,false);
+      _pathCell(ctx,fs); ctx.lineWidth=hl||picked?4:2.5; ctx.strokeStyle=picked?'#00e0ff':cols[0]; ctx.stroke();
+    } else if(alt.length){
+      const cols=[...new Set(alt.flatMap(aLines).map(colOf))];
+      _pathCell(ctx,fs); ctx.fillStyle=_hexA(cols[0],hl?.2:.1); ctx.fill();
+      _stripes(ctx,fs,cols,hl?.95:.8,2,true);
+      _pathCell(ctx,fs); ctx.setLineDash([5,4]); ctx.lineWidth=hl||picked?3.5:2; ctx.strokeStyle=picked?'#00e0ff':cols[0]; ctx.stroke(); ctx.setLineDash([]);
     } else if(hl||picked){ _pathCell(ctx,fs); ctx.lineWidth=3; ctx.strokeStyle=picked?'#00e0ff':'#ffd400'; ctx.stroke(); }
     // תוויות: מוסדות בתא
     const p=cellCentroid(fs); if(!p) continue;
     const [sx,sy]=dc(p[0],p[1]);
     // מספר הכיתות מוצג רק כשהמענה כולו בתא אחד (באשכול של כמה תאים — רק שם המוסד)
-    const tags=list.map(a=>{ const ln=L.find(l=>l.id===a.line)||{id:a.line,inst:''};
-      return {txt:eduShort(ln)+(num(a.classes)&&a.cells.length===1?' '+fmtN(num(a.classes)):''),col:(EDU_META[eduBase(a.line)]||{}).color||'#888',built:a.mode==='built'}; });
+    const tags=list.map(a=>({txt:_allocLabel(a,L).replace(/\+/g,'/')+(num(a.classes)&&a.cells.length===1&&!isShared(a)?' '+fmtN(num(a.classes)):'')+(a.alt?' ?':''),
+      col:colOf(aLines(a)[0]),built:a.mode==='built'}));
     ctx.font='bold 11px Arial'; ctx.textBaseline='middle'; ctx.textAlign='center';
     const h=16, gap=2; let y=sy-(tags.length*(h+gap))/2+h/2;
     for(const t of tags){

@@ -1702,7 +1702,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 // ── App version — bump on EVERY deploy (date + that day's deploy number), so the
 //    user and Claude can confirm they're looking at the same build. Shown in the
 //    map toolbar and the loading-page footer.
-const APP_VERSION='2026.09.24-7';
+const APP_VERSION='2026.09.24-8';
 // Version of the road-network DETECTION ALGORITHM only — bump when _rnDetect's
 // output changes, so a network saved from an older run is flagged as stale
 // (networks are saved per project and are NOT re-detected on load).
@@ -3057,16 +3057,86 @@ async function _mavatApplyDocs(kinds,d,url){
   if(!failed.length) setTimeout(()=>{const b=document.getElementById('mavat-status');if(b&&b.className==='ms-ok')_mavatStatus(null);},9000);
   if(ok) await _projAfterLaunch(); // לשמור את הקבצים בפרויקט
 }
-// פתיחת מסמך שנמשך (PDF/DOC) בלשונית חדשה
+// פתיחת מסמך שנמשך: PDF — בחלונית צפה בתוך הממשק (ניתנת להזזה, שינוי גודל ומזעור); DOC — הורדה
 function openPlanDoc(kind){
   const files=kind==='takanon'?(state.files.takanon||state.files.word):state.files[kind];
   const f=files&&files[0]; if(!f) return;
   const type=/\.pdf$/i.test(f.name)?'application/pdf':(f.type||'application/octet-stream');
+  if(type==='application/pdf'){ _docWinOpen(f,kind==='prog'?'נספח פרוגרמה':kind==='takanon'?'תקנון':f.name); return; }
   const u=URL.createObjectURL(new Blob([f],{type}));
-  if(type==='application/pdf') window.open(u,'_blank','noopener');
-  else{ const a=document.createElement('a'); a.href=u; a.download=f.name; document.body.appendChild(a); a.click(); a.remove(); }
+  const a=document.createElement('a'); a.href=u; a.download=f.name; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(u),60000);
 }
+// ── חלונית מסמך צפה ──
+const _docWin={el:null,url:null,file:null,min:false};
+function _docWinGeom(){ try{ return JSON.parse(localStorage.getItem('tasrit_docwin')||'null'); }catch(e){ return null; } }
+function _docWinSave(){ const el=_docWin.el; if(!el) return; try{ localStorage.setItem('tasrit_docwin',JSON.stringify({l:el.offsetLeft,t:el.offsetTop,w:el.offsetWidth,h:_docWin.min?(_docWin.h||el.offsetHeight):el.offsetHeight})); }catch(e){} }
+function _docWinClamp(){ const el=_docWin.el; if(!el) return;
+  const W=innerWidth,H=innerHeight; el.style.left=Math.max(0,Math.min(el.offsetLeft,W-120))+'px'; el.style.top=Math.max(0,Math.min(el.offsetTop,H-36))+'px'; }
+function _docWinBuild(){
+  const st=document.createElement('style');
+  st.textContent=`#doc-win{position:fixed;z-index:9000;background:#0f1824;border:1px solid #3d6a9a;border-radius:9px;box-shadow:0 10px 36px rgba(0,0,0,.45);display:flex;flex-direction:column;overflow:hidden;min-width:260px}
+#doc-win .dw-h{display:flex;align-items:center;gap:6px;padding:5px 8px;background:#1d3350;color:#e6eef8;cursor:move;user-select:none;font-size:13px;direction:rtl}
+#doc-win .dw-t{flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#doc-win .dw-h button{background:#27456b;border:1px solid #3d6a9a;color:#fff;border-radius:5px;cursor:pointer;font-size:12px;padding:1px 8px;line-height:18px}
+#doc-win .dw-h button:hover{background:#34598a}
+#doc-win iframe{flex:1;border:0;background:#525659;width:100%}
+#doc-win .dw-rs{position:absolute;left:0;bottom:0;width:16px;height:16px;cursor:nesw-resize;background:linear-gradient(225deg,transparent 50%,#6aa6e0 50%,#6aa6e0 60%,transparent 60%,transparent 70%,#6aa6e0 70%,#6aa6e0 80%,transparent 80%)}
+#doc-win.min{height:auto!important}
+#doc-win.min iframe,#doc-win.min .dw-rs{display:none}
+#doc-win.drag iframe{pointer-events:none}
+body.theme-light #doc-win{background:#fff;border-color:#8fb0d6}
+body.theme-light #doc-win .dw-h{background:#dde5ef;color:#1a3560}
+body.theme-light #doc-win .dw-h button{background:#fff;color:#1a3560;border-color:#8fb0d6}`;
+  document.head.appendChild(st);
+  const el=document.createElement('div'); el.id='doc-win';
+  el.innerHTML=`<div class="dw-h" title="גררו להזזה · לחיצה כפולה למזעור"><span>📄</span><span class="dw-t"></span>
+    <button data-act="min" title="מזעור / הגדלה">—</button><button data-act="tab" title="פתיחה בלשונית נפרדת">↗</button><button data-act="close" title="סגירה">✕</button></div>
+    <iframe title="מסמך"></iframe><div class="dw-rs" title="שינוי גודל"></div>`;
+  document.body.appendChild(el); _docWin.el=el;
+  const g=_docWinGeom(), W=innerWidth, H=innerHeight;
+  const w=g&&g.w||Math.min(760,Math.round(W*0.45)), h=g&&g.h||Math.round(H*0.82);
+  Object.assign(el.style,{width:w+'px',height:h+'px',left:(g?g.l:16)+'px',top:(g?g.t:Math.round(H*0.09))+'px'});
+  _docWinClamp();
+  const hdr=el.querySelector('.dw-h');
+  hdr.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return;
+    const act=b.dataset.act;
+    if(act==='close') _docWinClose();
+    else if(act==='min') _docWinMin(!_docWin.min);
+    else if(act==='tab'&&_docWin.url) window.open(_docWin.url,'_blank','noopener'); });
+  hdr.addEventListener('dblclick',e=>{ if(!e.target.closest('button')) _docWinMin(!_docWin.min); });
+  // גרירה — עם pointer capture; ה-iframe לא "בולע" את העכבר בזמן הגרירה
+  const drag=(handle,onMove)=>handle.addEventListener('pointerdown',e=>{
+    if(e.button!==0||e.target.closest('button')) return;
+    e.preventDefault(); handle.setPointerCapture(e.pointerId); el.classList.add('drag');
+    const s={x:e.clientX,y:e.clientY,l:el.offsetLeft,t:el.offsetTop,w:el.offsetWidth,h:el.offsetHeight};
+    const mv=ev=>onMove(ev.clientX-s.x,ev.clientY-s.y,s);
+    const up=()=>{ handle.removeEventListener('pointermove',mv); handle.removeEventListener('pointerup',up); handle.removeEventListener('pointercancel',up); el.classList.remove('drag'); _docWinClamp(); _docWinSave(); };
+    handle.addEventListener('pointermove',mv); handle.addEventListener('pointerup',up); handle.addEventListener('pointercancel',up);
+  });
+  drag(hdr,(dx,dy,s)=>{ el.style.left=(s.l+dx)+'px'; el.style.top=Math.max(0,s.t+dy)+'px'; });
+  // ידית שינוי גודל בפינה השמאלית-תחתונה: הצד הימני נשאר במקומו
+  drag(el.querySelector('.dw-rs'),(dx,dy,s)=>{ const w=Math.max(260,s.w-dx); el.style.width=w+'px'; el.style.left=(s.l+s.w-w)+'px'; el.style.height=Math.max(160,s.h+dy)+'px'; });
+  addEventListener('resize',_docWinClamp);
+}
+function _docWinOpen(file,title){
+  if(!_docWin.el) _docWinBuild();
+  const el=_docWin.el;
+  if(_docWin.file!==file){
+    if(_docWin.url) URL.revokeObjectURL(_docWin.url);
+    _docWin.url=URL.createObjectURL(new Blob([file],{type:'application/pdf'})); _docWin.file=file;
+    el.querySelector('iframe').src=_docWin.url;
+  }
+  el.querySelector('.dw-t').textContent=title+' — '+file.name;
+  el.style.display='flex'; _docWinMin(false);
+}
+function _docWinMin(on){ const el=_docWin.el; if(!el) return;
+  if(on&&!_docWin.min) _docWin.h=el.offsetHeight;
+  _docWin.min=!!on; el.classList.toggle('min',_docWin.min);
+  if(!_docWin.min&&_docWin.h) el.style.height=_docWin.h+'px';
+  el.querySelector('[data-act="min"]').textContent=_docWin.min?'▢':'—'; }
+function _docWinClose(){ const el=_docWin.el; if(!el) return; _docWinSave(); el.style.display='none';
+  el.querySelector('iframe').src='about:blank'; if(_docWin.url) URL.revokeObjectURL(_docWin.url); _docWin.url=null; _docWin.file=null; }
 // כמה עותקים של התוסף מותקנים (עותק ישן + חדש = כל בקשה מבוצעת פעמיים ומתנגשת)
 const _bridgeCopies=new Set();
 document.addEventListener('tasrit-bridge-ready',e=>{try{const v=_bridgeDetail(e).version;if(v)_bridgeCopies.add(v);_plannumBridgeUI();}catch(x){}});
