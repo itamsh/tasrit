@@ -131,6 +131,7 @@ function emptySpec(){
     demand:{},     // {lineId: {declared:{classes,institutions,land,model}, keys:{rate,grades,perClass}}} — מה שהנספח אומר
     provision:[],  // [{id,line,lines?,alt?,mode,cells:[],classes,land,built,model,note}] — המענה שהיועץ הציע ושיבוצו בתאים
                    // lines = אשכול משותף לכמה סוגים (למשל מעון+גן) · alt = תאים חלופיים ("אחד מכמה שימושים אפשריים")
+    builtNonEdu:[], // תאים עם שטח ציבורי מבונה בטבלה 5 שסומנו "לא לחינוך"
     radii:null, open_space:{}, notes:[],
   };
 }
@@ -428,6 +429,10 @@ const CSS=`
 .pr-chips{display:flex;flex-wrap:wrap;gap:4px}
 .pr-chip.free{border-style:dashed;border-color:#c0392b;background:#2a1a1a}
 .pr-chip.used{background:#1d3a2b;border-color:#3aa06a}
+.pr-chip.non{background:#2a2a33;border-color:#666;color:#bbb;text-decoration:line-through}
+.pr-bsel{margin-right:auto;background:#0f1824;border:1px solid #6c4a8a;color:#e6eef8;border-radius:5px;padding:2px 5px;font-size:11.5px}
+.pr-legend .lg-built{border:2.5px solid #3498db;box-shadow:0 0 0 1.5px #fff inset;background:transparent}
+.pr-legend .lg-t5b{border:1.5px dashed #9b59b6}
 .pr-btn.on{background:#00a6c8;border-color:#00c8e8;color:#fff}
 .pr-pick{position:sticky;top:-12px;z-index:5;background:#0f3a4a;border:1px solid #00c8e8;border-radius:8px;padding:8px 10px;margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .pr-chk{font-size:11.5px;margin:2px 0;line-height:1.45}
@@ -443,6 +448,7 @@ body.theme-light .pr-atag{color:#1a3560}
 body.theme-light .pr-tog{background:#fff;border-color:#bfccdb;color:#4a5d74}
 body.theme-light .pr-tog.on{background:#dcebfb;border-color:#5a8fd0;color:#1a3560}
 body.theme-light .pr-legend{color:#4a5d74}
+body.theme-light .pr-bsel{background:#fff;color:#1c2b3c}
 body.theme-light .pr-exp{color:#4a5d74;border-color:#bfccdb}
 body.theme-light .pr-docrow{background:#fff;border-color:#bfccdb}
 body.theme-light .pr-docver{color:#4a5d74}
@@ -779,12 +785,30 @@ function t5CellCheck(cn,mode){
     return {ok:pub,txt:pub?`תא ${cn}: ייעוד "${rows[0].yiud}" בטבלה 5`:`תא ${cn}: בטבלה 5 הייעוד הוא "${rows[0].yiud}" — לא ציבורי`};
   }
   if(mode==='built'){
-    const pr=rows.filter(r=>/ציבור/.test(r.shimush||''));
-    const sqm=pr.reduce((t,r)=>t+(num(r.ikariMal)||0)+(num(r.sherutMal)||0),0);
-    return pr.length?{ok:true,sqm,txt:`תא ${cn}: שימוש "מבנים ומוסדות ציבור" — ${fmtN(sqm)} מ"ר (עיקרי+שירות)`}
+    const pr=rows.filter(isPubUseRow);
+    const sqm=t5PublicSqm(rows);
+    return pr.length?{ok:true,sqm,txt:`תא ${cn}: שימוש "מבנים ומוסדות ציבור" — ${fmtN(sqm)} מ"ר`}
       :{ok:false,txt:`תא ${cn}: אין בטבלה 5 שימוש ציבורי בתא הזה`};
   }
   return null;
+}
+// שורת "מבנים ומוסדות ציבור" בטבלה 5. השטח: עיקרי+שירות מעל הקרקע, ואם ריקים — "סה"כ מעל הקרקע"
+// (בתמ"ל 3006 רק העמודה הכוללת מולאה)
+const isPubUseRow=r=>/מבנים ומוסדות ציבור/.test(r.shimush||'');
+function t5PublicSqm(rows){
+  return (rows||[]).filter(isPubUseRow).reduce((t,r)=>{ const a=(num(r.ikariMal)||0)+(num(r.sherutMal)||0); return t+(a>0?a:(num(r.kollMal)||0)); },0);
+}
+// סריקת טבלה 5: שטחי ציבור מבונים במגרשים סחירים (מגורים / תעסוקה / מסחר…)
+function builtScan(){
+  if(typeof state==='undefined'||!state.table5) return null;
+  const out=[];
+  for(const [cn,rows] of Object.entries(state.table5)){
+    if(!rows||!rows.some(isPubUseRow)) continue;
+    const yiud=(rows[0].yiud||'').trim();
+    if(/ציבור/.test(yiud)) continue; // קרקע חומה — לא הפרשה מבונה
+    out.push({cn:String(cn),yiud,sqm:t5PublicSqm(rows),units:rows.reduce((t,r)=>t+(num(r.yihud)||0),0)});
+  }
+  return out.sort((a,b)=>(+a.cn)-(+b.cn));
 }
 
 // בדיקות להקצאה אחת: שטח התאים מול הדגם, טבלה 5, מבונה מול טבלה 5
@@ -829,11 +853,22 @@ function allocChecks(a,line){
     }
   }
   if(a.mode==='built'){
-    let sum=0,any=false;
-    for(const c of a.cells){ const t=t5CellCheck(c,'built'); if(t){ out.push(t); if(t.ok){sum+=t.sqm;any=true;} } }
+    let sum=0,any=false; const good=[],bad=[];
+    for(const c of a.cells){ const t=t5CellCheck(c,'built'); if(!t) continue; if(t.ok){ sum+=t.sqm; any=true; good.push(t); } else bad.push(t); }
+    // מסכמים: שורה אחת לכל התאים התקינים, פירוט רק לבעייתיים
+    if(good.length===1) out.push(good[0]);
+    else if(good.length>1) out.push({ok:true,txt:`טבלה 5: שימוש ציבורי בכל ${good.length} התאים — סה"כ ${fmtN(sum)} מ"ר`});
+    out.push(...bad);
     const decl=num(a.built);
-    if(decl!=null&&any&&Math.abs(decl-sum)>Math.max(10,decl*0.03)) out.push({ok:false,txt:`הנספח: ${fmtN(decl)} מ"ר מבונה; טבלה 5 בתאים אלה: ${fmtN(sum)} מ"ר`});
-    else if(decl!=null&&any) out.push({ok:true,txt:`המבונה בנספח (${fmtN(decl)} מ"ר) תואם לטבלה 5`});
+    if(decl!=null&&any){ const ev=evalSupply(sum,decl,Math.max(10,decl*0.03));
+      out.push(ev.cls==='short'?{ok:false,txt:`הנספח: ${fmtN(decl)} מ"ר מבונה; בטבלה 5 בתאים אלה רק ${fmtN(sum)} מ"ר`}
+        :ev.cls==='ok'?{ok:true,txt:`המבונה בנספח (${fmtN(decl)} מ"ר) תואם לטבלה 5`}
+        :{ok:ev.cls==='margin',info:ev.cls==='surplus',txt:`בטבלה 5 ${fmtN(sum)} מ"ר — יותר מהמצוין בנספח (${fmtN(decl)} מ"ר)`}); }
+    // הערכת כיתות מהמבונה — רק אם הוזן מפתח מ"ר לכיתה (מהנספח/התדריך)
+    const per=num(a.sqmPerClass), cls=num(a.classes), base=decl??(any?sum:null);
+    if(per&&base){ const est=base/per;
+      out.push(cls?{ok:est>=cls-0.5,txt:`${fmtN(base)} מ"ר ÷ ${fmtN(per)} מ"ר לכיתה ≈ ${fmtN(est,1)} כיתות · בנספח ${fmtN(cls)}${est<cls-0.5?' — המבונה לא מספיק':''}`}
+        :{info:true,txt:`${fmtN(base)} מ"ר ÷ ${fmtN(per)} מ"ר לכיתה ≈ ${fmtN(est,1)} כיתות`}); }
   }
   return out;
 }
@@ -993,7 +1028,8 @@ function _renderSupplyEdu(){
           <select data-a="${a.id}.mode" onchange="PR.onAlloc(this)">${ALLOC_MODES.map(([v,l])=>`<option value="${v}"${a.mode===v?' selected':''}>${l}</option>`).join('')}</select>
           <label>${shared?'כיתות (סה"כ באשכול)':'כיתות'} <input class="pr-in-s" data-a="${a.id}.classes" value="${E(a.classes??'')}" oninput="PR.onAlloc(this)"${shared?' title="לא חובה — רק אם הנספח מציין"':''}></label>
           ${a.mode==='land'?`<label>ד׳ <input class="pr-in-s" data-a="${a.id}.land" value="${E(a.land??'')}" oninput="PR.onAlloc(this)" title="שטח קרקע כפי שבנספח (לא חובה)"></label>`:''}
-          ${a.mode==='built'?`<label>מ"ר <input class="pr-in-s" data-a="${a.id}.built" value="${E(a.built??'')}" oninput="PR.onAlloc(this)" title="שטח מבונה כפי שבנספח"></label>`:''}
+          ${a.mode==='built'?`<label>מ"ר <input class="pr-in-s" data-a="${a.id}.built" value="${E(a.built??'')}" oninput="PR.onAlloc(this)" title="שטח מבונה כפי שבנספח (לא חובה — ריק = לפי טבלה 5)"></label>
+            <label title="לא חובה — להערכת מספר הכיתות מהמ&quot;ר">מ"ר לכיתה <input class="pr-in-s" data-a="${a.id}.sqmPerClass" value="${E(a.sqmPerClass??'')}" oninput="PR.onAlloc(this)"></label>`:''}
           ${a.mode==='land'&&isSchool&&!shared?`<select data-a="${a.id}.model" onchange="PR.onAlloc(this)" title="דגם">${MODEL_OPTS.map(([v,l])=>`<option value="${v}"${(a.model||'')===v?' selected':''}>${v?l:'דגם'}</option>`).join('')}</select>`:''}
           <button class="pr-del" onclick="PR.delAlloc('${a.id}')" title="מחיקת מענה">🗑</button>
         </div>
@@ -1015,11 +1051,57 @@ function _renderSupplyEdu(){
     </div>`;
   }).join('');
   const legend=`<div class="pr-legend"><span><i class="lg-fill"></i>תא ייעודי</span><span><i class="lg-stripe"></i>אשכול משותף (פסים בצבעי הסוגים)</span>
-    <span><i class="lg-alt"></i>תא חלופי (קווקוו דק, "?" בתווית)</span><span><i class="lg-free"></i>תא ציבור בלי שיבוץ</span></div>`;
+    <span><i class="lg-alt"></i>תא חלופי (קווקוו דק, "?" בתווית)</span><span><i class="lg-free"></i>תא ציבור בלי שיבוץ</span><span><i class="lg-built"></i>הפרשה מבונה (מסגרת בלבד)</span><span><i class="lg-t5b"></i>🏢 מבונה בטבלה 5, לא שויך</span></div>`;
   return banner+`<div class="pr-sec"><h3>🎓 מענה ושיבוץ בתשריט <span class="pr-hint">לכל שורה: איך היועץ נתן מענה, ובאילו תאי שטח</span></h3>
     <div class="pr-small" style="margin-bottom:6px">גנים ומעונות מוקצים לרוב <b>באשכול משותף</b> — הוסיפו מענה אחד, וסמנו בו "משרת גם". תאים שהנספח מציע לכמה שימושים חלופיים — סמנו "תאים חלופיים".</div>
-    ${legend}${cards}</div>`+_renderGroups()+_renderPublicCells()+_renderRadii();
+    ${legend}${cards}</div>`+_renderGroups()+_renderBuiltScan()+_renderPublicCells()+_renderRadii();
 }
+// ── שטחי ציבור מבונים שנמצאו בטבלה 5 ──
+function _builtAssigned(){ const m={}; for(const a of PR.spec.provision||[]) if(a.mode==='built') for(const c of a.cells) (m[c]=m[c]||[]).push(a); return m; }
+function _nonEdu(){ return PR.spec.builtNonEdu||(PR.spec.builtNonEdu=[]); }
+function _builtGroupsOf(scan){ const g={}; for(const s of scan) (g[s.yiud]=g[s.yiud]||[]).push(s); return g; }
+function _renderBuiltScan(){
+  const scan=builtScan();
+  if(scan==null) return `<div class="pr-sec"><h3>🏢 שטחי ציבור מבונים <span class="pr-hint">במגרשים סחירים</span></h3><div class="pr-small">טענו טבלה 5 כדי לאתר אוטומטית הקצאות מבונות במגרשי מגורים/תעסוקה.</div></div>`;
+  if(!scan.length) return `<div class="pr-sec"><h3>🏢 שטחי ציבור מבונים <span class="pr-hint">במגרשים סחירים</span></h3><div class="pr-small">בטבלה 5 אין שימוש "מבנים ומוסדות ציבור" במגרשים שאינם ציבוריים.</div></div>`;
+  const asg=_builtAssigned(), non=new Set(_nonEdu()), lines=_eduLines();
+  const tot=scan.reduce((t,s)=>t+s.sqm,0);
+  const groups=_builtGroupsOf(scan);
+  const opts=`<option value="">שייך את הפנויים ל…</option>`+
+    (lines.some(l=>l.id==='maon')&&lines.some(l=>l.id==='gan')?`<option value="maon+gan">מעון + גן (אשכול משותף)</option>`:'')+
+    lines.map(l=>`<option value="${l.id}">${E(eduShort(l))}</option>`).join('')+`<option value="__non">לא לחינוך (מוסדות אחרים)</option>`;
+  const blocks=Object.entries(groups).map(([yiud,list])=>{
+    const sq=list.reduce((t,s)=>t+s.sqm,0);
+    const chips=list.map(s=>{ const as=asg[s.cn];
+      const cls=as?'used':non.has(s.cn)?'non':'free';
+      const ttl=as?'משויך: '+as.map(a=>_allocLabel(a,lines)).join(', '):non.has(s.cn)?'סומן כלא-חינוך':'לא משויך';
+      return `<span class="pr-chip ${cls}" title="${E(ttl)}${s.units?` · ${s.units} יח"ד`:''}${cls==='non'?' · לחיצה מבטלת':''}"${cls==='non'?` onclick="PR.unNonEdu('${s.cn}')" style="cursor:pointer"`:''} onmouseenter="PR.hlCells(['${s.cn}'])" onmouseleave="PR.hlCells(null)">${E(s.cn)} · ${fmtN(s.sqm)}</span>`; }).join('');
+    const free=list.filter(s=>!asg[s.cn]&&!non.has(s.cn)).length;
+    return `<div class="pr-card" onmouseenter="PR.hlCells(${E(JSON.stringify(list.map(s=>s.cn)))})" onmouseleave="PR.hlCells(null)">
+      <div class="pr-card-h"><b>${E(yiud)}</b><span class="pr-small">${list.length} תאים · ${fmtN(sq)} מ"ר${free?` · ${free} לא משויכים`:''}</span>
+        ${free?`<select class="pr-bsel" onchange="PR.assignBuilt(${E(JSON.stringify(yiud))},this.value)">${opts}</select>`:''}</div>
+      <div class="pr-chips">${chips}</div></div>`;
+  }).join('');
+  return `<div class="pr-sec"><h3>🏢 שטחי ציבור מבונים בטבלה 5 <span class="pr-hint">${scan.length} מגרשים סחירים · ${fmtN(tot)} מ"ר — זוהו אוטומטית</span></h3>
+    <div class="pr-small" style="margin-bottom:6px">מגרשים שבטבלה 5 יש בהם שימוש "מבנים ומוסדות ציבור" אף שהייעוד שלהם אינו ציבורי. שייכו אותם לפי הנספח —
+      קבוצה שלמה בבת אחת, או תא-תא דרך "📍 שבץ בתשריט" במענה "הפרשה מבונה". מספר אחרי התא = מ"ר.
+      <span class="pr-chip used">משויך</span> <span class="pr-chip free">לא משויך</span> <span class="pr-chip non">לא לחינוך</span></div>${blocks}</div>`;
+}
+PR.assignBuilt=function(yiud,target){
+  if(!target) return;
+  const scan=builtScan()||[], asg=_builtAssigned(), non=_nonEdu();
+  const cells=scan.filter(s=>s.yiud===yiud&&!asg[s.cn]&&!non.includes(s.cn)).map(s=>s.cn);
+  if(!cells.length) return;
+  if(target==='__non'){ non.push(...cells); PR.render(); safeRedraw(); return; }
+  const ls=target.split('+');
+  const sqm=cells.reduce((t,c)=>t+t5PublicSqm(t5Of(c)),0);
+  PR.spec.provision.push({id:'a'+Date.now().toString(36)+(_aSeq++),line:ls[0],lines:ls.length>1?ls:undefined,mode:'built',cells,
+    classes:'',land:'',built:'',model:'',note:`שויך מטבלה 5 (${fmtN(sqm)} מ"ר)`});
+  PR.render(); safeRedraw();
+};
+PR.unNonEdu=function(cn){ PR.spec.builtNonEdu=_nonEdu().filter(c=>c!==cn); PR.render(); safeRedraw(); };
+PR.hlCellList=null;
+PR.hlCells=function(list){ PR.hlCellList=list; safeRedraw(); };
 PR.toggleShare=function(id,lineId){
   const a=_alloc(id); if(!a) return;
   let ls=aLines(a).slice();
@@ -1042,7 +1124,9 @@ function groupChecks(){
     const firmCells=[...new Set(g.allocs.filter(a=>a.mode==='land'&&!a.alt).flatMap(a=>a.cells))];
     const altCells=[...new Set(g.allocs.filter(a=>a.mode==='land'&&a.alt).flatMap(a=>a.cells))].filter(c=>!firmCells.includes(c));
     const firm=_landArea(firmCells), alt=_landArea(altCells);
-    const have=`בתאים ייעודיים ${fmtN(firm,1)} ד׳ (${firmCells.length} תאים)${altCells.length?` · בתאים חלופיים עוד ${fmtN(alt,1)} ד׳ (${altCells.length})`:''}`;
+    const bCells=[...new Set(g.allocs.filter(a=>a.mode==='built').flatMap(a=>a.cells))];
+    const bSqm=bCells.reduce((t,c)=>t+t5PublicSqm(t5Of(c)),0);
+    const have=`בתאים ייעודיים ${fmtN(firm,1)} ד׳ (${firmCells.length} תאים)${altCells.length?` · בתאים חלופיים עוד ${fmtN(alt,1)} ד׳ (${altCells.length})`:''}${bCells.length?` · ובנוסף הפרשה מבונה ${fmtN(bSqm)} מ"ר ב-${bCells.length} מגרשים`:''}`;
     if(need==null){ out.push({info:true,label,txt:`${have} · להשוואה: הזינו בלשונית "ביקוש" ▸ פרטים את השטח הנדרש ל${missing.map(p=>_lineShortById(p.id,lines)).join(', ')}`}); continue; }
     const needTxt=`נדרש לפי הנספח ${fmtN(need,1)} ד׳ (${parts.map(p=>_lineShortById(p.id,lines)+' '+fmtN(p.land,1)).join(' + ')})`;
     const ev=evalSupply(firm,need,Math.max(0.1,need*0.03));
@@ -1106,7 +1190,8 @@ function _renderRadii(){
 
 function _refreshSupply(){
   const body=$('pr-body'); if(!body) return;
-  const set=(k,h)=>{ const el=body.querySelector(`[data-out="${k}"]`); if(el) el.innerHTML=h; };
+  // אשכול משותף מופיע בכמה כרטיסים — מעדכנים את כל המופעים
+  const set=(k,h)=>{ body.querySelectorAll(`[data-out="${k}"]`).forEach(el=>{ el.innerHTML=h; }); };
   const lines=_eduLines();
   for(const L of lines){
     const allocs=_allocsOf(L.id), d=_dem(L.id);
@@ -1163,6 +1248,10 @@ function _renderChecks(){
   for(const c of groupChecks()) items.push({g:'אשכולות משותפים',ok:c.ok,info:c.info,txt:`${c.label}: ${c.txt}`});
   const idx=cellIndex(); const used=new Set((PR.spec.provision||[]).flatMap(a=>a.cells||[]));
   const free=Object.keys(idx).filter(k=>isPublicCell(idx[k])&&!used.has(k));
+  { const scan=builtScan(); if(scan&&scan.length){ const asg=_builtAssigned(), non=new Set(_nonEdu());
+      const un=scan.filter(s=>!asg[s.cn]&&!non.has(s.cn)), done=scan.filter(s=>asg[s.cn]);
+      if(done.length) items.push({g:'מבונה בטבלה 5',ok:true,txt:`${done.length} מגרשים סחירים עם שטח ציבורי מבונה שויכו (${fmtN(done.reduce((t,s)=>t+s.sqm,0))} מ"ר)`});
+      if(un.length) items.push({g:'מבונה בטבלה 5',info:true,txt:`${un.length} מגרשים סחירים עם שטח ציבורי מבונה בטבלה 5 (${fmtN(un.reduce((t,s)=>t+s.sqm,0))} מ"ר) לא שויכו לשום מענה: ${un.slice(0,15).map(s=>s.cn).join(', ')}${un.length>15?'…':''} — האם הנספח מתייחס אליהם?`}); } }
   if(PR.spec.provision.length&&free.length) items.push({g:'שיבוץ ושטח',ok:false,info:true,txt:`${free.length} תאי ציבור בתשריט בלי שיבוץ (ייתכן שמיועדים למוסדות שאינם חינוך): ${free.slice(0,15).join(', ')}${free.length>15?'…':''}`});
   for(const b of Object.keys(EDU_META)){ const c=coverage(b); if(c.pct!=null) items.push({g:'כיסוי',ok:c.pct>=90,txt:`${EDU_META[b].short}: ${fmtN(c.pct,0)}% ${c.byUnits?'מיח"ד':'משטח המגורים'} בטווח ${fmtN(c.rM)} מ׳${c.pctAlt!=null?` (${fmtN(c.pctAlt,0)}% כולל תאים חלופיים)`:''}${c.uncovered.length?` · מחוץ לטווח: ${c.uncovered.slice(0,12).join(', ')}${c.uncovered.length>12?'…':''}`:''}`}); }
   if(!items.length) return `<div class="pr-note">עוד אין מה לבדוק — הזינו בלשונית <b>ביקוש</b> את מה שהנספח אומר, ובלשונית <b>מענה ושיבוץ</b> את המענים.</div>`;
@@ -1187,7 +1276,10 @@ function _renderSoon(tab){
 PR.cellInfoHtml=function(cn){
   cn=String(cn);
   const list=(PR.spec.provision||[]).filter(a=>a.cells.includes(cn));
-  if(!list.length) return '';
+  if(!list.length){
+    const s=(builtScan()||[]).find(x=>x.cn===cn);
+    return s?`<div class="inf-sec">נספח הפרוגרמה</div><div style="margin:3px 0">🏢 בטבלה 5: <b>${fmtN(s.sqm)} מ"ר</b> ציבורי מבונה במגרש ${E(s.yiud)} — ${_nonEdu().includes(cn)?'סומן כלא-חינוך':'<b>לא שויך</b> לשום מענה'}</div>`:'';
+  }
   const lines=_eduLines();
   return `<div class="inf-sec">נספח הפרוגרמה — מוסדות בתא</div>`+list.map(a=>{
     const dots=aLines(a).map(l=>`<span style="width:10px;height:10px;border-radius:50%;background:${(EDU_META[eduBase(l)]||{}).color};display:inline-block"></span>`).join('');
@@ -1228,6 +1320,17 @@ PR.drawLayer=function(ctx){
   ctx.setLineDash([6,4]); ctx.lineWidth=2; ctx.strokeStyle='rgba(192,57,43,.85)';
   for(const [k,fs] of Object.entries(idx)) if(!byCell[k]&&isPublicCell(fs)){ _pathCell(ctx,fs); ctx.stroke(); }
   ctx.setLineDash([]);
+  // 1ב. שטח ציבורי מבונה בטבלה 5 שלא שויך — מסגרת סגולה מקווקוות + תג מ"ר
+  const scan=builtScan();
+  if(scan&&scan.length){ const non=new Set(_nonEdu());
+    ctx.font='bold 10.5px Arial'; ctx.textBaseline='middle'; ctx.textAlign='center';
+    for(const s of scan){ if(byCell[s.cn]||non.has(s.cn)) continue; const fs=idx[s.cn]; if(!fs) continue;
+      _pathCell(ctx,fs); ctx.setLineDash([4,3]); ctx.lineWidth=2.2; ctx.strokeStyle='rgba(155,89,182,.95)'; ctx.stroke(); ctx.setLineDash([]);
+      const p=cellCentroid(fs); if(!p) continue; const [sx,sy]=dc(p[0],p[1]);
+      const t=`🏢 ${fmtN(s.sqm)} מ"ר`, w=ctx.measureText(t).width+10;
+      ctx.fillStyle='rgba(248,240,252,.95)'; ctx.strokeStyle='#9b59b6'; ctx.lineWidth=1.5;
+      ctx.beginPath(); if(ctx.roundRect) ctx.roundRect(sx-w/2,sy+10,w,15,6); else ctx.rect(sx-w/2,sy+10,w,15); ctx.fill(); ctx.stroke();
+      ctx.fillStyle='#5b2c6f'; ctx.fillText(t,sx,sy+17.5); } }
   // 2. רדיוסים + מגרשי מגורים מחוץ לטווח
   const R=PR.spec.radii;
   if(R&&R.on&&R.base&&EDU_META[R.base]){
@@ -1262,6 +1365,12 @@ PR.drawLayer=function(ctx){
       _pathCell(ctx,fs); ctx.fillStyle=_hexA(cols[0],hl?.2:.1); ctx.fill();
       _stripes(ctx,fs,cols,hl?.95:.8,2,true);
       _pathCell(ctx,fs); ctx.setLineDash([5,4]); ctx.lineWidth=hl||picked?3.5:2; ctx.strokeStyle=picked?'#00e0ff':cols[0]; ctx.stroke(); ctx.setLineDash([]);
+    } else if(list.some(a=>a.mode==='built')){ // הפרשה מבונה: בלי מילוי (המגרש סחיר), מסגרת כפולה בצבע הסוג
+      const cols=[...new Set(list.filter(a=>a.mode==='built').flatMap(aLines).map(colOf))];
+      _pathCell(ctx,fs); ctx.lineWidth=hl||picked?6:4.5; ctx.strokeStyle='rgba(255,255,255,.85)'; ctx.stroke();
+      ctx.setLineDash(cols.length>1?[8,8]:[]); ctx.lineWidth=hl||picked?4:2.5; ctx.strokeStyle=picked?'#00e0ff':cols[0]; ctx.stroke();
+      if(cols.length>1){ ctx.lineDashOffset=8; ctx.strokeStyle=cols[1]; ctx.stroke(); ctx.lineDashOffset=0; }
+      ctx.setLineDash([]);
     } else if(hl||picked){ _pathCell(ctx,fs); ctx.lineWidth=3; ctx.strokeStyle=picked?'#00e0ff':'#ffd400'; ctx.stroke(); }
     // תוויות: מוסדות בתא
     const p=cellCentroid(fs); if(!p) continue;
@@ -1280,7 +1389,8 @@ PR.drawLayer=function(ctx){
       y+=h+gap;
     }
   }
-  // 4. במצב שיבוץ: תאים שנבחרו אך עוד בלי תווית (למשל mode לא-קרקע)
+  // 4. הדגשת תאים מריחוף על רשימת "מבונה בטבלה 5"
+  if(PR.hlCellList) for(const k of PR.hlCellList){ const fs=idx[k]; if(!fs) continue; _pathCell(ctx,fs); ctx.lineWidth=4; ctx.strokeStyle='#ffd400'; ctx.stroke(); }
   ctx.restore();
 };
 
