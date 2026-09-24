@@ -138,7 +138,8 @@ function emptySpec(){
 let _segSeq=0;
 function newSegment(label){
   return {id:'s'+Date.now().toString(36)+(_segSeq++),label:label||'',units:null,realization_pct:null,
-    household_size:null,cohort_pct:null,sector:'',trad_pct:null};
+    household_size:null,cohort_pct:null,sector:'',trad_pct:null,special:false};
+  // special = דיור מיוחד (דיור מוגן, דיור לסטודנטים וכד'): תושבים שנספרים לצורכי ציבור כלליים (ירוק, מועדונים…) אך לא לחינוך
 }
 // מבטיח שמבנה שנטען מפרויקט ישן/חלקי יהיה שלם
 function normalizeSpec(s){
@@ -165,15 +166,22 @@ function computeAssumptions(spec){
     const hh=num(g.household_size), cp=num(g.cohort_pct);
     const unitsR=units!=null?units*real/100:null;
     const pop=unitsR!=null&&hh!=null?unitsR*hh:null;
-    const coh=pop!=null&&cp!=null?pop*cp/100:null;
+    const special=!!g.special;
+    const coh=special?(pop!=null?0:null):(pop!=null&&cp!=null?pop*cp/100:null); // דיור מיוחד — ללא ילדים
     const sector=effSector(a,g);
     const trad=sector==='חרדי'?(num(g.trad_pct)??100):(num(g.trad_pct)??num(a.tradition_pct));
-    return {id:g.id,label:g.label,units,real,unitsR,hh,cp,pop,coh,sector,trad};
+    return {id:g.id,label:g.label,units,real,unitsR,hh,cp:special?null:cp,pop,coh,sector,trad,special};
   });
-  const sum=k=>rows.every(r=>r[k]==null)?null:rows.reduce((t,r)=>t+(r[k]||0),0);
-  const T={units:sum('units'),unitsR:sum('unitsR'),pop:sum('pop'),coh:sum('coh')};
+  // T = מגורים רגילים (בסיס החינוך וההשוואה לנספח); T.special = דיור מיוחד; T.popAll/unitsAll = כל התושבים (לצורכי ציבור כלליים)
+  const reg=rows.filter(r=>!r.special), spc=rows.filter(r=>r.special);
+  const sumOf=(rs,k)=>!rs.length||rs.every(r=>r[k]==null)?null:rs.reduce((t,r)=>t+(r[k]||0),0);
+  const T={units:sumOf(reg,'units'),unitsR:sumOf(reg,'unitsR'),pop:sumOf(reg,'pop'),coh:sumOf(reg,'coh')};
   T.hh=T.pop!=null&&T.unitsR?T.pop/T.unitsR:null;
   T.cp=T.coh!=null&&T.pop?T.coh/T.pop*100:null;
+  T.special=spc.length?{units:sumOf(spc,'units'),unitsR:sumOf(spc,'unitsR'),pop:sumOf(spc,'pop')}:null;
+  const add=(x,y)=>x==null&&y==null?null:(x||0)+(y||0);
+  T.popAll=add(T.pop,T.special&&T.special.pop); T.unitsAll=add(T.units,T.special&&T.special.units);
+  if(!reg.length&&T.special){ T.pop=null; } // רק דיור מיוחד — אין בסיס לחינוך
   T.complete=rows.length>0&&rows.every(r=>r.pop!=null&&(r.coh!=null||num(a.segments.find(s=>s.id===r.id).cohort_pct)===0));
   // בסיס "תוספת": מקזזים יח"ד קיימות (התחדשות עירונית)
   let addition=null;
@@ -223,10 +231,10 @@ function publicDemand(spec,A){
   A=A||computeAssumptions(spec);
   const a=spec.assumptions;
   const T=A.T;
-  if(T.pop==null) return [];
+  if(T.popAll==null) return [];
   const POPTRAD=A.rows.reduce((t,r)=>t+(r.pop!=null&&r.trad!=null?r.pop*r.trad/100:0),0);
   const sectors=new Set(A.rows.map(r=>r.sector));
-  const c={POP:T.pop,COH:T.coh||0,UNITS:T.units||0,POPTRAD,
+  const c={POP:T.popAll,COH:T.coh||0,UNITS:T.unitsAll||0,POPTRAD, // כל התושבים, כולל דיור מיוחד
     NONJEWISH:[...sectors].every(s=>NONJEWISH.has(s)),
     TEXTURE:spec.identity.dev_type==='התחדשות עירונית'?'existing':'new',
     SIZE:a.settlement_size||''};
@@ -240,12 +248,12 @@ function publicDemand(spec,A){
 
 function openSpaceDemand(spec,A){
   A=A||computeAssumptions(spec);
-  const pop=A.T.pop; if(pop==null) return [];
+  const pop=A.T.popAll; if(pop==null) return []; // כולל דיור מיוחד — גם הם משתמשים בשטחים הפתוחים
   const ren=spec.identity.dev_type==='התחדשות עירונית';
   return NORMS.openSpace.levels.map(L=>{
     const key=ren?L.keyRenewal:L.keyNew;
     return {id:L.id,domain:'open',label:L.label,key,note:L.note,pop,dunam:pop*key/1000,
-      formula:`${fmtN(pop,0)} נפש × ${key} מ"ר ÷ 1,000`};
+      formula:`${fmtN(pop,0)} נפש${A.T.special?' (כולל דיור מיוחד)':''} × ${key} מ"ר ÷ 1,000`};
   });
 }
 
@@ -388,6 +396,7 @@ const CSS=`
 .pr-cat{font-size:11.5px;color:#f5d58a}
 .pr-na{color:#5d7087;font-size:11.5px}
 .pr-small{font-size:11px;color:#7899bb}
+.pr-spc{display:flex;align-items:center;gap:4px;font-size:10.5px;color:#8fa6c0;margin-top:3px;white-space:nowrap;cursor:pointer}
 .pr-docrow{display:flex;align-items:center;gap:8px;padding:6px 8px;background:#18263a;border:1px solid #2d4060;border-radius:7px;margin-bottom:5px}
 .pr-docname{font-weight:600;min-width:92px}
 .pr-docfmt{font-size:10.5px;background:#2d2a45;color:#c4b5ff;border-radius:6px;padding:1px 6px}
@@ -549,6 +558,7 @@ PR.onField=function(el){
 };
 // select / שינוי מבני — מרנדר מחדש
 PR.onSelect=function(el){ PR.onField(el); PR.render(); };
+PR.setSpecial=function(id,on){ const g=PR.spec.assumptions.segments.find(x=>x.id===id); if(!g) return; g.special=!!on; if(on&&!g.label) g.label='דיור מיוחד'; PR.render(); };
 PR.addSegment=function(){ PR.spec.assumptions.segments.push(newSegment('')); PR.render(); };
 PR.delSegment=function(id){
   const a=PR.spec.assumptions;
@@ -612,11 +622,12 @@ function _renderAssump(){
   const head=`<tr><th style="width:24%">מקטע</th><th>יח"ד</th><th>מימוש %</th><th>נפשות<br>למ"ב</th><th>שנתון %</th>
     ${mixed?'<th>מגזר</th>':''}<th>אוכלוסייה <span class="pr-src calc">חושב</span></th><th>ילדים<br>בשנתון <span class="pr-src calc">חושב</span></th><th></th></tr>`;
   const rows=a.segments.map(g=>`<tr>
-      <td>${_inp('seg:'+g.id+':label',g.label,'t','תווית')}</td>
+      <td>${_inp('seg:'+g.id+':label',g.label,'t','תווית')}
+        <label class="pr-spc" title="דיור מוגן / מיוחד: התושבים נספרים לשטחים פתוחים ולמוסדות ציבור כלליים, אך לא לחינוך"><input type="checkbox" ${g.special?'checked':''} onchange="PR.setSpecial('${g.id}',this.checked)"> דיור מיוחד (ללא ילדים)</label></td>
       <td>${_inp('seg:'+g.id+':units',g.units,'n')}</td>
       <td>${_inp('seg:'+g.id+':realization_pct',g.realization_pct,'n',String(a.realization_default??100))}</td>
       <td>${_inp('seg:'+g.id+':household_size',g.household_size,'n')}</td>
-      <td>${_inp('seg:'+g.id+':cohort_pct',g.cohort_pct,'n')}</td>
+      <td>${g.special?'<span class="pr-small" title="דיור מיוחד — לא נספר לחינוך">— אין ילדים</span>':_inp('seg:'+g.id+':cohort_pct',g.cohort_pct,'n')}</td>
       ${mixed?`<td>${_sel('seg:'+g.id+':sector',g.sector||'יהודי כללי',SECTORS.filter(s=>s!=='מעורב'))}</td>`:''}
       <td class="num"><span class="pr-calc" data-out="seg-pop-${g.id}">—</span></td>
       <td class="num"><span class="pr-calc" data-out="seg-coh-${g.id}">—</span></td>
@@ -629,6 +640,7 @@ function _renderAssump(){
       <td class="num"><span data-out="T-hh">—</span></td><td class="num"><span data-out="T-cp">—</span></td>
       ${span?'<td></td>':''}
       <td class="num"><span data-out="T-pop">—</span></td><td class="num"><span data-out="T-coh">—</span></td><td></td></tr>
+    <tr data-out-row="spc"><td colspan="${7+span}" class="pr-small" data-out="T-special"></td></tr>
     <tr class="pr-decl"><td>הנספח מצהיר <div class="pr-small">סיכום מתוך הנספח</div></td>
       <td>${_inp('assumptions.declared.units',D.units,'n')}<div data-out="st-units"></div></td><td></td>
       <td>${_inp('assumptions.declared.household_size',D.household_size,'n')}<div data-out="st-hh"></div></td>
@@ -642,7 +654,7 @@ function _renderAssump(){
     <table class="pr-tbl">${head}${rows}${tot}</table>
     <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
       <button class="pr-btn" onclick="PR.addSegment()">+ מקטע</button>
-      <span class="pr-small">אחוז מימוש ריק = 100%. ילדים בשנתון = אוכלוסייה × שנתון%.</span>
+      <span class="pr-small">אחוז מימוש ריק = 100%. ילדים בשנתון = אוכלוסייה × שנתון%. דיור מוגן/מיוחד — מקטע נפרד עם ☑ "דיור מיוחד".</span>
     </div></div>`;
 
   const chain=`<div class="pr-sec"><h3>שרשרת ההנחות</h3><div class="pr-chain" data-out="chain"></div>
@@ -682,6 +694,8 @@ function _refreshComputed(){
   const set=(k,html)=>{ const el=body.querySelector(`[data-out="${k}"]`); if(el) el.innerHTML=html; };
   for(const r of A.rows){ set('seg-pop-'+r.id,fmtN(r.pop)); set('seg-coh-'+r.id,fmtN(r.coh,r.coh!=null&&r.coh<100?1:0)); }
   const T=A.T;
+  set('T-special',T.special?`<b>+ דיור מיוחד:</b> ${fmtN(T.special.units)} יח"ד · ${fmtN(T.special.pop)} נפש — לא נספרים לחינוך. <b>סה"כ תושבים לצורכי ציבור כלליים ושטחים פתוחים: ${fmtN(T.popAll)}</b> (${fmtN(T.unitsAll)} יח"ד)`:'');
+  for(const r of A.rows) if(r.special) set('seg-coh-'+r.id,'<span title="דיור מיוחד — לא נספר לחינוך">0</span>');
   set('T-units',fmtN(T.units)); set('T-pop',fmtN(T.pop)); set('T-coh',fmtN(T.coh,T.coh!=null&&T.coh<100?1:0));
   set('T-hh',T.hh!=null?fmtN(T.hh,2):'—'); set('T-cp',T.cp!=null?fmtN(T.cp,2)+'%':'—');
   const D=PR.spec.assumptions.declared;
@@ -699,6 +713,7 @@ function _refreshComputed(){
   if(T.unitsR!=null&&T.units!=null&&Math.abs(T.unitsR-T.units)>0.5){ ch+=ar('× מימוש')+nd('מתממשות',fmtN(T.unitsR)); }
   ch+=ar(`× ${T.hh!=null?fmtN(T.hh,2):'?'} נפשות`)+nd('אוכלוסייה',fmtN(T.pop));
   ch+=ar(`× ${T.cp!=null?fmtN(T.cp,2):'?'}%`)+nd('ילדים בשנתון',fmtN(T.coh,1),true);
+  if(T.special) ch+=`<div class="pr-arr"><div>+</div></div>`+nd('דיור מיוחד (לא לחינוך)',`${fmtN(T.special.units)} יח"ד · ${fmtN(T.special.pop)} נפש`)+`<div class="pr-arr"><div>=</div></div>`+nd('תושבים לצורכי ציבור',fmtN(T.popAll));
   set('chain',ch);
   set('addition',A.addition?`בסיס תוספת: ${fmtN(A.addition.units)} יח"ד · ${fmtN(A.addition.pop)} נפש · ${fmtN(A.addition.coh,1)} ילדים בשנתון (אחרי קיזוז יח"ד קיימות)`:'');
 }
