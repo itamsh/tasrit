@@ -397,6 +397,9 @@ const CSS=`
 .pr-tbl td{padding:3px 3px;border-bottom:1px solid #1d2b3e;vertical-align:middle}
 .pr-tbl input{padding:4px 5px;font-size:12px}
 .pr-tbl td.num{text-align:left;direction:ltr;font-variant-numeric:tabular-nums}
+/* תמונת הנספח: עמודות המספרים ממורכזות — הכותרת בדיוק מעל הערכים */
+.pr-sumtbl th:not(:first-child),.pr-sumtbl td.num{text-align:center;width:13%}
+.pr-sumtbl th:first-child{width:22%}.pr-sumtbl th:last-child{text-align:right;width:auto}
 .pr-calc{color:#b8c8da;background:#16263a;border-radius:4px;padding:3px 6px;display:inline-block;min-width:48px;text-align:left;direction:ltr}
 .pr-tot td{border-top:1px solid #3d6a9a;font-weight:600;color:#fff}
 .pr-decl td{background:#1a2230}
@@ -1738,7 +1741,7 @@ function _walkSummaryBody(){
   const skipped=[...Q.land,...Q.built].filter(c=>!_cellAllocs(c).length&&!((w.cells[c]||{}).other||[]).length&&!(w.cells[c]||{}).reserve);
   const cov=Object.keys(EDU_META).map(b=>{ const c=coverage(b); return c.pct==null?'':`<span class="pr-covb ${c.pct>=90?'ok':'bad'}"><span class="pr-dot" style="background:${EDU_META[b].color}"></span>${EDU_META[b].short} ${fmtN(c.pct,0)}%${c.pctAlt!=null?` <span class="pr-small">(${fmtN(c.pctAlt,0)}% עם חלופיים)</span>`:''}</span>`; }).join('');
   return `<div class="pr-wcard"><div class="pr-wbig">ההקצאה שהנספח מציע — מול הדרישות</div>
-    <table class="pr-tbl"><tr><th>סוג</th><th>נדרש</th><th>בקרקע</th><th>במבונה</th><th>אחר</th><th>חלופי</th><th></th></tr>${rows}</table>
+    <table class="pr-tbl pr-sumtbl"><tr><th>סוג</th><th>נדרש</th><th>בקרקע</th><th>במבונה</th><th>אחר</th><th>חלופי</th><th>מצב</th></tr>${rows}</table>
     <div class="pr-small" style="margin:4px 0 10px">נדרש = מה שהוזן כ"הנספח אומר" בלשונית ביקוש (או התדריך). "אחר" = בשילוב במוסד אחר / מחוץ לתכנית (דרך לשונית "מענה ושיבוץ").</div>
     <div class="pr-cg"><div class="pr-cg-h">שטח התאים מול מכסות התדריך <span class="pr-small">${good.length} ✓ · ${bad.length} ⚠</span></div>
       ${cellsChk.length?cellsChk.sort((a,b)=>(a.ok?1:0)-(b.ok?1:0)).map(c=>chk(c)).join(''):'<div class="pr-small">אין עדיין תאים עם כיתות.</div>'}</div>
