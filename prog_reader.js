@@ -372,6 +372,10 @@ const CSS=`
 #pr-panel.vis{display:flex}
 #pr-hdr{display:flex;align-items:center;gap:10px;padding:9px 14px;background:#1f2e42;border-bottom:1px solid #2d4060;flex-shrink:0}
 #pr-hdr h2{margin:0;font-size:14px;color:#7ecfff;flex:1;font-weight:600}
+#pr-hdr .pr-annex{background:#2a4a6e;border:1px solid #3d6a9a;color:#fff;border-radius:6px;padding:3px 10px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap}
+#pr-hdr .pr-annex:hover{background:#34598a}
+#pr-hdr .pr-annex.off{opacity:.55}
+body.theme-light #pr-hdr .pr-annex{background:#fff;color:#1a3560;border-color:#8fb0d6}
 #pr-hdr .pr-x{background:#2c3e55;border:1px solid #3a5070;color:#cde;border-radius:6px;padding:3px 10px;cursor:pointer;font-size:12px}
 #pr-domains{display:flex;gap:4px;padding:8px 10px 0;flex-shrink:0;flex-wrap:wrap}
 .pr-dom{flex:1;min-width:92px;background:#18263a;border:1px solid #2d4060;border-bottom:none;color:#9ab;
@@ -567,6 +571,7 @@ function _ensureDom(){
   const st=document.createElement('style'); st.id='pr-css'; st.textContent=CSS; document.head.appendChild(st);
   const p=document.createElement('div'); p.id='pr-panel';
   p.innerHTML=`<div id="pr-hdr"><h2>📊 קורא הפרוגרמה</h2>
+      <button class="pr-annex" id="pr-annex-btn" onclick="PR.annexBtn()">📄 נספח הפרוגרמה</button>
       <span class="pr-small" title="${E(NORMS.versionLabel)}">נורמות: ${E(NORMS.version)}</span>
       <button class="pr-x" onclick="PR.close()">✕ סגירה</button></div>
     <div id="pr-domains"></div><div id="pr-tabs"></div><div id="pr-body"></div>`;
@@ -659,8 +664,24 @@ PR.delSegment=function(id){
 };
 
 // ── רינדור ──
+// כפתור הנספח בכותרת: נטען → פותח בחלונית הצפה; לא נטען → משיכה מ"מידע תכנוני" (אם התוסף מותקן)
+function _annexBtnSync(){
+  const b=$('pr-annex-btn'); if(!b||typeof state==='undefined') return;
+  const has=!!(state.files&&state.files.prog&&state.files.prog.length);
+  const bridge=typeof _bridgeVersion==='function'&&_bridgeVersion();
+  b.textContent=has?'📄 נספח הפרוגרמה':bridge?'⟳ משוך את הנספח':'📄 נספח הפרוגרמה';
+  b.classList.toggle('off',!has&&!bridge);
+  b.title=has?'פתיחת נספח הפרוגרמה בחלונית צפה — לקריאה לצד ההזנה':bridge?'הנספח עוד לא נטען — משיכה מ"מידע תכנוני"':'הנספח לא נטען — אפשר לגרור אותו בעמוד הטעינה, או להתקין את התוסף לכרום';
+}
+PR.annexBtn=function(){
+  const has=!!(state.files&&state.files.prog&&state.files.prog.length);
+  if(has){ if(typeof openPlanDoc==='function') openPlanDoc('prog'); return; }
+  if(typeof _bridgeVersion==='function'&&_bridgeVersion()&&typeof _mavatFetchDocs==='function'){ _mavatFetchDocs(['prog']); return; }
+  try{ _showToast('נספח הפרוגרמה לא נטען. אפשר לגרור אותו בעמוד הטעינה, או להתקין את התוסף לכרום כדי למשוך אותו אוטומטית',5000); }catch(e){}
+};
 PR.render=function(){
   if(!$('pr-panel')) return;
+  _annexBtnSync();
   if(PR.tab==='supply') PR.tab='walk'; // "מענה ושיבוץ" אוחדה לתוך "תא אחר תא"
   $('pr-domains').innerHTML=DOMAINS.map(d=>{
     const soon=(d.id==='edu'||d.id==='all')?'':'<span class="soon">חלקי</span>';
