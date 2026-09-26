@@ -1501,15 +1501,17 @@ PR.drawLayer=function(ctx){
     if(builtCells.has(k)){ const bl=list.filter(a=>a.mode==='built'), decl=bl.reduce((t,a)=>t+(num(a.built)||0),0);
       const sq=decl||(scanBy[k]?scanBy[k].sqm:t5PublicSqm(t5Of(k)));
       tags.push({txt:sq>0?`🏢 ${fmtN(sq)} מ"ר`:'🏢 ציבורי (בלי שטח בטבלה 5)',brown:true}); }
-    for(const a of list) tags.push({txt:_classesLabel(a,L,a.cells.length===1)+(a.alt?' ?':'')});
+    for(const a of list) tags.push({txt:_classesLabel(a,L,a.cells.length===1)+(a.alt?' ?':''),cols:aLines(a).map(l=>(EDU_META[eduBase(l)]||{}).color||'#888')});
     for(const o of m.other||[]) tags.push({txt:o+(m.alt?' ?':'')});
     if(m.reserve) tags.push({txt:'עתודה'});
     const h=16, gap=2; let y=sy-(tags.length*(h+gap))/2+h/2;
     for(const t of tags){
-      const w=ctx.measureText(t.txt).width+12;
-      ctx.fillStyle=t.brown?'rgba(250,243,235,.96)':'rgba(255,255,255,.94)'; ctx.strokeStyle=t.brown?'#8b5a2b':'#5a6b80'; ctx.lineWidth=1.5;
+      // צבע סוג המוסד — במסגרת התגית ובנקודה בצידה (מעון אדום, גן צהוב, יסודי כחול, על-יסודי סגול)
+      const dots=t.cols?t.cols.length:0, w=ctx.measureText(t.txt).width+12+dots*10;
+      ctx.fillStyle=t.brown?'rgba(250,243,235,.96)':'rgba(255,255,255,.94)'; ctx.strokeStyle=t.brown?'#8b5a2b':t.cols?t.cols[0]:'#5a6b80'; ctx.lineWidth=t.cols?2:1.5;
       ctx.beginPath(); if(ctx.roundRect) ctx.roundRect(sx-w/2,y-h/2,w,h,7); else ctx.rect(sx-w/2,y-h/2,w,h); ctx.fill(); ctx.stroke();
-      ctx.fillStyle=t.brown?'#5a3515':'#1a2533'; ctx.fillText(t.txt,sx,y);
+      for(let d=0;d<dots;d++){ ctx.fillStyle=t.cols[d]; ctx.beginPath(); ctx.arc(sx+w/2-8-d*10,y,3.8,0,Math.PI*2); ctx.fill(); }
+      ctx.fillStyle=t.brown?'#5a3515':'#1a2533'; ctx.fillText(t.txt,sx-dots*5,y);
       y+=h+gap;
     }
   }
@@ -1756,7 +1758,7 @@ function _walkSummaryBody(){
     <div class="pr-cg"><div class="pr-cg-h">שטח התאים מול מכסות התדריך <span class="pr-small">${good.length} ✓ · ${bad.length} ⚠</span></div>
       ${cellsChk.length?cellsChk.sort((a,b)=>(a.ok?1:0)-(b.ok?1:0)).map(c=>chk(c)).join(''):'<div class="pr-small">אין עדיין תאים עם כיתות.</div>'}</div>
     <div class="pr-cg"><div class="pr-cg-h">מקרא לתשריט</div><div class="pr-legend"><span><i class="lg-t5b"></i>הקצאה מבונה — שטח ציבורי במגרש סחיר (לפי טבלה 5)</span>
-      <span class="pr-small">על כל תא — תגית עם מה שהוצע בו · "?" = שימוש חלופי</span></div></div>
+      <span class="pr-small">על כל תא — תגית עם מה שהוצע בו, בצבע סוג המוסד: <span class="pr-dot" style="background:#e74c3c"></span>מעון <span class="pr-dot" style="background:#f1c40f"></span>גן <span class="pr-dot" style="background:#3498db"></span>יסודי <span class="pr-dot" style="background:#8e44ad"></span>על-יסודי · "?" = שימוש חלופי</span></div></div>
     ${_renderRadii()}
     ${skipped.length?`<div class="pr-cg"><div class="pr-cg-h">תאים בלי הזנה (${skipped.length})</div><div class="pr-wdots">${skipped.map(c=>`<button class="pr-wd" onclick="PR.walkGo('${c}')">${c}</button>`).join('')}</div></div>`:''}
   </div>`;
