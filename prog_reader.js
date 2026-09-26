@@ -1195,6 +1195,9 @@ function _renderSupplyEdu(){
 // ── שטחי ציבור מבונים שנמצאו בטבלה 5 ──
 function _builtAssigned(){ const m={}; for(const a of PR.spec.provision||[]) if(a.mode==='built') for(const c of a.cells) (m[c]=m[c]||[]).push(a); return m; }
 function _nonEdu(){ return PR.spec.builtNonEdu||(PR.spec.builtNonEdu=[]); }
+// לתא יש מענה כלשהו: הקצאה, שימוש לא-חינוכי / עתודה שהוזנו ב"תא אחר תא", או סימון "לא לחינוך"
+function _cellHasUse(cn){ cn=String(cn); const m=((PR.spec.walk||{}).cells||{})[cn]||{};
+  return _cellAllocs(cn).length>0||(m.other||[]).length>0||!!m.reserve||_nonEdu().includes(cn); }
 function _builtGroupsOf(scan){ const g={}; for(const s of scan) (g[s.yiud]=g[s.yiud]||[]).push(s); return g; }
 function _renderBuiltScan(){
   const scan=builtScan();
@@ -1385,7 +1388,7 @@ function _renderChecks(){
   const idx=cellIndex(); const used=new Set((PR.spec.provision||[]).flatMap(a=>a.cells||[]));
   const free=Object.keys(idx).filter(k=>isPublicCell(idx[k])&&!used.has(k));
   { const scan=builtScan(); if(scan&&scan.length){ const asg=_builtAssigned(), non=new Set(_nonEdu());
-      const un=scan.filter(s=>!asg[s.cn]&&!non.has(s.cn)), done=scan.filter(s=>asg[s.cn]);
+      const un=scan.filter(s=>!_cellHasUse(s.cn)), done=scan.filter(s=>_cellHasUse(s.cn)&&!non.has(s.cn));
       if(done.length) items.push({g:'מבונה בטבלה 5',ok:true,txt:`${done.length} מגרשים סחירים עם שטח ציבורי מבונה שויכו (${fmtN(done.reduce((t,s)=>t+s.sqm,0))} מ"ר)`});
       if(un.length) items.push({g:'מבונה בטבלה 5',info:true,txt:`${un.length} מגרשים סחירים עם שטח ציבורי מבונה בטבלה 5 (${fmtN(un.reduce((t,s)=>t+s.sqm,0))} מ"ר) לא שויכו לשום מענה: ${un.slice(0,15).map(s=>s.cn).join(', ')}${un.length>15?'…':''} — האם הנספח מתייחס אליהם?`}); } }
   if(PR.spec.provision.length&&free.length) items.push({g:'שיבוץ ושטח',ok:false,info:true,txt:`${free.length} תאי ציבור בתשריט בלי שיבוץ (ייתכן שמיועדים למוסדות שאינם חינוך): ${free.slice(0,15).join(', ')}${free.length>15?'…':''}`});
@@ -1409,34 +1412,28 @@ function _renderSoon(tab){
 }
 
 // מידע לכרטיס תא השטח בממשק הראשי (לחיצה על תא)
-PR.cellInfoHtml=function(cn){
-  cn=String(cn);
-  const list=(PR.spec.provision||[]).filter(a=>a.cells.includes(cn));
-  if(!list.length){
-    const s=(builtScan()||[]).find(x=>x.cn===cn);
-    return s?`<div class="t5-shimush t5-prog">פרוגרמה</div><div style="margin:3px 0">🏢 בטבלה 5: <b>${fmtN(s.sqm)} מ"ר</b> ציבורי מבונה במגרש ${E(s.yiud)} — ${_nonEdu().includes(cn)?'סומן כלא-חינוך':'<b>לא שויך</b> לשום מענה'}</div>`:'';
-  }
-  const lines=_eduLines();
-  return `<div class="t5-shimush t5-prog">פרוגרמה</div>`+list.map(a=>{
-    const dots=aLines(a).map(l=>`<span style="width:10px;height:10px;border-radius:50%;background:${(EDU_META[eduBase(l)]||{}).color};display:inline-block"></span>`).join('');
-    return `<div style="display:flex;gap:6px;align-items:center;margin:3px 0">${dots}
-      <b>${E(_allocLabel(a,lines))}</b> — ${isShared(a)?'אשכול משותף · ':''}${num(a.classes)?fmtN(num(a.classes))+' כיתות · ':''}${E(ALLOC_MODE_LABEL[a.mode]||'')}${a.mode==='built'&&num(a.built)?` · ${fmtN(num(a.built))} מ"ר`:''}${a.alt?' · <b>תא חלופי</b> (אחד מכמה שימושים)':''}</div>`;
-  }).join('');
-};
-
-// מידע פרוגרמטי מלא לתא — לחלונית שליד הסמן כשקורא הפרוגרמה פתוח: "390 מ"ר מבונה ציבורי · 3 כיתות גן"
-PR.hoverInfo=function(cn){
-  if(!PR.open) return '';
+// מה הוזן לתא (משותף לחלונית ליד הסמן ולחלונית הלחיצה): "310 מ"ר מבונה ציבורי", "2 כיתות גן", "בית כנסת"…
+function _cellProgParts(cn){
   cn=String(cn); const lines=_eduLines(), parts=[];
   const al=_cellAllocs(cn), built=al.filter(a=>a.mode==='built');
   const scan=(builtScan()||[]).find(x=>x.cn===cn);
   if(built.length){ const decl=built.reduce((t,a)=>t+(num(a.built)||0),0), sq=decl||(scan?scan.sqm:t5PublicSqm(t5Of(cn)));
     if(sq) parts.push(`${fmtN(sq)} מ"ר מבונה ציבורי`); }
+  else if(scan) parts.push(`${scan.sqm>0?fmtN(scan.sqm)+' מ"ר ':''}מבונה ציבורי${_cellHasUse(cn)?'':' (טבלה 5) — עוד לא שויך'}`);
   for(const a of al) parts.push(_classesLabel(a,lines,true)+(a.cells.length>1&&num(a.classes)?` ב-${a.cells.length} תאים`:'')+(a.mode==='built'||a.mode==='land'?'':' ('+(ALLOC_MODE_LABEL[a.mode]||'')+')')+(a.alt?' — חלופי':''));
   const m=((PR.spec.walk||{}).cells||{})[cn]||{};
-  if(m.other&&m.other.length) parts.push(m.other.join(', '));
+  if(m.other&&m.other.length) parts.push(m.other.join(', ')+(m.alt?' — חלופי':''));
   if(m.reserve) parts.push('עתודה / לא מוגדר');
-  if(!al.length&&scan&&!_nonEdu().includes(cn)) parts.push(`${scan.sqm>0?fmtN(scan.sqm)+' מ"ר ':''}ציבורי מבונה בטבלה 5 — לא שויך`);
+  if(_nonEdu().includes(cn)&&!parts.length) parts.push('לא לחינוך');
+  return parts;
+}
+PR.cellInfoHtml=function(cn){
+  const parts=_cellProgParts(cn);
+  return parts.length?`<div class="t5-shimush t5-prog">פרוגרמה</div>${parts.map(x=>`<div style="margin:3px 0">${E(x)}</div>`).join('')}`:'';
+};
+PR.hoverInfo=function(cn){
+  if(!PR.open) return '';
+  const parts=_cellProgParts(cn);
   return parts.length?`<div class="ht-prog">📊 ${parts.map(E).join(' · ')}</div>`:'';
 };
 
@@ -1464,27 +1461,14 @@ function _hexA(hex,a){ const h=hex.replace('#',''); const n=parseInt(h.length===
 PR.drawLayer=function(ctx){
   if(!PR.open||typeof state==='undefined'||!state.layers||!state.layers.plan) return;
   if(!(PR.domain==='edu'||PR.domain==='all')) return;
-  const idx=cellIndex(); const provision=PR.spec.provision||[];
+  // סימבולוגיה מצומצמת (בקשת המשתמש): התאים עצמם לא נצבעים — ייעוד הקרקע של התשריט (חום = ציבור) נשאר כמו שהוא.
+  // מסגרת חומה עבה = הקצאה מבונה (שטח ציבורי במגרש סחיר). על כל תא — תגיות לבנות עם מה שהוצע בו.
+  const idx=cellIndex(), L=_eduLines(), W=(PR.spec.walk||{}).cells||{};
+  const scan=builtScan()||[], scanBy=Object.fromEntries(scan.map(x=>[x.cn,x]));
   const byCell={};
-  for(const a of provision){ if(!(a.mode==='land'||a.mode==='built')) continue; for(const c of a.cells) (byCell[c]=byCell[c]||[]).push(a); }
+  for(const a of PR.spec.provision||[]){ if(!(a.mode==='land'||a.mode==='built')) continue; for(const c of a.cells) (byCell[c]=byCell[c]||[]).push(a); }
   ctx.save();
-  // 1. תאי ציבור בלי שיבוץ — מקווקו
-  ctx.setLineDash([6,4]); ctx.lineWidth=2; ctx.strokeStyle='rgba(192,57,43,.85)';
-  for(const [k,fs] of Object.entries(idx)) if(!byCell[k]&&isPublicCell(fs)){ _pathCell(ctx,fs); ctx.stroke(); }
-  ctx.setLineDash([]);
-  // 1ב. שטח ציבורי מבונה בטבלה 5 שלא שויך — גבול חום עבה (צבע "מבנים ומוסדות ציבור") + תג מ"ר
-  const scan=builtScan();
-  if(scan&&scan.length){ const non=new Set(_nonEdu());
-    ctx.font='bold 10.5px Arial'; ctx.textBaseline='middle'; ctx.textAlign='center';
-    for(const s of scan){ if(byCell[s.cn]||non.has(s.cn)) continue; const fs=idx[s.cn]; if(!fs) continue;
-      _pathCell(ctx,fs); ctx.lineWidth=6; ctx.strokeStyle='rgba(255,255,255,.75)'; ctx.stroke(); // הילה בהירה — שהגבול ייראה גם על כתום
-      ctx.lineWidth=4; ctx.strokeStyle='#8b5a2b'; ctx.stroke();
-      const p=cellCentroid(fs); if(!p) continue; const [sx,sy]=dc(p[0],p[1]);
-      const t=s.sqm>0?`🏢 ${fmtN(s.sqm)} מ"ר`:"🏢 ציבורי (בלי שטח בטבלה 5)", w=ctx.measureText(t).width+10;
-      ctx.fillStyle='rgba(250,243,235,.96)'; ctx.strokeStyle='#8b5a2b'; ctx.lineWidth=1.5;
-      ctx.beginPath(); if(ctx.roundRect) ctx.roundRect(sx-w/2,sy+10,w,15,6); else ctx.rect(sx-w/2,sy+10,w,15); ctx.fill(); ctx.stroke();
-      ctx.fillStyle='#5a3515'; ctx.fillText(t,sx,sy+17.5); } }
-  // 2. רדיוסים + מגרשי מגורים מחוץ לטווח
+  // 1. רדיוסים + מגרשי מגורים מחוץ לטווח (רק כשהמשתמש הדליק)
   const R=PR.spec.radii;
   if(R&&R.on&&R.base&&EDU_META[R.base]){
     const c=coverage(R.base), col=EDU_META[R.base].color;
@@ -1494,58 +1478,44 @@ PR.drawLayer=function(ctx){
       for(const p of c.centers){ const [sx,sy]=dc(p[0],p[1]); const r=Math.abs(c.rU*scale);
         ctx.beginPath(); ctx.arc(sx,sy,r,0,Math.PI*2); ctx.fillStyle=_hexA(col,.07); ctx.fill();
         ctx.setLineDash([8,5]); ctx.strokeStyle=_hexA(col,.9); ctx.lineWidth=1.8; ctx.stroke(); ctx.setLineDash([]); }
-      for(const p of c.altCenters||[]){ const [sx,sy]=dc(p[0],p[1]); const r=Math.abs(c.rU*scale); // תאים חלופיים — עיגול מנוקד וחלש
+      for(const p of c.altCenters||[]){ const [sx,sy]=dc(p[0],p[1]); const r=Math.abs(c.rU*scale);
         ctx.beginPath(); ctx.arc(sx,sy,r,0,Math.PI*2); ctx.setLineDash([2,5]); ctx.strokeStyle=_hexA(col,.6); ctx.lineWidth=1.4; ctx.stroke(); ctx.setLineDash([]); }
     }
   }
-  // 3. תאים משובצים: ייעודי = מילוי · אשכול משותף = פסים בצבעי הסוגים · חלופי = קווקוו דק ללא מילוי
-  const pickA=provision.find(a=>a.id===PR.pick);
-  const L=Object.keys(byCell).length?_eduLines():[];
-  const colOf=l=>(EDU_META[eduBase(l)]||{}).color||'#888';
-  for(const [k,list] of Object.entries(byCell)){
-    const fs=idx[k]; if(!fs) continue;
-    const land=list.filter(a=>a.mode==='land');
-    const firm=land.filter(a=>!a.alt), alt=land.filter(a=>a.alt);
-    const hl=PR.hlLine&&list.some(a=>aLines(a).includes(PR.hlLine));
-    const picked=pickA&&pickA.cells.includes(k);
-    if(firm.length){
-      const cols=[...new Set(firm.flatMap(aLines).map(colOf))];
-      if(cols.length===1){ _pathCell(ctx,fs); ctx.fillStyle=_hexA(cols[0],hl?.7:.5); ctx.fill(); }
-      else _stripes(ctx,fs,cols,hl?.8:.6,9,false);
-      _pathCell(ctx,fs); ctx.lineWidth=hl||picked?4:2.5; ctx.strokeStyle=picked?'#00e0ff':cols[0]; ctx.stroke();
-    } else if(alt.length){
-      const cols=[...new Set(alt.flatMap(aLines).map(colOf))];
-      _pathCell(ctx,fs); ctx.fillStyle=_hexA(cols[0],hl?.2:.1); ctx.fill();
-      _stripes(ctx,fs,cols,hl?.95:.8,2,true);
-      _pathCell(ctx,fs); ctx.setLineDash([5,4]); ctx.lineWidth=hl||picked?3.5:2; ctx.strokeStyle=picked?'#00e0ff':cols[0]; ctx.stroke(); ctx.setLineDash([]);
-    } else if(list.some(a=>a.mode==='built')){ // הפרשה מבונה: בלי מילוי (המגרש סחיר), מסגרת כפולה בצבע הסוג
-      const cols=[...new Set(list.filter(a=>a.mode==='built').flatMap(aLines).map(colOf))];
-      _pathCell(ctx,fs); ctx.lineWidth=hl||picked?6:4.5; ctx.strokeStyle='rgba(255,255,255,.85)'; ctx.stroke();
-      ctx.setLineDash(cols.length>1?[8,8]:[]); ctx.lineWidth=hl||picked?4:2.5; ctx.strokeStyle=picked?'#00e0ff':cols[0]; ctx.stroke();
-      if(cols.length>1){ ctx.lineDashOffset=8; ctx.strokeStyle=cols[1]; ctx.stroke(); ctx.lineDashOffset=0; }
-      ctx.setLineDash([]);
-    } else if(hl||picked){ _pathCell(ctx,fs); ctx.lineWidth=3; ctx.strokeStyle=picked?'#00e0ff':'#ffd400'; ctx.stroke(); }
-    // תוויות: מוסדות בתא
-    const p=cellCentroid(fs); if(!p) continue;
-    const [sx,sy]=dc(p[0],p[1]);
-    // מספר הכיתות מוצג רק כשהמענה כולו בתא אחד (באשכול של כמה תאים — רק שם המוסד)
-    const tags=list.map(a=>({txt:_classesLabel(a,L,a.cells.length===1)+(a.alt?' ?':''),
-      col:colOf(aLines(a)[0]),built:a.mode==='built'}));
-    ctx.font='bold 11px Arial'; ctx.textBaseline='middle'; ctx.textAlign='center';
+  // 2. מסגרת חומה — כל תא עם הקצאה מבונה (מטבלה 5, או שהוזנה כמבונה)
+  const builtCells=new Set([...scan.map(x=>x.cn),...Object.entries(byCell).filter(([k,l])=>l.some(a=>a.mode==='built')).map(([k])=>k)]);
+  for(const k of builtCells){ const fs=idx[k]; if(!fs) continue;
+    _pathCell(ctx,fs); ctx.lineWidth=6; ctx.strokeStyle='rgba(255,255,255,.75)'; ctx.stroke(); // הילה — שהגבול ייראה גם על כתום
+    ctx.lineWidth=4; ctx.strokeStyle='#8b5a2b'; ctx.stroke(); }
+  // 3. הדגשות: ריחוף על שורה בפאנל / מצב שיבוץ
+  const pickA=(PR.spec.provision||[]).find(a=>a.id===PR.pick);
+  for(const [k,list] of Object.entries(byCell)){ const fs=idx[k]; if(!fs) continue;
+    const hl=PR.hlLine&&list.some(a=>aLines(a).includes(PR.hlLine)), picked=pickA&&pickA.cells.includes(k);
+    if(hl||picked){ _pathCell(ctx,fs); ctx.lineWidth=3.5; ctx.strokeStyle=picked?'#00e0ff':'#ffd400'; ctx.stroke(); } }
+  // 4. תגיות לכל תא שיש בו משהו
+  const cells=new Set([...Object.keys(byCell),...builtCells,...Object.keys(W).filter(k=>(W[k].other||[]).length||W[k].reserve)]);
+  ctx.font='bold 11px Arial'; ctx.textBaseline='middle'; ctx.textAlign='center';
+  for(const k of cells){
+    const fs=idx[k]; if(!fs) continue; const p=cellCentroid(fs); if(!p) continue;
+    const [sx,sy]=dc(p[0],p[1]); const list=byCell[k]||[], m=W[k]||{}, tags=[];
+    if(builtCells.has(k)){ const bl=list.filter(a=>a.mode==='built'), decl=bl.reduce((t,a)=>t+(num(a.built)||0),0);
+      const sq=decl||(scanBy[k]?scanBy[k].sqm:t5PublicSqm(t5Of(k)));
+      tags.push({txt:sq>0?`🏢 ${fmtN(sq)} מ"ר`:'🏢 ציבורי (בלי שטח בטבלה 5)',brown:true}); }
+    for(const a of list) tags.push({txt:_classesLabel(a,L,a.cells.length===1)+(a.alt?' ?':'')});
+    for(const o of m.other||[]) tags.push({txt:o+(m.alt?' ?':'')});
+    if(m.reserve) tags.push({txt:'עתודה'});
     const h=16, gap=2; let y=sy-(tags.length*(h+gap))/2+h/2;
     for(const t of tags){
-      const w=ctx.measureText(t.txt).width+(t.built?22:12);
-      ctx.fillStyle='rgba(255,255,255,.93)'; ctx.strokeStyle=t.col; ctx.lineWidth=2;
+      const w=ctx.measureText(t.txt).width+12;
+      ctx.fillStyle=t.brown?'rgba(250,243,235,.96)':'rgba(255,255,255,.94)'; ctx.strokeStyle=t.brown?'#8b5a2b':'#5a6b80'; ctx.lineWidth=1.5;
       ctx.beginPath(); if(ctx.roundRect) ctx.roundRect(sx-w/2,y-h/2,w,h,7); else ctx.rect(sx-w/2,y-h/2,w,h); ctx.fill(); ctx.stroke();
-      if(t.built){ ctx.fillStyle=t.col; ctx.beginPath(); ctx.arc(sx+w/2-9,y,4,0,Math.PI*2); ctx.fill(); }
-      ctx.fillStyle='#1a2533'; ctx.fillText(t.txt,sx-(t.built?5:0),y);
+      ctx.fillStyle=t.brown?'#5a3515':'#1a2533'; ctx.fillText(t.txt,sx,y);
       y+=h+gap;
     }
   }
   // 5. התא הנוכחי במעבר תא-אחר-תא
   if(PR.tab==='walk'&&PR.spec.walk&&PR.spec.walk.cur&&idx[PR.spec.walk.cur]){ const fs=idx[PR.spec.walk.cur];
     _pathCell(ctx,fs); ctx.lineWidth=9; ctx.strokeStyle='rgba(0,224,255,.35)'; ctx.stroke(); ctx.lineWidth=3.5; ctx.strokeStyle='#00e0ff'; ctx.stroke(); }
-  // 4. הדגשת תאים מריחוף על רשימת "מבונה בטבלה 5"
   if(PR.hlCellList) for(const k of PR.hlCellList){ const fs=idx[k]; if(!fs) continue; _pathCell(ctx,fs); ctx.lineWidth=4; ctx.strokeStyle='#ffd400'; ctx.stroke(); }
   ctx.restore();
 };
@@ -1785,8 +1755,8 @@ function _walkSummaryBody(){
     ${_walkOffCells(lines)}
     <div class="pr-cg"><div class="pr-cg-h">שטח התאים מול מכסות התדריך <span class="pr-small">${good.length} ✓ · ${bad.length} ⚠</span></div>
       ${cellsChk.length?cellsChk.sort((a,b)=>(a.ok?1:0)-(b.ok?1:0)).map(c=>chk(c)).join(''):'<div class="pr-small">אין עדיין תאים עם כיתות.</div>'}</div>
-    <div class="pr-cg"><div class="pr-cg-h">מקרא לתשריט</div><div class="pr-legend"><span><i class="lg-fill"></i>תא ייעודי</span><span><i class="lg-stripe"></i>אשכול משותף</span>
-      <span><i class="lg-alt"></i>תא חלופי ("?")</span><span><i class="lg-free"></i>תא ציבור בלי שיבוץ</span><span><i class="lg-built"></i>הפרשה מבונה</span><span><i class="lg-t5b"></i>🏢 מבונה בטבלה 5, לא שויך</span></div></div>
+    <div class="pr-cg"><div class="pr-cg-h">מקרא לתשריט</div><div class="pr-legend"><span><i class="lg-t5b"></i>הקצאה מבונה — שטח ציבורי במגרש סחיר (לפי טבלה 5)</span>
+      <span class="pr-small">על כל תא — תגית עם מה שהוצע בו · "?" = שימוש חלופי</span></div></div>
     ${_renderRadii()}
     ${skipped.length?`<div class="pr-cg"><div class="pr-cg-h">תאים בלי הזנה (${skipped.length})</div><div class="pr-wdots">${skipped.map(c=>`<button class="pr-wd" onclick="PR.walkGo('${c}')">${c}</button>`).join('')}</div></div>`:''}
   </div>`;
