@@ -132,6 +132,8 @@ function emptySpec(){
     provision:[],  // [{id,line,lines?,alt?,mode,cells:[],classes,land,built,model,note}] — המענה שהיועץ הציע ושיבוצו בתאים
                    // lines = אשכול משותף לכמה סוגים (למשל מעון+גן) · alt = תאים חלופיים ("אחד מכמה שימושים אפשריים")
     builtNonEdu:[], // תאים עם שטח ציבורי מבונה בטבלה 5 שסומנו "לא לחינוך"
+    pubProv:[],    // [{id,type,mode:'land'|'built'|'combined'|'outside'|'citywide',cells:[],sqm,note,alt?,src}] — מוסדות ציבור אחרים (לא חינוך)
+    pubDemand:{},  // {normId:{value,cat}} — מה שהנספח אומר על כל מוסד
     radii:null, open_space:{}, notes:[],
   };
 }
@@ -152,6 +154,16 @@ function normalizeSpec(s){
   a.segments=Array.isArray(a.segments)&&a.segments.length?a.segments.map(g=>Object.assign(newSegment(),g)):[newSegment('כל התכנית')];
   out.assumptions=a;
   out.demand=(s.demand&&typeof s.demand==='object'&&!Array.isArray(s.demand))?s.demand:{};
+  out.pubProv=Array.isArray(s.pubProv)?s.pubProv.map(p=>Object.assign({cells:[]},p,{cells:Array.isArray(p.cells)?p.cells.map(String):[]})):[];
+  out.pubDemand=(s.pubDemand&&typeof s.pubDemand==='object')?s.pubDemand:{};
+  // המרה: "שימושים לא-חינוכיים" שסומנו בגרסה קודמת (walk.cells[cn].other = שמות) → רשומות מוסדות ציבור
+  const OLD={'בית כנסת':'synagogue','מועדון / מתנ"ס':'community','מרפאה / טיפת חלב':'clinic','רווחה':'welfare','ספורט':'sport','מקווה':'mikve','אחר':'other'};
+  const wc=s.walk&&s.walk.cells;
+  if(wc) for(const [cn,m] of Object.entries(wc)){ if(!m||!Array.isArray(m.other)||!m.other.length) continue;
+    for(const nm of m.other){ const t=OLD[nm]||'other';
+      if(!out.pubProv.some(x=>x.type===t&&x.cells.includes(String(cn))))
+        out.pubProv.push({id:'p'+Math.random().toString(36).slice(2,9),type:t,mode:'land',cells:[String(cn)],sqm:'',note:t==='other'?nm:'',alt:m.alt||undefined,src:'walk',migrated:true}); }
+    m.other=[]; }
   out.provision=Array.isArray(s.provision)?s.provision.map(p=>Object.assign({cells:[]},p,{cells:Array.isArray(p.cells)?p.cells.map(String):[]})):[];
   return out;
 }
@@ -244,6 +256,30 @@ function publicDemand(spec,A){
       value:r.v??null,category:r.cat??null,na:!!r.na,
       needsTrad:(P.id==='synagogue'||P.id==='mikve')&&!c.NONJEWISH&&POPTRAD===0};
   });
+}
+
+// ── מוסדות ציבור אחרים: סוגים לשיבוץ (כפתור אחד לכל סוג) ← שורות הנורמה (NORMS.public) ──
+// sqm = שורות שהתדריך נותן להן מ"ר בנוי (אפשר להשוות לסכום המ"ר ששובץ) · dunam = שורות בדונם (קרקע)
+const PUB_TYPES=[
+  {id:'synagogue', label:'בית כנסת',              norms:['synagogue'], sqm:['synagogue']},
+  {id:'mikve',     label:'מקווה',                 norms:['mikve']},
+  {id:'community', label:'מתנ"ס / מרכז קהילתי',   norms:['community']},
+  {id:'youth',     label:'מועדון נוער',            norms:['youth']},
+  {id:'elderly',   label:'מועדון / מרכז יום לקשיש',norms:['elderly_club','daycare_ltd','daycare_frail']},
+  {id:'tipat',     label:'טיפת חלב',               norms:['tipat']},
+  {id:'clinic',    label:'מרפאה',                 norms:['clinic'], sqm:['clinic']},
+  {id:'welfare',   label:'רווחה',                  norms:['welfare','welfare_res'], sqm:['welfare']},
+  {id:'sport',     label:'ספורט',                  norms:['football','stadium','athletics','pool','tennis']},
+  {id:'emergency', label:'חירום (משטרה, מד"א, כיבוי)',norms:['police','mda','fire']},
+  {id:'reserve',   label:'רזרבה כלל-עירונית',      norms:['reserve']},
+  {id:'other',     label:'אחר',                    norms:[]},
+];
+// האם התדריך דורש את המוסד (שורת נורמה): לא "לא חל", ולא "אין סף כניסה"
+function pubNeeded(r){
+  if(!r||r.na) return false;
+  if(r.category&&/אין סף|לא עומד|פחות מ-150/.test(r.category)) return false;
+  if(r.category&&/^חסר/.test(r.category)) return null; // חסר נתון (למשל גודל יישוב) — לא ידוע
+  return r.value==null?!!r.category:r.value>0;
 }
 
 function openSpaceDemand(spec,A){
@@ -341,7 +377,7 @@ function eduRowStatus(line,d){
 
 const Engine={num,round,emptySpec,newSegment,normalizeSpec,computeAssumptions,compare,
   eduDemand,publicDemand,openSpaceDemand,fmtN,SECTORS,DOMAINS,
-  EDU_META,eduBase,eduShort,dunamPerClass,keysClasses,eduRowStatus,evalSupply,MARGIN,ganLandDunam,landNeed,builtNeed};
+  EDU_META,eduBase,eduShort,dunamPerClass,keysClasses,eduRowStatus,evalSupply,MARGIN,ganLandDunam,landNeed,builtNeed,PUB_TYPES,pubNeeded};
 
 if(typeof module!=='undefined'&&module.exports){ module.exports={NORMS,Engine}; return; }
 
@@ -485,6 +521,11 @@ body.theme-light .pr-wb{background:#f1e6f8;color:#5b2c6f}
 .pr-offl{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:6px 0 3px}
 .pr-offn{min-width:92px;font-size:12px;font-weight:600}
 .pr-offd summary{cursor:pointer}
+.pr-in-cat{width:110px;padding:3px 5px;font-size:11.5px;background:#0f1824;border:1px solid #2d4060;color:#e6eef8;border-radius:5px;margin-right:3px}
+.pr-pubtbl td{vertical-align:top}
+.pr-na-row{opacity:.6}
+.pr-pubsum td{vertical-align:top}
+body.theme-light .pr-in-cat{background:#fff;color:#1c2b3c;border-color:#bfccdb}
 .pr-spc{display:flex;align-items:center;gap:4px;font-size:10.5px;color:#8fa6c0;margin-top:3px;white-space:nowrap;cursor:pointer}
 .pr-docrow{display:flex;align-items:center;gap:8px;padding:6px 8px;background:#18263a;border:1px solid #2d4060;border-radius:7px;margin-bottom:5px}
 .pr-docname{font-weight:600;min-width:92px}
@@ -684,13 +725,13 @@ PR.render=function(){
   _annexBtnSync();
   if(PR.tab==='supply') PR.tab='walk'; // "מענה ושיבוץ" אוחדה לתוך "תא אחר תא"
   $('pr-domains').innerHTML=DOMAINS.map(d=>{
-    const soon=(d.id==='edu'||d.id==='all')?'':'<span class="soon">חלקי</span>';
+    const soon=(d.id==='edu'||d.id==='all'||d.id==='public')?'':'<span class="soon">חלקי</span>';
     return `<button class="pr-dom${PR.domain===d.id?' on':''}" onclick="PR.setDomain('${d.id}')">${d.icon} ${E(d.label)}${soon}</button>`;
   }).join('');
   $('pr-tabs').innerHTML=TABS.map(t=>`<button class="pr-tab${PR.tab===t.id?' on':''}" onclick="PR.setTab('${t.id}')">${E(t.label)}</button>`).join('');
   const body=$('pr-body');
   const sc=body.scrollTop;
-  const eduDom=PR.domain==='edu'||PR.domain==='all';
+  const eduDom=PR.domain==='edu'||PR.domain==='all'||PR.domain==='public'; // "תא אחר תא" ובדיקות — משותפים לחינוך ולמוסדות הציבור
   body.innerHTML=_mismatchBanner()+(PR.tab==='assump'?_renderAssump():PR.tab==='demand'?_renderDemand()
     :PR.tab==='walk'?(eduDom?_renderWalk():_renderSoon('supply'))
     :PR.tab==='checks'?(eduDom?_renderChecks():_renderSoon('checks')):'');
@@ -1101,20 +1142,38 @@ function _renderDemand(){
     return eduT+_publicTable(A)+_openTable(A);
   }
   const intro=`<div class="pr-note" style="margin-bottom:12px"><b>תצוגה מקדימה — ביקוש לפי התדריך.</b> השוואה ל"הנספח אומר" ושיבוץ בתשריט לתחום זה — בשלב הבא.</div>`;
-  if(PR.domain==='public') return intro+_publicTable(A);
+  if(PR.domain==='public') return _publicTable(A);
   if(PR.domain==='open') return intro+_openTable(A);
   return '';
 }
+function _pubDem(id){ const D=PR.spec.pubDemand||(PR.spec.pubDemand={}); return D[id]||(D[id]={}); }
+// סטטוס שורת מוסד: מה שהנספח אומר מול התדריך
+function pubRowStatus(r){
+  const d=(PR.spec.pubDemand||{})[r.id]||{}, v=num(d.value);
+  if(v==null&&!d.cat) return '';
+  if(v!=null&&r.value!=null&&!r.na){ const ev=evalSupply(v,r.value,Math.max(r.value*0.03,r.value<10?0.5:1));
+    return ev.cls==='short'?`<span class="pr-st diff">⚠ פחות מהתדריך (${fmtN(r.value,r.value<10?1:0)})</span>`
+      :ev.cls==='surplus'?`<span class="pr-st info">ℹ עודף ניכר</span>`:`<span class="pr-st ok">✓${ev.cls==='margin'?' מרווח ביטחון':' תואם'}</span>`; }
+  if(r.na&&(v||d.cat)) return '<span class="pr-st info">ℹ התדריך לא דורש</span>';
+  return d.cat?'<span class="pr-st keys">נרשם</span>':'';
+}
+PR.onPubDem=function(el){ const [id,f]=el.dataset.pd.split('.'); _pubDem(id)[f]=el.value===''?null:el.value;
+  const row=el.closest('tr'); const r=publicDemand(PR.spec,computeAssumptions(PR.spec)).find(x=>x.id===id);
+  const st=row&&row.querySelector('[data-out="pst"]'); if(st&&r) st.innerHTML=pubRowStatus(r); };
 function _publicTable(A){
   const rows=publicDemand(PR.spec,A);
-  const t=rows.map(r=>`<tr${r.na?' style="opacity:.55"':''}>
+  const t=rows.map(r=>{ const d=(PR.spec.pubDemand||{})[r.id]||{};
+    return `<tr${r.na?' class="pr-na-row"':''}>
       <td>${E(r.inst)} <span class="pr-small">${E(r.family)}</span></td>
-      <td class="num">${r.na?'<span class="pr-na">לא חל</span>':r.value!=null?`<span class="pr-calc">${fmtN(r.value,r.value<10?1:0)}</span>`:''}</td>
-      <td class="pr-small">${r.na?'':E(r.unit)}</td>
-      <td>${r.category?`<span class="pr-cat">${E(r.category)}</span>`:''}${r.needsTrad?' <span class="pr-st diff">חסר % שומרי מסורת</span>':''}</td>
-      <td class="pr-small">${E(r.formula)}</td></tr>`).join('');
-  return `<div class="pr-sec"><h3>🏛 מוסדות ציבור אחרים <span class="pr-src guide">תדריך</span></h3>
-    <table class="pr-tbl"><tr><th>מוסד</th><th>כמות</th><th>יחידה</th><th>קטגוריה</th><th>נוסחה</th></tr>${t}</table></div>`;
+      <td class="num">${r.na?'<span class="pr-na">לא חל</span>':r.value!=null?`<b>${fmtN(r.value,r.value<10?1:0)}</b> <span class="pr-small">${E(r.unit)}</span>`:''}${r.category?`<div class="pr-cat">${E(r.category)}</div>`:''}${r.needsTrad?' <span class="pr-st diff">חסר % שומרי מסורת</span>':''}</td>
+      <td><input class="pr-in-s" data-pd="${r.id}.value" value="${E(d.value??'')}" placeholder="${r.na?'':'כמות'}" oninput="PR.onPubDem(this)" title="${E(r.unit)} — כפי שבנספח">
+        <input class="pr-in-cat" data-pd="${r.id}.cat" value="${E(d.cat??'')}" placeholder="קטגוריה / הערה" oninput="PR.onPubDem(this)"></td>
+      <td data-out="pst">${pubRowStatus(r)}</td>
+      <td class="pr-small">${E(r.formula)}</td></tr>`; }).join('');
+  return `<div class="pr-sec"><h3>🏛 מוסדות ציבור אחרים <span class="pr-hint">הקלידו מה הנספח אומר על כל מוסד (לא חובה — רק מה שמופיע בנספח)</span></h3>
+    <table class="pr-tbl pr-pubtbl"><tr><th>מוסד</th><th>לפי התדריך</th><th>הנספח אומר</th><th>השוואה</th><th>נוסחה</th></tr>${t}</table>
+    <div class="pr-small" style="margin-top:6px">"לפי התדריך" מחושב מכל התושבים (כולל דיור מיוחד). כמות = באותה יחידה שבעמודה "לפי התדריך" (מ"ר, משתתפים…).
+      אם הנספח מציין רק קטגוריה ("מרכז קטן", "לא עומד בסף") — הקלידו אותה בשדה השני. את השיבוץ בתאים עושים בלשונית <b>תא אחר תא</b>.</div></div>`;
 }
 function _openTable(A){
   const rows=openSpaceDemand(PR.spec,A);
@@ -1218,7 +1277,7 @@ function _builtAssigned(){ const m={}; for(const a of PR.spec.provision||[]) if(
 function _nonEdu(){ return PR.spec.builtNonEdu||(PR.spec.builtNonEdu=[]); }
 // לתא יש מענה כלשהו: הקצאה, שימוש לא-חינוכי / עתודה שהוזנו ב"תא אחר תא", או סימון "לא לחינוך"
 function _cellHasUse(cn){ cn=String(cn); const m=((PR.spec.walk||{}).cells||{})[cn]||{};
-  return _cellAllocs(cn).length>0||(m.other||[]).length>0||!!m.reserve||_nonEdu().includes(cn); }
+  return _cellAllocs(cn).length>0||(PR.spec.pubProv||[]).some(a=>a.cells.includes(cn))||(m.other||[]).length>0||!!m.reserve||_nonEdu().includes(cn); }
 function _builtGroupsOf(scan){ const g={}; for(const s of scan) (g[s.yiud]=g[s.yiud]||[]).push(s); return g; }
 function _renderBuiltScan(){
   const scan=builtScan();
@@ -1414,13 +1473,17 @@ function _renderChecks(){
       if(un.length) items.push({g:'מבונה בטבלה 5',info:true,txt:`${un.length} מגרשים סחירים עם שטח ציבורי מבונה בטבלה 5 (${fmtN(un.reduce((t,s)=>t+s.sqm,0))} מ"ר) לא שויכו לשום מענה: ${un.slice(0,15).map(s=>s.cn).join(', ')}${un.length>15?'…':''} — האם הנספח מתייחס אליהם?`}); } }
   if(PR.spec.provision.length&&free.length) items.push({g:'שיבוץ ושטח',ok:false,info:true,txt:`${free.length} תאי ציבור בתשריט בלי שיבוץ (ייתכן שמיועדים למוסדות שאינם חינוך): ${free.slice(0,15).join(', ')}${free.length>15?'…':''}`});
   for(const b of Object.keys(EDU_META)){ const c=coverage(b); if(c.pct!=null) items.push({g:'כיסוי',ok:c.pct>=90,txt:`${EDU_META[b].short}: ${fmtN(c.pct,0)}% ${c.byUnits?'מיח"ד':'משטח המגורים'} בטווח ${fmtN(c.rM)} מ׳${c.pctAlt!=null?` (${fmtN(c.pctAlt,0)}% כולל תאים חלופיים)`:''}${c.uncovered.length?` · מחוץ לטווח: ${c.uncovered.slice(0,12).join(', ')}${c.uncovered.length>12?'…':''}`:''}`}); }
+  if(PR.domain==='public'||PR.domain==='all'){ for(const c of pubChecks()) items.push(Object.assign({g:c.g||'מוסדות ציבור אחרים'},c)); }
   if(!items.length) return `<div class="pr-note">עוד אין מה לבדוק — הזינו בלשונית <b>ביקוש</b> את מה שהנספח אומר, ובלשונית <b>תא אחר תא</b> מה הוצע בכל תא.</div>`;
   const groups=[...new Set(items.map(i=>i.g))];
   const bad=items.filter(i=>!i.ok&&!i.info).length, good=items.filter(i=>i.ok&&!i.info).length, inf=items.filter(i=>i.info).length;
   const rank=i=>i.info?1:i.ok?2:0;
-  return `<div class="pr-sec"><h3>בדיקות — חינוך <span class="pr-hint">${good} ✓ · ${inf} ℹ · ${bad} ⚠</span></h3>
+  if(PR.domain==='public'){ for(let k=items.length-1;k>=0;k--) if(!/מוסדות ציבור|הנספח מול התדריך|מבונה בטבלה 5|עקביות/.test(items[k].g)) items.splice(k,1); }
+  const bad2=items.filter(i=>!i.ok&&!i.info).length, good2=items.filter(i=>i.ok&&!i.info).length, inf2=items.filter(i=>i.info).length;
+  const groups2=[...new Set(items.map(i=>i.g))];
+  return `<div class="pr-sec"><h3>בדיקות — ${PR.domain==='public'?'מוסדות ציבור אחרים':PR.domain==='all'?'חינוך ומוסדות ציבור':'חינוך'} <span class="pr-hint">${good2} ✓ · ${inf2} ℹ · ${bad2} ⚠</span></h3>
     <div class="pr-small" style="margin-bottom:8px">⚠ = חוסר או אי-התאמה · ℹ = לתשומת לב (עודף ניכר, תאים חלופיים) · עודף של עד ${MARGIN*100}% נחשב מרווח ביטחון תקין.</div>`+
-    groups.map(g=>`<div class="pr-cg"><div class="pr-cg-h">${E(g)}</div>${items.filter(i=>i.g===g).sort((a,b)=>rank(a)-rank(b)).map(chk).join('')}</div>`).join('')+`</div>`;
+    groups2.map(g=>`<div class="pr-cg"><div class="pr-cg-h">${E(g)}</div>${items.filter(i=>i.g===g).sort((a,b)=>rank(a)-rank(b)).map(chk).join('')}</div>`).join('')+`</div>`;
 }
 
 function _renderSoon(tab){
@@ -1443,6 +1506,7 @@ function _cellProgParts(cn){
   else if(scan) parts.push(`${scan.sqm>0?fmtN(scan.sqm)+' מ"ר ':''}מבונה ציבורי${_cellHasUse(cn)?'':' (טבלה 5) — עוד לא שויך'}`);
   for(const a of al) parts.push(_classesLabel(a,lines,true)+(a.cells.length>1&&num(a.classes)?` ב-${a.cells.length} תאים`:'')+(a.mode==='built'||a.mode==='land'?'':' ('+(ALLOC_MODE_LABEL[a.mode]||'')+')')+(a.alt?' — חלופי':''));
   const m=((PR.spec.walk||{}).cells||{})[cn]||{};
+  for(const a of (PR.spec.pubProv||[]).filter(x=>x.cells.includes(cn))) parts.push(_pubT(a.type).label+(a.type==='other'&&a.note?` (${a.note})`:'')+(num(a.sqm)?` ${fmtN(num(a.sqm))} מ"ר`:'')+(a.alt?' — חלופי':''));
   if(m.other&&m.other.length) parts.push(m.other.join(', ')+(m.alt?' — חלופי':''));
   if(m.reserve) parts.push('עתודה / לא מוגדר');
   if(_nonEdu().includes(cn)&&!parts.length) parts.push('לא לחינוך');
@@ -1481,7 +1545,7 @@ function _stripes(ctx,fs,cols,alpha,w,thin){
 function _hexA(hex,a){ const h=hex.replace('#',''); const n=parseInt(h.length===3?h.split('').map(c=>c+c).join(''):h,16); return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`; }
 PR.drawLayer=function(ctx){
   if(!PR.open||typeof state==='undefined'||!state.layers||!state.layers.plan) return;
-  if(!(PR.domain==='edu'||PR.domain==='all')) return;
+  if(PR.domain==='open') return;
   // סימבולוגיה מצומצמת (בקשת המשתמש): התאים עצמם לא נצבעים — ייעוד הקרקע של התשריט (חום = ציבור) נשאר כמו שהוא.
   // מסגרת חומה עבה = הקצאה מבונה (שטח ציבורי במגרש סחיר). על כל תא — תגיות לבנות עם מה שהוצע בו.
   const idx=cellIndex(), L=_eduLines(), W=(PR.spec.walk||{}).cells||{};
@@ -1504,7 +1568,8 @@ PR.drawLayer=function(ctx){
     }
   }
   // 2. מסגרת חומה — כל תא עם הקצאה מבונה (מטבלה 5, או שהוזנה כמבונה)
-  const builtCells=new Set([...scan.map(x=>x.cn),...Object.entries(byCell).filter(([k,l])=>l.some(a=>a.mode==='built')).map(([k])=>k)]);
+  const builtCells=new Set([...scan.map(x=>x.cn),...Object.entries(byCell).filter(([k,l])=>l.some(a=>a.mode==='built')).map(([k])=>k),
+    ...(PR.spec.pubProv||[]).filter(a=>a.mode==='built').flatMap(a=>a.cells)]);
   for(const k of builtCells){ const fs=idx[k]; if(!fs) continue;
     _pathCell(ctx,fs); ctx.lineWidth=6; ctx.strokeStyle='rgba(255,255,255,.75)'; ctx.stroke(); // הילה — שהגבול ייראה גם על כתום
     ctx.lineWidth=4; ctx.strokeStyle='#8b5a2b'; ctx.stroke(); }
@@ -1514,7 +1579,8 @@ PR.drawLayer=function(ctx){
     const hl=PR.hlLine&&list.some(a=>aLines(a).includes(PR.hlLine)), picked=pickA&&pickA.cells.includes(k);
     if(hl||picked){ _pathCell(ctx,fs); ctx.lineWidth=3.5; ctx.strokeStyle=picked?'#00e0ff':'#ffd400'; ctx.stroke(); } }
   // 4. תגיות לכל תא שיש בו משהו
-  const cells=new Set([...Object.keys(byCell),...builtCells,...Object.keys(W).filter(k=>(W[k].other||[]).length||W[k].reserve)]);
+  const pubBy={}; for(const a of PR.spec.pubProv||[]) for(const c of a.cells) (pubBy[c]=pubBy[c]||[]).push(a);
+  const cells=new Set([...Object.keys(byCell),...builtCells,...Object.keys(pubBy),...Object.keys(W).filter(k=>(W[k].other||[]).length||W[k].reserve)]);
   ctx.font='bold 11px Arial'; ctx.textBaseline='middle'; ctx.textAlign='center';
   for(const k of cells){
     const fs=idx[k]; if(!fs) continue; const p=cellCentroid(fs); if(!p) continue;
@@ -1523,6 +1589,7 @@ PR.drawLayer=function(ctx){
       const sq=decl||(scanBy[k]?scanBy[k].sqm:t5PublicSqm(t5Of(k)));
       tags.push({txt:sq>0?`🏢 ${fmtN(sq)} מ"ר`:'🏢 ציבורי (בלי שטח בטבלה 5)',brown:true}); }
     for(const a of list) tags.push({txt:_classesLabel(a,L,a.cells.length===1)+(a.alt?' ?':''),cols:aLines(a).map(l=>(EDU_META[eduBase(l)]||{}).color||'#888')});
+    for(const a of pubBy[k]||[]) tags.push({txt:(a.type==='other'&&a.note?a.note:_pubT(a.type).label)+(num(a.sqm)?` ${fmtN(num(a.sqm))} מ"ר`:'')+(a.alt?' ?':'')});
     for(const o of m.other||[]) tags.push({txt:o+(m.alt?' ?':'')});
     if(m.reserve) tags.push({txt:'עתודה'});
     const h=16, gap=2; let y=sy-(tags.length*(h+gap))/2+h/2;
@@ -1641,7 +1708,7 @@ PR.walkMeta=function(f,v){
   const cn=_walk().cur; if(!cn) return; const m=_wCell(cn);
   if(f==='other'){ if(typeof v==='number') v=OTHER_USES[v]; m.other=m.other.includes(v)?m.other.filter(x=>x!==v):[...m.other,v]; }
   else if(f==='reserve'){ m.reserve=!m.reserve; }
-  else if(f==='alt'){ m.alt=!m.alt; for(const a of _walkAllocs(cn)) a.alt=m.alt||undefined; }
+  else if(f==='alt'){ m.alt=!m.alt; for(const a of [..._walkAllocs(cn),..._pubOf(cn)]) a.alt=m.alt||undefined; }
   else m[f]=v;
   PR.render(); safeRedraw();
 };
@@ -1685,13 +1752,31 @@ function _walkAllocRows(cn,lines,phase){
       ${models}</div>`;
   }).join('');
 }
+const _pubOf=cn=>(PR.spec.pubProv||[]).filter(a=>a.cells.includes(String(cn)));
+const _pubT=id=>PUB_TYPES.find(t=>t.id===id)||{id,label:id};
 function _walkOtherRow(cn){
-  const m=_wCell(cn);
-  return `<div class="pr-wq" style="margin-top:10px">ולא-חינוך:</div><div class="pr-wts sm">
-    ${OTHER_USES.map((u,i)=>`<button class="pr-wt${m.other.includes(u)?' on':''}" style="--c:#7f8c8d" onclick="PR.walkMeta('other',${i})">🏛 ${E(u)}</button>`).join('')}
+  const m=_wCell(cn), w=_walk(), mine=_pubOf(cn);
+  const btns=PUB_TYPES.map((t,i)=>`<button class="pr-wt${mine.some(a=>a.type===t.id)?' on':''}" style="--c:#7f8c8d" onclick="PR.walkPub(${i})">🏛 ${E(t.label)}</button>`).join('');
+  const rows=mine.map(a=>`<div class="pr-wrow" style="border-color:#7f8c8d">
+      <b style="min-width:90px">🏛 ${E(_pubT(a.type).label)}</b>
+      <label class="pr-small">מ"ר בנוי <input class="pr-in-s" value="${E(a.sqm??'')}" placeholder="${w.phase==='built'?fmtN(t5PublicSqm(t5Of(cn))):'?'}" oninput="PR.pubSet('${a.id}','sqm',this.value)" title="לפי הנספח (לא חובה)"></label>
+      <input class="pr-in-note" value="${E(a.note??'')}" placeholder="${a.type==='other'?'מה? (למשל: ספרייה)':'הערה מהנספח (לא חובה)'}" oninput="PR.pubSet('${a.id}','note',this.value)"></div>`).join('');
+  return `<div class="pr-wq" style="margin-top:10px">🏛 מוסדות ציבור אחרים:</div><div class="pr-wts sm">${btns}
     <button class="pr-wt${m.reserve?' on':''}" style="--c:#95a5a6" onclick="PR.walkMeta('reserve')">⬜ עתודה / לא מוגדר</button></div>
+    <div class="pr-wrows">${rows}</div>
     <label class="pr-walt"><input type="checkbox" ${m.alt?'checked':''} onchange="PR.walkMeta('alt')"> <b>?</b> הנספח מציע כאן <b>כמה שימושים חלופיים</b> (למשל "גנים / מעונות / בית כנסת") — לא ודאי</label>`;
 }
+PR.walkPub=function(i){
+  const w=_walk(), cn=w.cur; if(!cn) return; const t=PUB_TYPES[i]; if(!t) return;
+  const ex=_pubOf(cn).find(a=>a.type===t.id);
+  if(ex) PR.spec.pubProv=PR.spec.pubProv.filter(a=>a!==ex);
+  else PR.spec.pubProv.push({id:'p'+Date.now().toString(36)+(_aSeq++),type:t.id,mode:w.phase==='built'?'built':'land',cells:[cn],sqm:'',note:'',alt:_wCell(cn).alt||undefined,src:'walk'});
+  _wCell(cn).reserve=false;
+  PR.render(); safeRedraw();
+};
+PR.pubSet=function(id,f,v){ const a=(PR.spec.pubProv||[]).find(x=>x.id===id); if(!a) return; a[f]=v; _walkRefresh(); safeRedraw(); };
+PR.pubAddOff=function(type,mode){ PR.spec.pubProv.push({id:'p'+Date.now().toString(36)+(_aSeq++),type,mode,cells:[],sqm:'',note:''}); PR.render(); };
+PR.pubDel=function(id){ PR.spec.pubProv=PR.spec.pubProv.filter(a=>a.id!==id); PR.render(); safeRedraw(); };
 function _walkLive(cn,phase){
   const out=[];
   if(phase==='built'){ const b=cellBuiltCheck(cn); if(b) out.push(b); }
@@ -1701,7 +1786,7 @@ function _walkLive(cn,phase){
 function _walkRefresh(){ const el=$('pr-wlive'); const w=_walk(); if(el&&w.cur) el.innerHTML=_walkLive(w.cur,w.phase); const s=$('pr-wsum'); if(s&&w.phase==='summary') s.innerHTML=_walkSummaryBody(); }
 function _walkDots(list,w){
   return `<div class="pr-wdots">${list.map(c=>{ const al=_cellAllocs(c), m=w.cells[c]||{};
-    const col=al.length?(EDU_META[eduBase(al[0].line)]||{}).color:(m.other&&m.other.length)?'#7f8c8d':m.reserve?'#95a5a6':'';
+    const col=al.length?(EDU_META[eduBase(al[0].line)]||{}).color:(_pubOf(c).length||(m.other&&m.other.length))?'#7f8c8d':m.reserve?'#95a5a6':'';
     return `<button class="pr-wd${c===w.cur?' cur':''}${w.done[c]?' done':''}" style="${col?`--c:${col}`:''}" onclick="PR.walkGo('${c}')" title="תא ${c}">${c}</button>`; }).join('')}</div>`;
 }
 function _renderWalk(){
@@ -1770,12 +1855,14 @@ function _walkSummaryBody(){
   }).join('');
   const cellsChk=[...Q.land.map(cellLandCheck),...Q.built.map(cellBuiltCheck)].filter(Boolean);
   const bad=cellsChk.filter(c=>!c.ok&&!c.info), good=cellsChk.filter(c=>c.ok);
-  const skipped=[...Q.land,...Q.built].filter(c=>!_cellAllocs(c).length&&!((w.cells[c]||{}).other||[]).length&&!(w.cells[c]||{}).reserve);
+  const skipped=[...Q.land,...Q.built].filter(c=>!_cellHasUse(c));
   const cov=Object.keys(EDU_META).map(b=>{ const c=coverage(b); return c.pct==null?'':`<span class="pr-covb ${c.pct>=90?'ok':'bad'}"><span class="pr-dot" style="background:${EDU_META[b].color}"></span>${EDU_META[b].short} ${fmtN(c.pct,0)}%${c.pctAlt!=null?` <span class="pr-small">(${fmtN(c.pctAlt,0)}% עם חלופיים)</span>`:''}</span>`; }).join('');
+  const showEdu=PR.domain!=='public', showPub=PR.domain==='public'||PR.domain==='all';
   return `<div class="pr-wcard"><div class="pr-wbig">ההקצאה שהנספח מציע — מול הדרישות</div>
-    <table class="pr-tbl pr-sumtbl"><tr><th>סוג</th><th>נדרש</th><th>בקרקע</th><th>במבונה</th><th>אחר</th><th>חלופי</th><th>מצב</th></tr>${rows}</table>
+    ${showPub?_pubSummary():''}
+    ${showEdu?`<div class="pr-cg-h" style="margin-top:4px">🎓 חינוך</div><table class="pr-tbl pr-sumtbl"><tr><th>סוג</th><th>נדרש</th><th>בקרקע</th><th>במבונה</th><th>אחר</th><th>חלופי</th><th>מצב</th></tr>${rows}</table>
     <div class="pr-small" style="margin:4px 0 10px">נדרש = מה שהוזן כ"הנספח אומר" בלשונית ביקוש (או התדריך). "אחר" = בשילוב במוסד אחר / מחוץ לתכנית — ר׳ למטה.</div>
-    ${_walkOffCells(lines)}
+    ${_walkOffCells(lines)}`:''}
     <div class="pr-cg"><div class="pr-cg-h">שטח התאים מול מכסות התדריך <span class="pr-small">${good.length} ✓ · ${bad.length} ⚠</span></div>
       ${cellsChk.length?cellsChk.sort((a,b)=>(a.ok?1:0)-(b.ok?1:0)).map(c=>chk(c)).join(''):'<div class="pr-small">אין עדיין תאים עם כיתות.</div>'}</div>
     <div class="pr-cg"><div class="pr-cg-h">מקרא לתשריט</div><div class="pr-legend"><span><i class="lg-t5b"></i>הקצאה מבונה — שטח ציבורי במגרש סחיר (לפי טבלה 5)</span>
@@ -1784,6 +1871,71 @@ function _walkSummaryBody(){
     ${skipped.length?`<div class="pr-cg"><div class="pr-cg-h">תאים בלי הזנה (${skipped.length})</div><div class="pr-wdots">${skipped.map(c=>`<button class="pr-wd" onclick="PR.walkGo('${c}')">${c}</button>`).join('')}</div></div>`:''}
   </div>`;
 }
+// ── תמונת הנספח — מוסדות ציבור אחרים: לכל סוג — מה נדרש (הנספח / התדריך) מול מה ששובץ ──
+function pubSummaryRows(){
+  const A=computeAssumptions(PR.spec), norms=publicDemand(PR.spec,A), D=PR.spec.pubDemand||{};
+  return PUB_TYPES.map(t=>{
+    const rs=norms.filter(r=>t.norms.includes(r.id));
+    const needFlags=rs.map(pubNeeded), needed=needFlags.some(x=>x===true), unknown=!needed&&needFlags.some(x=>x===null);
+    // מ"ר נדרש: מה שהנספח הצהיר, ואם לא — התדריך (רק לשורות שהתדריך נותן בהן מ"ר)
+    let sqmNeed=null, sqmSrc='';
+    for(const id of t.sqm||[]){ const r=rs.find(x=>x.id===id); if(!r||r.na) continue;
+      const dv=num((D[id]||{}).value); const v=dv??r.value; if(v!=null){ sqmNeed=(sqmNeed||0)+v; sqmSrc=dv!=null?'נספח':'תדריך'; } }
+    const declCats=rs.map(r=>(D[r.id]||{}).cat).filter(Boolean);
+    const guideTxt=rs.filter(r=>!r.na).map(r=>r.category||(r.value!=null?`${fmtN(r.value,r.value<10?1:0)} ${r.unit}`:'')).filter(Boolean);
+    const al=(PR.spec.pubProv||[]).filter(a=>a.type===t.id);
+    const inCells=al.filter(a=>a.cells.length&&!a.alt), alt=al.filter(a=>a.cells.length&&a.alt), off=al.filter(a=>!a.cells.length);
+    const sqm=inCells.reduce((s,a)=>s+(num(a.sqm)||0),0);
+    let st;
+    if(!al.length) st=needed?'<span class="pr-st diff">⚠ לא נמצא מענה</span>':unknown?'<span class="pr-st info">ℹ חסר נתון לתדריך</span>':'';
+    else if(sqmNeed&&sqm){ const ev=evalSupply(sqm,sqmNeed,sqmNeed*0.03);
+      st=ev.cls==='short'?`<span class="pr-st diff">⚠ חסרים ${fmtN(sqmNeed-sqm)} מ"ר</span>`:ev.cls==='surplus'?'<span class="pr-st info">ℹ עודף ניכר</span>':`<span class="pr-st ok">✓${ev.cls==='margin'?' מרווח ביטחון':''}</span>`; }
+    else if(!inCells.length&&alt.length) st='<span class="pr-st info">◐ רק בתאים חלופיים</span>';
+    else if(!inCells.length&&off.length) st=`<span class="pr-st keys">${E(off.map(a=>ALLOC_MODE_LABEL[a.mode]||a.mode).join(', '))}</span>`;
+    else st=needed||t.id==='other'?`<span class="pr-st ok">✓ ניתן מענה${sqmNeed&&!sqm?' <span class="pr-small">(הזינו מ"ר להשוואה)</span>':''}</span>`:'<span class="pr-st info">ℹ הוקצה — התדריך לא דורש</span>';
+    return {t,needed,unknown,sqmNeed,sqmSrc,guideTxt,declCats,inCells,alt,off,sqm,al,st};
+  }).filter(r=>r.needed||r.unknown||r.al.length||r.declCats.length);
+}
+ALLOC_MODE_LABEL.citywide='כלל-עירוני';
+function _pubSummary(){
+  const rows=pubSummaryRows();
+  const tr=rows.map(r=>`<tr><td>🏛 ${E(r.t.label)}</td>
+      <td class="pr-small">${r.sqmNeed!=null?`<b>${fmtN(r.sqmNeed)}</b> מ"ר <span class="pr-src ${r.sqmSrc==='נספח'?'calc':'guide'}">${r.sqmSrc}</span>`:E(r.guideTxt.join(' · ')||(r.unknown?'חסר נתון':'—'))}${r.declCats.length?`<div>נספח: ${E(r.declCats.join(', '))}</div>`:''}</td>
+      <td class="num">${r.inCells.length?`${r.inCells.map(a=>a.cells[0]).join(', ')}`:'<span class="pr-small">—</span>'}${r.alt.length?` <span class="pr-small">(+${r.alt.map(a=>a.cells[0]).join(', ')} חלופי)</span>`:''}</td>
+      <td class="num">${r.sqm?fmtN(r.sqm):'<span class="pr-small">—</span>'}</td>
+      <td>${r.st}</td></tr>`).join('');
+  const off=(PR.spec.pubProv||[]).filter(a=>!a.cells.length);
+  const OFF=[['outside','מחוץ לתכנית'],['citywide','כלל-עירוני'],['combined','בשילוב במוסד אחר']];
+  const offRows=off.map(a=>`<div class="pr-wrow" style="border-color:#7f8c8d"><b style="min-width:120px">🏛 ${E(_pubT(a.type).label)}</b>
+      <span class="pr-small">${E(ALLOC_MODE_LABEL[a.mode]||a.mode)}</span>
+      <input class="pr-in-note" value="${E(a.note??'')}" placeholder="${a.mode==='combined'?'בשילוב עם… (למשל: באגף בית הספר)':'הערה מהנספח'}" oninput="PR.pubSet('${a.id}','note',this.value)">
+      <button class="pr-del" onclick="PR.pubDel('${a.id}')" title="מחיקה">🗑</button></div>`).join('');
+  const addSel=`<select class="pr-bsel" onchange="if(this.value){const [t,m]=this.value.split('|');PR.pubAddOff(t,m);}"><option value="">+ מענה שאינו בתא שטח…</option>
+      ${PUB_TYPES.map(t=>OFF.map(([m,l])=>`<option value="${t.id}|${m}">${E(t.label)} — ${l}</option>`).join('')).join('')}</select>`;
+  return `<div class="pr-cg-h">🏛 מוסדות ציבור אחרים</div>
+    ${rows.length?`<table class="pr-tbl pr-pubsum"><tr><th>מוסד</th><th>נדרש</th><th>בתאים</th><th>מ"ר ששובצו</th><th>מצב</th></tr>${tr}</table>`
+      :'<div class="pr-small">עוד אין נתונים — מלאו את ההנחות, ושבצו מוסדות בתאים (כפתורי 🏛 בכרטיס התא).</div>'}
+    <div class="pr-small" style="margin:4px 0 6px">נדרש = מה שהנספח אומר בלשונית ביקוש, ואם לא הוזן — התדריך. השוואת מ"ר רק לבית כנסת, מרפאה ורווחה (שם התדריך נותן מ"ר).</div>
+    <div class="pr-offd">${offRows}<div style="margin-top:4px">${addSel}</div></div>`;
+}
+function pubChecks(){
+  const out=[];
+  for(const r of pubSummaryRows()){
+    const nm=r.t.label;
+    if(!r.al.length&&r.needed) out.push({ok:false,txt:`${nm}: התדריך דורש (${r.sqmNeed!=null?fmtN(r.sqmNeed)+' מ"ר':r.guideTxt.join(' · ')}) — לא נמצא מענה בנספח`});
+    else if(r.sqmNeed&&r.sqm){ const ev=evalSupply(r.sqm,r.sqmNeed,r.sqmNeed*0.03);
+      out.push(ev.cls==='short'?{ok:false,txt:`${nm}: ${fmtN(r.sqm)} מ"ר בתאים מול ${fmtN(r.sqmNeed)} מ"ר נדרש (${r.sqmSrc})`}:{ok:ev.cls!=='surplus',info:ev.cls==='surplus',txt:`${nm}: ${fmtN(r.sqm)} מ"ר בתאים מול ${fmtN(r.sqmNeed)} נדרש${ev.cls==='surplus'?' — עודף ניכר':''}`}); }
+    else if(r.al.length&&!r.needed&&!r.unknown&&r.t.id!=='other') out.push({info:true,txt:`${nm}: הוקצה אף שהתדריך לא דורש לגודל האוכלוסייה הזה`});
+    else if(r.al.length) out.push({ok:true,txt:`${nm}: ניתן מענה (${[r.inCells.length?r.inCells.length+' תאים':'',r.off.length?r.off.map(a=>ALLOC_MODE_LABEL[a.mode]).join(', '):''].filter(Boolean).join(' · ')})`});
+    // הצהרת הנספח מול התדריך (שורות הנורמה)
+  }
+  const A=computeAssumptions(PR.spec);
+  for(const r of publicDemand(PR.spec,A)){ const d=(PR.spec.pubDemand||{})[r.id]||{}, v=num(d.value);
+    if(v!=null&&r.value!=null&&!r.na){ const ev=evalSupply(v,r.value,Math.max(r.value*0.03,r.value<10?0.5:1));
+      if(ev.cls==='short') out.push({ok:false,g:'הנספח מול התדריך',txt:`${r.inst}: הנספח ${fmtN(v)} ${r.unit}, התדריך ${fmtN(r.value,r.value<10?1:0)}`}); } }
+  return out;
+}
+
 // מענים שאינם בתא שטח — לכל סוג: רשימה + הוספה (בעיקר לחינוך מיוחד: "בשילוב עם גן" וכד')
 function _walkOffCells(lines){
   const OFF=[['combined','בשילוב במוסד אחר'],['outside','מחוץ לתכנית'],['none','לא ניתן מענה']];
