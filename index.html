@@ -1790,7 +1790,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 // ── App version — bump on EVERY deploy (date + that day's deploy number), so the
 //    user and Claude can confirm they're looking at the same build. Shown in the
 //    map toolbar and the loading-page footer.
-const APP_VERSION='2026.09.27-9';
+const APP_VERSION='2026.09.27-10';
 // Version of the road-network DETECTION ALGORITHM only — bump when _rnDetect's
 // output changes, so a network saved from an older run is flagged as stale
 // (networks are saved per project and are NOT re-detected on load).
@@ -1925,6 +1925,7 @@ const MS = {
   20150:{f:'#E8E8E8',s:'#AAAAAA', name:'שביל / מדרכה'},
   // LINES (no fill)
   21010:{f:'none',s:'#CC0000',dash:[7,4],sw:1.5, name:'קו בניין', isLine:true},
+  21015:{f:'none',s:'#CC0000',dash:[7,4],sw:1.5, name:'קו בניין (על רקע אדום)', isLine:true},
   21035:{f:'none',s:'#880000',dash:[2,4],sw:1,   name:'קו בניין תת-קרקעי', isLine:true},
   21120:{f:'none',s:'#FF8800',dash:[5,3],sw:1.5, name:'להריסה', isLine:true},
   // Non-standard combined codes
@@ -4305,7 +4306,7 @@ function redraw(){
     // keep OG active through the ARC dimension text too
     if(sp&&state.dims.all&&state.dims.arcLines){
       const f21=state.layers.arc.features.filter(
-        f=>Number(f.properties.MAVAT_CODE)===21010&&f.geometry&&state.lineLayerVisible[f.properties.MAVAT_CODE]!==false
+        f=>_isBuildLine(f.properties.MAVAT_CODE)&&f.geometry&&state.lineLayerVisible[f.properties.MAVAT_CODE]!==false
       );
       if(f21.length) drawArcLineDimensions(f21,sp,90);
     }
@@ -4695,7 +4696,7 @@ function raySegIntersect(ox,oy,dx,dy,x1,y1,x2,y2){
 function drawSetbacks(span,minScreenPx){
   if(!state.layers.arc||!state.layers.plan||!span) return;
   const mpu=span/DATA_SIZE;
-  const arcFeats=state.layers.arc.features.filter(f=>Number(f.properties.MAVAT_CODE)===21010&&f.geometry);
+  const arcFeats=state.layers.arc.features.filter(f=>_isBuildLine(f.properties.MAVAT_CODE)&&f.geometry);
   if(!arcFeats.length) return;
   const allRings=[];
   for(const f of state.layers.plan.features){
@@ -4817,6 +4818,10 @@ function _convexHull(pts){
 // interior, treat the קו-בניין lines as walls, flood the buildable interior from
 // its deepest point, and count the cells the flood reaches. This measures the
 // TRUE buildable area for any parcel shape.
+// Ground-level building-line codes: 21010 (regular) + 21015 (variant drawn over red
+// zones — used by many Xplan/quick-load plans). Overhead (21020/25) and underground
+// (21035) lines define different envelopes and are intentionally excluded.
+function _isBuildLine(code){ code=Number(code); return code===21010||code===21015; }
 function _calcBuildEnvArea(zoneFeat){
   if(!state.layers.arc||!state.spanMeters||!zoneFeat.geometry) return null;
   const zc=zoneFeat.geometry.coordinates;
@@ -4830,7 +4835,7 @@ function _calcBuildEnvArea(zoneFeat){
   // ── Collect this zone's setback-line segments (clipped to the interior) ──
   const segs=[];
   for(const af of state.layers.arc.features){
-    if(Number(af.properties.MAVAT_CODE)!==21010||!af.geometry) continue;
+    if(!_isBuildLine(af.properties.MAVAT_CODE)||!af.geometry) continue;
     const coords=af.geometry.type==='LineString'?af.geometry.coordinates:af.geometry.coordinates.flat();
     for(let i=0;i<coords.length-1;i++){
       const p1=coords[i],p2=coords[i+1];
