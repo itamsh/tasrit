@@ -1787,7 +1787,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 // ── App version — bump on EVERY deploy (date + that day's deploy number), so the
 //    user and Claude can confirm they're looking at the same build. Shown in the
 //    map toolbar and the loading-page footer.
-const APP_VERSION='2026.09.27-5';
+const APP_VERSION='2026.09.27-6';
 // Version of the road-network DETECTION ALGORITHM only — bump when _rnDetect's
 // output changes, so a network saved from an older run is flagged as stale
 // (networks are saved per project and are NOT re-detected on load).
@@ -1812,7 +1812,7 @@ let normDash=0,normAnimId=null,normBg=null;
 let normMode='zones',normPolyPts=[],normMousePt=null;
 let normPan={active:false,sx:0,sy:0,vx0:0,vy0:0,dragged:false};
 const T5_PARAMS={serviceMarkami:15,serviceMigdali:25,ahuzMode:'ahuz'};
-const TAMA={model:0,npdReg:3.2,npdSpec:1.5,normM2:null,intensive:false,densMode:1,deduction:0,spreadDenom:'norm',pct80:0,site:''};
+const TAMA={model:0,npdReg:3.2,npdSpec:1.5,normM2:null,intensive:false,densMode:1,deduction:0,spreadDenom:'norm',pct80:0,site:'',projPop:null};
 const NORM={incFeat:null,codeOrder:null,showOutline:true,polyRing:null};
 const RE={
   active:false, finalized:false, visible:true,
@@ -8576,11 +8576,28 @@ function _renderTamaPanel(){
           </div>
           ${siteZoneNote?`<div style="font-size:10px;color:#e6a817;margin-top:3px">${siteZoneNote} — בדוק הגדרת הפחתה למטה</div>`:''}
         </div>
+        <div class="tama-ig" style="flex:1;min-width:160px;max-width:220px">
+          <label>צפי אוכלוסייה ביישוב</label>
+          <div style="display:flex;gap:4px;align-items:center">
+            <input type="number" class="tama-num" id="tama-proj-pop"
+                   value="${TAMA.projPop!=null?TAMA.projPop:''}"
+                   placeholder="לפי תוכניות מאושרות..."
+                   min="0" step="1000" style="flex:1"
+                   oninput="_tamaSetProjPop(this.value===''?null:+this.value)">
+            ${TAMA.projPop!=null?`<button onclick="TAMA.projPop=null;_renderTamaPanel()" title="נקה — חזור לדגם מהמסד"
+              style="background:#3a2020;border:1px solid #6a3030;color:#e88;border-radius:4px;cursor:pointer;padding:5px 8px;font-size:12px">×</button>`:''}
+          </div>
+          <div style="font-size:10px;margin-top:3px;line-height:1.4;color:${TAMA.projPop!=null?'#e6a817':'#6688aa'}">
+            ${TAMA.projPop!=null
+              ? `דגם ${TAMA.model} חושב לפי הצפי שהוזן`
+              : (TAMA.site?'ריק = דגם לפי נתוני למ"ס 2022':'הזן לקביעת דגם לפי צפי')}
+          </div>
+        </div>
       </div>
       <div class="tama-inputs-row">
         <div class="tama-ig">
           <label>דגם יישוב</label>
-          <select class="tama-sel" onchange="TAMA.model=+this.value;_renderTamaPanel()">
+          <select class="tama-sel" onchange="TAMA.model=+this.value;TAMA.projPop=null;_renderTamaPanel()">
             <option value="0"${selModel===0?' selected':''}>— בחר דגם —</option>
             ${modelOpts}
           </select>
@@ -8886,7 +8903,7 @@ function _saveTamaState(){
     localStorage.setItem('tama_state',JSON.stringify({
       model:TAMA.model, npdReg:TAMA.npdReg, npdSpec:TAMA.npdSpec,
       intensive:TAMA.intensive, densMode:TAMA.densMode, deduction:TAMA.deduction,
-      spreadDenom:TAMA.spreadDenom, pct80:TAMA.pct80, site:TAMA.site,
+      spreadDenom:TAMA.spreadDenom, pct80:TAMA.pct80, site:TAMA.site, projPop:TAMA.projPop,
       normM2:TAMA.normM2,
       normIncFeat:NORM.incFeat?[...NORM.incFeat]:null,
       normPolyRing:NORM.polyRing||null
@@ -8907,6 +8924,7 @@ function _restoreTamaState(){
     if(s.spreadDenom!=null)TAMA.spreadDenom=s.spreadDenom;
     if(s.pct80!=null)      TAMA.pct80=s.pct80;
     if(s.site!=null)       TAMA.site=s.site;
+    if(s.projPop!=null)   TAMA.projPop=s.projPop;
     if(s.normM2!=null)     TAMA.normM2=s.normM2;
     if(s.normIncFeat)      NORM.incFeat=new Set(s.normIncFeat);
     if(s.normPolyRing)     NORM.polyRing=s.normPolyRing;
@@ -8945,10 +8963,32 @@ function _tamaSiteFilter(q){
   });
 }
 
+function _modelFromPop(pop, metro){
+  if(metro) return 1;
+  if(pop>500000) return 1;
+  if(pop>200000) return 2;
+  if(pop>50000)  return 3;
+  if(pop>20000)  return 4;
+  if(pop>5000)   return 5;
+  if(pop>2000)   return 6;
+  return 7;
+}
+
+function _tamaSetProjPop(pop){
+  TAMA.projPop=pop;
+  if(pop!=null){
+    const metro=TAMA.site?(SETTLEMENT_DB[TAMA.site]?.[1]===1):TAMA.intensive;
+    TAMA.model=_modelFromPop(pop,metro);
+    TAMA.intensive=metro;
+  }
+  _renderTamaPanel();
+}
+
 function _tamaApplySite(name){
   const s=SETTLEMENT_DB[name];
   if(!s) return;
   TAMA.site=name;
+  TAMA.projPop=null;
   TAMA.model=s[0];
   TAMA.intensive=s[1]===1;
   TAMA.deduction=s[2]===0?0:20;
