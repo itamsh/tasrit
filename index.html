@@ -1797,7 +1797,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 // ── App version — bump on EVERY deploy (date + that day's deploy number), so the
 //    user and Claude can confirm they're looking at the same build. Shown in the
 //    map toolbar and the loading-page footer.
-const APP_VERSION='2026.09.27-12';
+const APP_VERSION='2026.09.27-13';
 // Version of the road-network DETECTION ALGORITHM only — bump when _rnDetect's
 // output changes, so a network saved from an older run is flagged as stale
 // (networks are saved per project and are NOT re-detected on load).
@@ -3475,13 +3475,13 @@ function _buildT5FromGrid(grid, rowCount){
     return v.replace(/\s+/g,' ').trim();
   };
   const getCell=(gr,idx)=>idx>=0?cleanVal(gr[idx]||''):'';
-  const byNum={};
-  const order=[];
+  const parsed=[]; // {label, nums, row} — in source order
   for(let r=hdrEnd+1;r<rowCount;r++){
     const gr=grid[r]||{};
-    const numVal=(gr[CI.num]||'').replace(/ | /g,' ').trim();
-    if(!numVal||!/^\d+$/.test(numVal)) continue;
+    const nums=_t5ParseNums(gr[CI.num]);
+    if(!nums) continue;
     if(/סך|סה"כ/.test((gr[0]||'').replace(/ | /g,' ').trim())) continue;
+    const numVal=nums.length===1?nums[0]:_t5RangeLabel(nums);
     const row={
       yiud:getCell(gr,CI.yiud),shimush:getCell(gr,CI.shimush),num:numVal,
       magras:getCell(gr,CI.magras),ikariMal:getCell(gr,CI.ikariMal),
@@ -3494,12 +3494,68 @@ function _buildT5FromGrid(grid, rowCount){
       kvYmani:getCell(gr,CI.kvYmani),kvSmali:getCell(gr,CI.kvSmali),
       mirpasot:getCell(gr,CI.mirpasot),tachsit:getCell(gr,CI.tachsit),
     };
-    if(!byNum[numVal]){byNum[numVal]=[];order.push(numVal);}
-    byNum[numVal].push(row);
+    parsed.push({label:numVal,nums,row});
   }
+  // Single-cell rows first; a row for a range/list of cells ("1 - 296") then fills every cell
+  // of the range that has no row of its own. Its values are per cell (e.g. a 380 m² plot with
+  // 2 units), so each member cell shares the group's rows array.
+  const byNum={}, groups={}, order=[];
+  for(const p of parsed) if(p.nums.length===1) (byNum[p.label]=byNum[p.label]||[]).push(p.row);
+  const planNums=_t5PlanNumSet();
+  for(const p of parsed){
+    if(p.nums.length===1) continue;
+    let g=groups[p.label];
+    if(!g){
+      g=groups[p.label]={label:p.label,nums:[],rows:[]};
+      // Only cells that exist in the loaded plan (no plan / no match at all → trust the range)
+      const inPlan=planNums?p.nums.filter(n=>planNums.has(n)):[];
+      for(const n of (inPlan.length?inPlan:p.nums)){
+        if(byNum[n]) continue;
+        byNum[n]=g.rows; g.nums.push(n);
+      }
+    }
+    g.rows.push(p.row);
+  }
+  for(const p of parsed) if(!order.includes(p.label)) order.push(p.label);
   if(Object.keys(byNum).length===0) return null;
   Object.defineProperty(byNum,'__order',{value:order,enumerable:false});
+  Object.defineProperty(byNum,'__groups',{value:groups,enumerable:false});
   return byNum;
+}
+// "תאי שטח" may hold one number, a range ("1 - 296", "296-1", "1–296") or a list ("12, 15, 18-20").
+// Returns the cell numbers as strings, or null when the text isn't a cell reference.
+function _t5ParseNums(s){
+  s=String(s||'').replace(/[ ‎‏]/g,' ').trim();
+  if(/^\d+$/.test(s)) return [s];
+  if(!/^[\d\s,;\-–—]+$/.test(s)) return null;
+  const out=[];
+  for(const part of s.split(/[,;]/)){
+    const p=part.trim(); if(!p) continue;
+    const m=p.match(/^(\d+)\s*[-–—]\s*(\d+)$/);
+    if(m){
+      let a=+m[1], b=+m[2]; if(a>b) [a,b]=[b,a];
+      if(b-a>5000) return null;
+      for(let i=a;i<=b;i++) out.push(String(i));
+    } else if(/^\d+$/.test(p)) out.push(p);
+    else return null;
+  }
+  return out.length?out:null;
+}
+// Compact label for a set of cell numbers: consecutive runs as "a–b", joined with ", "
+function _t5RangeLabel(nums){
+  const v=[...new Set(nums.map(Number))].sort((a,b)=>a-b), runs=[];
+  for(let i=0;i<v.length;i++){
+    let j=i; while(j+1<v.length&&v[j+1]===v[j]+1) j++;
+    runs.push(i===j?String(v[i]):`${v[i]}–${v[j]}`); i=j;
+  }
+  return runs.join(', ');
+}
+function _t5PlanNumSet(){
+  const fs=state.layers&&state.layers.plan&&state.layers.plan.features;
+  if(!fs||!fs.length) return null;
+  const s=new Set();
+  for(const f of fs){ const n=String(f.properties.NUM??'').trim(); if(n) s.add(n); }
+  return s.size?s:null;
 }
 function _applyT5Data(byNum){
   if(!byNum) return false;
@@ -8040,12 +8096,15 @@ function _renderT5Panel(){
 
   // Preserve the source (Excel) ordering — grouped by ייעוד, sorted by zone within each.
   // Fall back to numeric sort if the order wasn't captured.
+  // A range row ("1–296") stays ONE entry here, like in the Excel; its member cells share its rows.
+  const groups=t5.__groups||{};
+  const rowsOf=n=>groups[n]?groups[n].rows:t5[n];
   const nums=(t5.__order&&t5.__order.length)
-    ?t5.__order.filter(n=>t5[n])
+    ?t5.__order.filter(n=>t5[n]||groups[n])
     :Object.keys(t5).sort((a,b)=>+a-+b);
   const flat=[];
   for(const num of nums){
-    const rows=t5[num];
+    const rows=rowsOf(num);
     const groupYiud=rows.find(r=>r.yiud)?.yiud||'';
     for(let i=0;i<rows.length;i++) flat.push({num,row:rows[i],isFirst:i===0,groupLen:rows.length,groupYiud});
   }
@@ -8094,9 +8153,12 @@ function _renderT5Panel(){
     }
 
   // ── Per-cell calculations ──
+  // Envelope area is costly on big plans (hundreds of small cells) → cache per feature
+  const envOf=f=>f._buildEnv!==undefined?f._buildEnv:(f._buildEnv=_calcBuildEnvArea(f));
+  const minMax=a=>a.length?[Math.min(...a),Math.max(...a)]:null;
   const cellCalcs={};
   for(const num of nums){
-    const rows=t5[num];
+    const rows=rowsOf(num);
     const dataRows=rows.length===1?rows:rows.filter(r=>!isSumRow(r));
     let totalAbove=0, komMalVal=null, magrasVal=null, yihudTotal=0, hasYihud=false;
     const detailRows=[];
@@ -8124,10 +8186,24 @@ function _renderT5Panel(){
     const avgFloorVal=(totalAbove>0&&komMalVal>0)?totalAbove/komMalVal:null;
     const tachsitVal=(avgFloorVal!=null&&magrasVal>0)?avgFloorVal/magrasVal*100:null;
     const densityVal=(hasYihud&&magrasVal>0)?yihudTotal/(magrasVal/1000):null;
-    const envFeat=featByNum[String(num)]||featByNum[String(+num)];
-    const buildEnv=envFeat?_calcBuildEnvArea(envFeat):null;
-    const measMagras=envFeat?_featureAreaM2(envFeat):null;
+    let buildEnv=null, measMagras=null, grp=null;
+    if(groups[num]){
+      // Range row: min–max over its member cells
+      const ms=[], es=[], ps=[];
+      for(const n of groups[num].nums){
+        const f=featByNum[n]; if(!f) continue;
+        const m=_featureAreaM2(f), e=envOf(f);
+        if(m>0) ms.push(m);
+        if(e!=null&&e>0){ es.push(e); if(m>0) ps.push(e/m*100); }
+      }
+      grp={count:groups[num].nums.length, meas:minMax(ms), env:minMax(es), pct:minMax(ps)};
+    } else {
+      const envFeat=featByNum[String(num)]||featByNum[String(+num)];
+      buildEnv=envFeat?envOf(envFeat):null;
+      measMagras=envFeat?_featureAreaM2(envFeat):null;
+    }
     cellCalcs[num]={
+      grp,
       totalAbove:totalAbove>0?totalAbove:null,
       komMal:komMalVal,
       magras:magrasVal,
@@ -8170,7 +8246,10 @@ function _renderT5Panel(){
     tbody+=`<tr${rowCls?' class="'+rowCls+'"':''}>`;
     const numStyle=yc?` style="background:${yc.bg};color:${yc.text}"`:'';
     // תא / יעוד / גודל מגרש are identical for every row of a cell group → merge with rowspan
-    if(isFirst) tbody+=`<td class="t5v-num" rowspan="${groupLen}"${numStyle}>${num}</td>`;
+    if(isFirst){
+      const gc=groups[num]?`<div style="font-size:10px;font-weight:400;opacity:.85">${groups[num].nums.length} תאים</div>`:'';
+      tbody+=`<td class="t5v-num" rowspan="${groupLen}"${numStyle}>${num}${gc}</td>`;
+    }
     for(const c of COL_DEFS){
       // Split columns render per-row; the rest merge across the cell group when
       // their values agree (conflicting values fall back to per-row — never hidden).
@@ -8179,7 +8258,7 @@ function _renderT5Panel(){
         tbody+=`<td>${v?fmtN(v):''}</td>`;
         continue;
       }
-      const mv=_t5GroupVal(t5[num],c.k);
+      const mv=_t5GroupVal(rowsOf(num),c.k);
       if(mv.ok){
         if(isFirst) tbody+=`<td rowspan="${groupLen}">${mv.val?fmtN(mv.val):''}</td>`;
       } else {
@@ -8191,13 +8270,20 @@ function _renderT5Panel(){
     if(isFirst){
       const cc=cellCalcs[num];
       tbody+=`<td class="t5v-calc-div-td" rowspan="${groupLen}"></td>`;
-      const measTxt=cc.measMagras!=null?fmtC(cc.measMagras):'—';
-      tbody+=`<td class="t5v-calc-cell t5v-env-cell" rowspan="${groupLen}"${cc.measMagras!=null?'':' style="color:#888"'}>${measTxt}</td>`;
-      const envTxt=cc.buildEnv!=null?fmtC(cc.buildEnv):'—';
-      tbody+=`<td class="t5v-calc-cell t5v-env-cell" rowspan="${groupLen}"${cc.buildEnv!=null?'':' style="color:#888"'}>${envTxt}</td>`;
-      const envPct=(cc.buildEnv!=null&&cc.measMagras>0)?cc.buildEnv/cc.measMagras*100:null;
-      const envPctTxt=envPct!=null?envPct.toFixed(1)+'%':'—';
-      tbody+=`<td class="t5v-calc-cell t5v-env-cell" rowspan="${groupLen}"${envPct!=null?'':' style="color:#888"'}>${envPctTxt}</td>`;
+      let measTxt, envTxt, envPctTxt;
+      if(cc.grp){
+        // range row → "min–max" over its cells
+        const rng=(r,f)=>!r?null:(f(r[0])===f(r[1])?f(r[0]):`${f(r[0])}–${f(r[1])}`);
+        measTxt=rng(cc.grp.meas,fmtC); envTxt=rng(cc.grp.env,fmtC);
+        const p=rng(cc.grp.pct,v=>v.toFixed(1)); envPctTxt=p?p+'%':null;
+      } else {
+        measTxt=cc.measMagras!=null?fmtC(cc.measMagras):null;
+        envTxt=cc.buildEnv!=null?fmtC(cc.buildEnv):null;
+        const envPct=(cc.buildEnv!=null&&cc.measMagras>0)?cc.buildEnv/cc.measMagras*100:null;
+        envPctTxt=envPct!=null?envPct.toFixed(1)+'%':null;
+      }
+      for(const t of [measTxt,envTxt,envPctTxt])
+        tbody+=`<td class="t5v-calc-cell t5v-env-cell" rowspan="${groupLen}"${t!=null?'':' style="color:#888"'}>${t!=null?t:'—'}</td>`;
       tbody+=`<td class="t5v-calc-cell" rowspan="${groupLen}" onclick="_t5ShowCalcDetail('${num}',event,'avgFloor')" title="לחץ לתחקור החישוב">${fmtC(cc.avgFloor)} <span style="font-size:9px;opacity:.6">🔍</span></td>`;
       const tachsitTxt=cc.tachsit!=null?cc.tachsit.toFixed(1)+'%':'—';
       tbody+=`<td class="t5v-calc-cell" rowspan="${groupLen}" onclick="_t5ShowCalcDetail('${num}',event,'tachsit')" title="לחץ לתחקור החישוב">${tachsitTxt} <span style="font-size:9px;opacity:.6">🔍</span></td>`;
@@ -8212,7 +8298,8 @@ function _renderT5Panel(){
   }
   tbody+='</tbody>';
 
-  document.getElementById('t5-stats').textContent=`${nums.length} תאי שטח`;
+  const cellCount=nums.reduce((a,n)=>a+(groups[n]?groups[n].nums.length:1),0);
+  document.getElementById('t5-stats').textContent=`${cellCount} תאי שטח`;
 
   return `<div class="t5v-wrap"><table class="t5v-tbl">${thead}${tbody}</table></div>`;
 }
