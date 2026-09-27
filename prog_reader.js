@@ -526,6 +526,12 @@ body.theme-light .pr-wb{background:#f1e6f8;color:#5b2c6f}
 .pr-na-row{opacity:.6}
 .pr-pubsum td{vertical-align:top}
 body.theme-light .pr-in-cat{background:#fff;color:#1c2b3c;border-color:#bfccdb}
+.pr-captbl th,.pr-captbl td.num{text-align:center}
+.pr-captbl th.pr-capdecl{color:#7ecfff}
+.pr-pos{color:#5ecf99}.pr-neg{color:#f5a05a}
+body.theme-light .pr-pos{color:#1e7a4a}body.theme-light .pr-neg{color:#b35a00}
+.pr-cap{background:rgba(90,160,224,.06);border:1px solid #2d4060;border-radius:8px;padding:8px 10px}
+body.theme-light .pr-cap{background:#f4f8fd;border-color:#bfccdb}
 .pr-spc{display:flex;align-items:center;gap:4px;font-size:10.5px;color:#8fa6c0;margin-top:3px;white-space:nowrap;cursor:pointer}
 .pr-docrow{display:flex;align-items:center;gap:8px;padding:6px 8px;background:#18263a;border:1px solid #2d4060;border-radius:7px;margin-bottom:5px}
 .pr-docname{font-weight:600;min-width:92px}
@@ -1474,11 +1480,12 @@ function _renderChecks(){
   if(PR.spec.provision.length&&free.length) items.push({g:'שיבוץ ושטח',ok:false,info:true,txt:`${free.length} תאי ציבור בתשריט בלי שיבוץ (ייתכן שמיועדים למוסדות שאינם חינוך): ${free.slice(0,15).join(', ')}${free.length>15?'…':''}`});
   for(const b of Object.keys(EDU_META)){ const c=coverage(b); if(c.pct!=null) items.push({g:'כיסוי',ok:c.pct>=90,txt:`${EDU_META[b].short}: ${fmtN(c.pct,0)}% ${c.byUnits?'מיח"ד':'משטח המגורים'} בטווח ${fmtN(c.rM)} מ׳${c.pctAlt!=null?` (${fmtN(c.pctAlt,0)}% כולל תאים חלופיים)`:''}${c.uncovered.length?` · מחוץ לטווח: ${c.uncovered.slice(0,12).join(', ')}${c.uncovered.length>12?'…':''}`:''}`}); }
   if(PR.domain==='public'||PR.domain==='all'){ for(const c of pubChecks()) items.push(Object.assign({g:c.g||'מוסדות ציבור אחרים'},c)); }
+  { const v=capacityVerdict(capacity()); if(v) items.unshift(Object.assign({g:'קיבולת התשריט'},v)); }
   if(!items.length) return `<div class="pr-note">עוד אין מה לבדוק — הזינו בלשונית <b>ביקוש</b> את מה שהנספח אומר, ובלשונית <b>תא אחר תא</b> מה הוצע בכל תא.</div>`;
   const groups=[...new Set(items.map(i=>i.g))];
   const bad=items.filter(i=>!i.ok&&!i.info).length, good=items.filter(i=>i.ok&&!i.info).length, inf=items.filter(i=>i.info).length;
   const rank=i=>i.info?1:i.ok?2:0;
-  if(PR.domain==='public'){ for(let k=items.length-1;k>=0;k--) if(!/מוסדות ציבור|הנספח מול התדריך|מבונה בטבלה 5|עקביות/.test(items[k].g)) items.splice(k,1); }
+  if(PR.domain==='public'){ for(let k=items.length-1;k>=0;k--) if(!/מוסדות ציבור|הנספח מול התדריך|מבונה בטבלה 5|עקביות|קיבולת/.test(items[k].g)) items.splice(k,1); }
   const bad2=items.filter(i=>!i.ok&&!i.info).length, good2=items.filter(i=>i.ok&&!i.info).length, inf2=items.filter(i=>i.info).length;
   const groups2=[...new Set(items.map(i=>i.g))];
   return `<div class="pr-sec"><h3>בדיקות — ${PR.domain==='public'?'מוסדות ציבור אחרים':PR.domain==='all'?'חינוך ומוסדות ציבור':'חינוך'} <span class="pr-hint">${good2} ✓ · ${inf2} ℹ · ${bad2} ⚠</span></h3>
@@ -1859,6 +1866,7 @@ function _walkSummaryBody(){
   const cov=Object.keys(EDU_META).map(b=>{ const c=coverage(b); return c.pct==null?'':`<span class="pr-covb ${c.pct>=90?'ok':'bad'}"><span class="pr-dot" style="background:${EDU_META[b].color}"></span>${EDU_META[b].short} ${fmtN(c.pct,0)}%${c.pctAlt!=null?` <span class="pr-small">(${fmtN(c.pctAlt,0)}% עם חלופיים)</span>`:''}</span>`; }).join('');
   const showEdu=PR.domain!=='public', showPub=PR.domain==='public'||PR.domain==='all';
   return `<div class="pr-wcard"><div class="pr-wbig">ההקצאה שהנספח מציע — מול הדרישות</div>
+    ${_capacityCard()}
     ${showPub?_pubSummary():''}
     ${showEdu?`<div class="pr-cg-h" style="margin-top:4px">🎓 חינוך</div><table class="pr-tbl pr-sumtbl"><tr><th>סוג</th><th>נדרש</th><th>בקרקע</th><th>במבונה</th><th>אחר</th><th>חלופי</th><th>מצב</th></tr>${rows}</table>
     <div class="pr-small" style="margin:4px 0 10px">נדרש = מה שהוזן כ"הנספח אומר" בלשונית ביקוש (או התדריך). "אחר" = בשילוב במוסד אחר / מחוץ לתכנית — ר׳ למטה.</div>
@@ -1934,6 +1942,78 @@ function pubChecks(){
     if(v!=null&&r.value!=null&&!r.na){ const ev=evalSupply(v,r.value,Math.max(r.value*0.03,r.value<10?0.5:1));
       if(ev.cls==='short') out.push({ok:false,g:'הנספח מול התדריך',txt:`${r.inst}: הנספח ${fmtN(v)} ${r.unit}, התדריך ${fmtN(r.value,r.value<10?1:0)}`}); } }
   return out;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// קיבולת התשריט — "האם זה בכלל נכנס": כמה קרקע ציבורית נדרשת לפי התדריך (בשלושה תרחישי צפיפות של בתי ספר)
+// מול סך התאים החומים בתשריט, ומה הנספח ניצל בפועל. בלי הנחות מעבר להנחות האוכלוסייה.
+// ════════════════════════════════════════════════════════════════════════════
+function capacity(){
+  const A=computeAssumptions(PR.spec); if(A.T.pop==null) return null;
+  const idx=cellIndex(); const lines=eduDemand(PR.spec,A);
+  const pubCells=Object.keys(idx).filter(k=>isPublicCell(idx[k]));
+  const landHave=pubCells.reduce((t,k)=>t+cellAreaM2(idx[k]),0)/1000;
+  const need=l=>num(((PR.spec.demand||{})[l.id]||{}).declared?.classes)??l.classesRounded;
+  const schools=lines.filter(l=>/ספר/.test(l.inst));
+  const pre=lines.filter(l=>!/ספר/.test(l.inst));
+  // בתי ספר בכל דגם (חנ"מ — מכסה אחידה, בלי דגם)
+  const MODELS=['A','B','C','model_1']; // model_1 = בית ספר קומפקטי (עדכון 2025) — לחרדי בנים אין, נופלים ל-C
+  const sch={}; const schMiss=new Set();
+  for(const m of MODELS){ sch[m]=0; for(const l of schools){ const n=need(l); if(!n) continue;
+    let ln=landNeed(l.id,n,/_se$/.test(l.id)?'':m,l); if(!ln&&m==='model_1') ln=landNeed(l.id,n,'C',l);
+    if(ln) sch[m]+=ln.d; else schMiss.add(eduShort(l)); } }
+  // גנים ומעונות — הכל בקרקע (הכי תובעני); וכמה מ"ר בנוי אם הכל עובר למבונה
+  let preLand=0, preBuilt=0; for(const l of pre){ const n=need(l); if(!n) continue;
+    const ln=landNeed(l.id,n,'',l); if(ln) preLand+=ln.d; const bn=builtNeed(l.id,n); if(bn) preBuilt+=bn.m; }
+  // מוסדות ציבור בדונם שבדרך כלל על קרקע חומה (רזרבות); ומוסדות במ"ר בנוי
+  const norms=publicDemand(PR.spec,A), D=PR.spec.pubDemand||{};
+  const val=r=>num((D[r.id]||{}).value)??r.value;
+  let resLand=0; for(const r of norms) if(!r.na&&r.unit==='דונם'&&/רזרבה/.test(r.inst)) resLand+=val(r)||0;
+  let pubBuilt=0; for(const t of PUB_TYPES) for(const id of t.sqm||[]){ const r=norms.find(x=>x.id===id); if(r&&!r.na) pubBuilt+=val(r)||0; }
+  const sport=norms.filter(r=>!r.na&&r.unit==='דונם'&&!/רזרבה/.test(r.inst)&&(val(r)||0)>0);
+  // היצע מבונה: שטח ציבורי במגרשים סחירים לפי טבלה 5
+  const builtHave=(builtScan()||[]).reduce((t,x)=>t+(x.sqm||0),0);
+  // מה הנספח ניצל: תאים חומים שיש בהם שיבוץ כלשהו
+  const used=pubCells.filter(k=>_cellHasUse(k)), usedLand=used.reduce((t,k)=>t+cellAreaM2(idx[k]),0)/1000;
+  const free=pubCells.filter(k=>!_cellHasUse(k));
+  // הדגם שהנספח הצהיר (אם הוזן לבית הספר היסודי / העל-יסודי)
+  const declModels=[...new Set(schools.map(l=>((PR.spec.demand||{})[l.id]||{}).declared?.model).filter(m=>MODELS.includes(m)))];
+  const tot=m=>sch[m]+preLand+resLand;
+  return {landHave,pubCells,sch,schMiss:[...schMiss],preLand,preBuilt,resLand,pubBuilt,sport,builtHave,used,usedLand,free,declModels,tot,MODELS};
+}
+function capacityVerdict(c){
+  if(!c||!c.pubCells.length) return null;
+  const bal=m=>c.landHave-c.tot(m);
+  const bestNoPre=c.landHave-(c.sch.model_1+c.resLand); // הצפוף ביותר: בתי ספר קומפקטיים וכל הגנים והמעונות במבונה
+  if(bal('B')>=0) return {ok:true,txt:`התשריט מכיל את הביקוש: ${fmtN(c.tot('B'),1)} ד׳ נדרשים בדגם B (כולל גנים ומעונות בקרקע) מול ${fmtN(c.landHave,1)} ד׳ חומים — עודף ${fmtN(bal('B'),1)} ד׳`};
+  if(bal('C')>=0) return {info:true,txt:`נכנס רק בצפיפות גבוהה: בדגם B חסרים ${fmtN(-bal('B'),1)} ד׳; בדגם C יש עודף ${fmtN(bal('C'),1)} ד׳`};
+  if(bal('model_1')>=0) return {info:true,txt:`נכנס רק בבתי ספר קומפקטיים: גם בדגם C חסרים ${fmtN(-bal('C'),1)} ד׳; בדגם 1 (קומפקטי) יש עודף ${fmtN(bal('model_1'),1)} ד׳`};
+  if(bestNoPre>=0) return {info:true,txt:`גם בבתי ספר קומפקטיים חסרים ${fmtN(-bal('model_1'),1)} ד׳ — נסגר רק אם גנים ומעונות עוברים להקצאה מבונה (${fmtN(c.preBuilt)} מ"ר בנוי; בטבלה 5 יש ${fmtN(c.builtHave)} מ"ר ציבורי מבונה)`};
+  return {ok:false,txt:`התשריט לא מכיל את הביקוש גם בתרחיש הצפוף ביותר (בתי ספר קומפקטיים, כל הגנים והמעונות במבונה): חסרים ${fmtN(-bestNoPre,1)} ד׳ קרקע ציבורית`};
+}
+function _capacityCard(){
+  const c=capacity(); if(!c) return '';
+  if(!c.pubCells.length) return `<div class="pr-cg"><div class="pr-cg-h">📐 קיבולת התשריט</div><div class="pr-small">אין בתשריט תאים בייעוד "מבנים ומוסדות ציבור".</div></div>`;
+  const v=capacityVerdict(c);
+  const td=(x,d)=>`<td class="num">${x?fmtN(x,d??1):'<span class="pr-small">—</span>'}</td>`;
+  const hl=m=>c.declModels.includes(m)?' class="pr-capdecl"':'';
+  const bal=m=>{ const b=c.landHave-c.tot(m); return `<td class="num"><b class="${b>=0?'pr-pos':'pr-neg'}">${b>=0?'+':'−'}${fmtN(Math.abs(b),1)}</b></td>`; };
+  const pct=c.landHave?Math.round(c.usedLand/c.landHave*100):0;
+  return `<div class="pr-cg pr-cap"><div class="pr-cg-h">📐 קיבולת התשריט — האם זה בכלל נכנס? <span class="pr-small">(דונם קרקע ציבורית, לפי התדריך)</span></div>
+    <table class="pr-tbl pr-captbl"><tr><th></th>${c.MODELS.map(m=>`<th${hl(m)}>${m==='model_1'?'דגם 1 <span class="pr-small">קומפקטי</span>':'דגם '+m}${c.declModels.includes(m)?' <span class="pr-small">(הנספח)</span>':''}</th>`).join('')}</tr>
+      <tr><td>בתי ספר</td>${c.MODELS.map(m=>td(c.sch[m])).join('')}</tr>
+      <tr><td>גנים ומעונות <span class="pr-small">(הכל בקרקע)</span></td>${c.MODELS.map(()=>td(c.preLand)).join('')}</tr>
+      ${c.resLand?`<tr><td>רזרבות (תדריך)</td>${c.MODELS.map(()=>td(c.resLand)).join('')}</tr>`:''}
+      <tr class="pr-tot"><td>סה"כ נדרש</td>${c.MODELS.map(m=>td(c.tot(m))).join('')}</tr>
+      <tr><td>תאים חומים בתשריט <span class="pr-small">(${c.pubCells.length})</span></td>${c.MODELS.map(()=>td(c.landHave)).join('')}</tr>
+      <tr><td><b>מאזן</b></td>${c.MODELS.map(bal).join('')}</tr></table>
+    ${v?chk(v):''}
+    <div class="pr-small" style="margin-top:4px;line-height:1.7">
+      • העברת כל הגנים והמעונות להקצאה מבונה חוסכת <b>${fmtN(c.preLand,1)} ד׳</b> ודורשת כ-<b>${fmtN(c.preBuilt)} מ"ר</b> בנוי ·
+        בטבלה 5 יש <b>${fmtN(c.builtHave)} מ"ר</b> ציבורי מבונה במגרשים סחירים${c.pubBuilt?` · מוסדות ציבור בנויים לפי התדריך (בית כנסת, מרפאה, רווחה): ${fmtN(c.pubBuilt)} מ"ר`:''}<br>
+      • <b>הנספח:</b> שובצו ${c.used.length} מתוך ${c.pubCells.length} התאים החומים — ${fmtN(c.usedLand,1)} ד׳ (${pct}%)${c.free.length?` · בלי שיבוץ: ${c.free.slice(0,12).join(', ')}${c.free.length>12?'…':''} (${fmtN(c.landHave-c.usedLand,1)} ד׳)`:''}
+      ${c.sport.length?`<br>• ${E(c.sport.map(r=>`${r.inst} ${fmtN(r.value,0)} ד׳`).join(', '))} — בדרך כלל בייעוד ספורט ונופש, לא בחישוב`:''}
+      ${c.schMiss.length?`<br>• בלי מכסת קרקע בתדריך: ${E(c.schMiss.join(', '))}`:''}</div></div>`;
 }
 
 // מענים שאינם בתא שטח — לכל סוג: רשימה + הוספה (בעיקר לחינוך מיוחד: "בשילוב עם גן" וכד')
