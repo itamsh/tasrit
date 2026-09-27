@@ -540,7 +540,7 @@ body.theme-light .pr-cap{background:#f4f8fd;border-color:#bfccdb}
 .pr-ab.on{background:#23456b;border-color:#5aa0e0}
 .pr-ab:hover{border-color:#5aa0e0}
 .pr-abwarn{color:#f5c35a!important}
-#pr-panel.pr-in-assump .pr-dom.on{opacity:.55}
+#pr-panel.pr-in-assump #pr-domains,#pr-panel.pr-in-assump #pr-tabs{display:none} /* בעריכת ההנחות — רק ההנחות, בלי כותרות התחומים והלשוניות */
 .pr-resb{background:none;border:1px dashed #4a7ab0;color:#8fb0d6;border-radius:10px;padding:0 7px;font-size:10.5px;cursor:pointer;white-space:nowrap}
 .pr-resb:hover{border-style:solid;color:#cfe3fa}
 .pr-resd{display:inline-flex;align-items:center;gap:3px;background:#173a2a;border:1px solid #2f8a5c;color:#8fe0b5;border-radius:10px;padding:1px 8px;font-size:11px}
