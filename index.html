@@ -1508,6 +1508,11 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
         <div class="rep-toolbar-row" style="margin-bottom:4px">
           <button class="rep-btn" id="rep-ntype-rr" onclick="setNodeType('rr')" title="סווג: דרך-דרך" style="color:#e03030">● דרך-דרך</button>
           <button class="rep-btn" id="rep-ntype-rp" onclick="setNodeType('rp')" title="סווג: דרך-שביל" style="color:#22aa44">● דרך-שביל</button>
+          <button class="rep-btn" id="rep-ntype-end" onclick="setNodeType('end')" title="קצה — סוף דרך בלי צומת (רחוב ללא מוצא, או רחוב שיוצא מגבול התוכנית). לא נספר בצפיפות הצמתים" style="color:#cfd8e3">○ קצה</button>
+        </div>
+        <div class="rep-toolbar-row" style="margin-bottom:4px">
+          <button class="rep-btn" id="rep-ecat-road" onclick="setEdgeCat('road')" title="סוג קו: דרך (כחול) — לקו שמציירים, או לקו שנבחר" style="color:#5b8fff">━ קו דרך</button>
+          <button class="rep-btn" id="rep-ecat-path" onclick="setEdgeCat('path')" title="סוג קו: שביל (ירוק), כולל שביל דרך שצ&quot;פ — לקו שמציירים, או לקו שנבחר" style="color:#22aa44">━ קו שביל</button>
         </div>
         <div class="rn-divider"></div>
         <div class="rep-toolbar-row" style="margin-bottom:4px">
@@ -1581,6 +1586,13 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
           <button class="calc-opt-btn" onclick="editPolyDraw()" title="שרטט פוליגון חדש">✏ ערוך</button>
           <button class="calc-opt-btn" onclick="deletePolyDraw()" title="מחק פוליגון" style="color:#fa7c7c">🗑 מחק</button>
         </div>
+        <div class="calc-label" style="margin-top:6px">הרכב הצמתים</div>
+        <div class="calc-result" id="calc-mix">—</div>
+        <div id="calc-mix-bar" style="display:none;height:7px;border-radius:4px;overflow:hidden;margin:3px 0 2px;background:#2d4060">
+          <div id="calc-mix-rr" style="height:100%;float:right;background:#d02020"></div>
+          <div id="calc-mix-rp" style="height:100%;float:right;background:#1a9a3a"></div>
+        </div>
+        <div class="calc-sub" id="calc-mix-sub"></div>
 
         <div class="rn-divider"></div>
 
@@ -1626,6 +1638,9 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
           <button id="re-node-ctx-rp" onclick="setNodeType('rp')" title="צומת דרך-שביל"
             style="background:none;border:1px solid transparent;color:#22aa44;cursor:pointer;font-size:13px;font-weight:600;padding:4px 7px;border-radius:6px;white-space:nowrap;direction:rtl"
             onmouseover="this.style.background='#0a2010'" onmouseout="this.style.background='none'">● דרך-שביל</button>
+          <button id="re-node-ctx-end" onclick="setNodeType('end')" title="קצה — סוף דרך בלי צומת"
+            style="background:none;border:1px solid transparent;color:#cfd8e3;cursor:pointer;font-size:13px;font-weight:600;padding:4px 7px;border-radius:6px;white-space:nowrap;direction:rtl"
+            onmouseover="this.style.background='#1a2533'" onmouseout="this.style.background='none'">○ קצה</button>
           <div style="width:1px;align-self:stretch;background:#3a5070;margin:0 2px"></div>
           <button id="re-node-ctx-del" title="מחק צומת"
             style="background:none;border:none;color:#c04040;cursor:pointer;font-size:18px;line-height:1;padding:4px 6px;border-radius:6px"
@@ -1797,7 +1812,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 // ── App version — bump on EVERY deploy (date + that day's deploy number), so the
 //    user and Claude can confirm they're looking at the same build. Shown in the
 //    map toolbar and the loading-page footer.
-const APP_VERSION='2026.09.27-14';
+const APP_VERSION='2026.09.27-15';
 // Version of the road-network DETECTION ALGORITHM only — bump when _rnDetect's
 // output changes, so a network saved from an older run is flagged as stale
 // (networks are saved per project and are NOT re-detected on load).
@@ -6880,6 +6895,28 @@ function _calcShowAvgDist(){
   const avg=total/cnt;
   avgEl.textContent=avg<1000?`∼ ${avg.toFixed(0)} מ׳`:`∼ ${(avg/1000).toFixed(2)} ק"מ`;
   subEl.textContent=`מבוסס על ${cnt} קווים, ${RE.nodes.filter(n=>!n.end).length} צמתים`;
+  _calcShowMix(RE.nodes,'בכל הרשת');
+}
+
+// Junction mix: share of road–road (red) vs road–path (green) junctions.
+// Ends ("קצה") aren't junctions; unclassified junctions are reported apart,
+// not folded into either share. Scope follows the density calc (whole
+// network by default, the plan boundary / drawn area once one is chosen).
+function _calcShowMix(nodes,scopeTxt){
+  const res=document.getElementById('calc-mix'), sub=document.getElementById('calc-mix-sub'), bar=document.getElementById('calc-mix-bar');
+  if(!res) return;
+  const j=nodes.filter(n=>!n.end), rr=j.filter(n=>n.nodeType==='rr').length, rp=j.filter(n=>n.nodeType==='rp').length, un=j.length-rr-rp;
+  if(!rr&&!rp){
+    res.textContent='—'; bar.style.display='none';
+    sub.textContent=j.length?`${j.length} צמתים לא מסווגים — סווגו אותם כדרך-דרך / דרך-שביל`:'אין צמתים';
+    return;
+  }
+  const pRR=Math.round(rr/(rr+rp)*100), pRP=100-pRR;
+  res.textContent=`${pRR}% דרך-דרך · ${pRP}% דרך-שביל`;
+  bar.style.display='block';
+  document.getElementById('calc-mix-rr').style.width=pRR+'%';
+  document.getElementById('calc-mix-rp').style.width=pRP+'%';
+  sub.textContent=`${rr} אדומים · ${rp} ירוקים — ${scopeTxt}`+(un?` · ${un} לא מסווגים (לא נכללים באחוזים)`:'');
 }
 
 function _calcDensityResult(polygonPts){
@@ -6892,6 +6929,7 @@ function _calcDensityResult(polygonPts){
   document.getElementById('calc-density').textContent=`∼ ${density.toFixed(1)} צמתים/קמ"ר`;
   const areaStr=areaKm2<0.1?`${(areaKm2*1000).toFixed(0)} דונם`:areaKm2<1?`${(areaKm2*1000).toFixed(0)} דונם`:` ${areaKm2.toFixed(2)} קמ"ר`;
   document.getElementById('calc-density-sub').textContent=`${inside.length} צמתים בשטח ${areaStr.trim()}`;
+  _calcShowMix(inside,'בתוך אזור הצפיפות');
 }
 
 function calcByGvul(){
@@ -6954,6 +6992,7 @@ function deletePolyDraw(){
   document.getElementById('calc-poly-btn').classList.remove('active');
   document.getElementById('calc-density').textContent='—';
   document.getElementById('calc-density-sub').textContent='';
+  _calcShowMix(RE.nodes,'בכל הרשת');                  // area gone → back to the whole network
   redraw();
 }
 
@@ -7153,8 +7192,7 @@ function setRETool(t){
     if(el('rep-btn-sel')) el('rep-btn-sel').classList.remove('active');
     if(el('rep-btn-addnode')) el('rep-btn-addnode').classList.add('active');
     if(el('rep-btn-draw')) el('rep-btn-draw').classList.remove('active');
-    if(el('rep-ntype-rr')) el('rep-ntype-rr').classList.add('needs-type');
-    if(el('rep-ntype-rp')) el('rep-ntype-rp').classList.add('needs-type');
+    _reMarkNeedsType(true);
     wrap.style.cursor='default';
     wrap.classList.remove('re-crosshair');
     redraw();return;
@@ -7164,8 +7202,8 @@ function setRETool(t){
   if(el('rep-btn-sel')) el('rep-btn-sel').classList.toggle('active',t==='select');
   if(el('rep-btn-addnode')) el('rep-btn-addnode').classList.toggle('active',t==='addnode');
   if(el('rep-btn-draw')) el('rep-btn-draw').classList.toggle('active',t==='draw');
-  if(el('rep-ntype-rr')) el('rep-ntype-rr').classList.remove('needs-type');
-  if(el('rep-ntype-rp')) el('rep-ntype-rp').classList.remove('needs-type');
+  _reMarkNeedsType(false);
+  _updateEdgeCatButtons();
   // Cursor: dark crosshair for draw/addnode, default otherwise
   const crosshair=(t==='draw'||t==='addnode');
   wrap.classList.toggle('re-crosshair',crosshair);
@@ -7254,8 +7292,9 @@ function _splitEdgeAtNode(newNode){
     const wpts1=wpts.slice(0,bestSeg).map(w=>({...w}));
     const wpts2=wpts.slice(bestSeg).map(w=>({...w}));
     RE.edges.splice(i,1);
-    RE.edges.push({id:RE.eId++,n1:e.n1,n2:newNode.id,wpts:wpts1});
-    RE.edges.push({id:RE.eId++,n1:newNode.id,n2:e.n2,wpts:wpts2});
+    const kind={cat:e.cat,viaOpen:e.viaOpen};              // both halves keep the line's type
+    RE.edges.push({id:RE.eId++,n1:e.n1,n2:newNode.id,wpts:wpts1,...kind});
+    RE.edges.push({id:RE.eId++,n1:newNode.id,n2:e.n2,wpts:wpts2,...kind});
     break; // a node can only land on one edge at a time
   }
 }
@@ -7281,7 +7320,8 @@ function drawRoadEdit(){
     for(const e of RE.edges){
       const sel=RE.sel&&RE.sel.type==='edge'&&RE.sel.id===e.id;
       // auto-detected links carry their land use: path green, through-park orange
-      ctx.strokeStyle=sel?'#ffcc00':e.viaOpen?'#e08a00':e.cat==='path'?'#1a9a3a':'#1155dd';ctx.lineWidth=sel?3.5:2;
+      // Two line kinds, same as the manual tools: road = blue, path (incl. through a park) = green
+      ctx.strokeStyle=sel?'#ffcc00':_edgeIsPath(e)?'#1a9a3a':'#1155dd';ctx.lineWidth=sel?3.5:2;
       if(anim){ctx.setLineDash([9,5]);ctx.lineDashOffset=-RE.anim;}
       else ctx.setLineDash([]);
       if(_drawEdgePath(e)) ctx.stroke();
@@ -7354,10 +7394,10 @@ function drawRoadEdit(){
     else if(multiSel){fill='#ff8800';stroke='#cc5500';}
     else if(n.nodeType==='rr'){fill='#d02020';stroke='#8b0000';}
     else if(n.nodeType==='rp'){fill='#1a9a3a';stroke='#0d6626';}
-    else if(n.end){fill='#fff';stroke='#777';r=RE_NODE_R*0.55;}   // dead end / plan-boundary exit — not a junction
+    else if(n.end){fill='#fff';stroke='#777';r=RE_NODE_R*0.55;}   // "קצה": dead end / plan-boundary exit — not a junction
     else{fill=anim?'#fff':'#1155dd';stroke='#1155dd';}
     ctx.beginPath();
-    if(n.end==='boundary'&&!sel&&!multiSel) ctx.rect(sx-r,sy-r,r*2,r*2); else ctx.arc(sx,sy,r,0,Math.PI*2);
+    ctx.arc(sx,sy,r,0,Math.PI*2);                      // one "קצה" symbol (boundary kept only in the data)
     ctx.fillStyle=fill;ctx.strokeStyle=stroke;ctx.lineWidth=2;
     ctx.fill();ctx.stroke();
     // extra ring for multi-select to distinguish from orange type
@@ -7485,7 +7525,7 @@ function _reMouseUp(e){
       // Tiny drag = a click on empty space: select nearest edge, else clear
       RE.selNodes.clear();
       const eg=_nearestEdge(sx,sy);
-      RE.sel=eg?{type:'edge',id:eg.id}:null;
+      RE.sel=eg?{type:'edge',id:eg.id}:null; _updateEdgeCatButtons();
     }
     RE.lasso=null;redraw();return;
   }
@@ -7497,7 +7537,7 @@ function _reMouseUp(e){
       if(Math.hypot(e.clientX-dragStart.x,e.clientY-dragStart.y)<=4){
         RE.selNodes.clear();
         const eg=_nearestEdge(sx,sy);
-        RE.sel=eg?{type:'edge',id:eg.id}:null;
+        RE.sel=eg?{type:'edge',id:eg.id}:null; _updateEdgeCatButtons();
         redraw();
       }
       return;
@@ -7515,7 +7555,7 @@ function _reMouseUp(e){
       _rePushHistory();
       const[dx,dy]=cd(sx,sy);
       const newNode={id:RE.nId++,x:dx,y:dy};
-      if(RE.activeNodeType) newNode.nodeType=RE.activeNodeType;
+      _reApplyNodeType(newNode,RE.activeNodeType);
       RE.nodes.push(newNode);
       _splitEdgeAtNode(newNode); // split any edge the new node lands on
       redraw();
@@ -7536,20 +7576,19 @@ function _reMouseUp(e){
     } else {
       // Creating a new node — require type selection
       if(!RE.activeNodeType){
-        const el=id=>document.getElementById(id);
-        if(el('rep-ntype-rr')) el('rep-ntype-rr').classList.add('needs-type');
-        if(el('rep-ntype-rp')) el('rep-ntype-rp').classList.add('needs-type');
-        _showToast('יש לבחור סוג צומת (דרך-דרך / דרך-שביל) לפני הוספה');
+        _reMarkNeedsType(true);
+        _showToast('יש לבחור סוג צומת (דרך-דרך / דרך-שביל / קצה) לפני הוספה');
         return;
       }
       const[dx,dy]=cd(sx,sy);
       _rePushHistory();
-      const newNode={id:RE.nId++,x:dx,y:dy,nodeType:RE.activeNodeType};
+      const newNode={id:RE.nId++,x:dx,y:dy};
+      _reApplyNodeType(newNode,RE.activeNodeType);
       tid=newNode.id;RE.lastAdded=tid;RE.nodes.push(newNode);
     }
     if(RE.drawFrom!==null&&tid!==RE.drawFrom&&
        !RE.edges.some(e=>(e.n1===RE.drawFrom&&e.n2===tid)||(e.n1===tid&&e.n2===RE.drawFrom)))
-      RE.edges.push({id:RE.eId++,n1:RE.drawFrom,n2:tid,wpts:[...RE.curveWpts]});
+      RE.edges.push({id:RE.eId++,n1:RE.drawFrom,n2:tid,wpts:[...RE.curveWpts],cat:RE.activeEdgeCat||'road'});
     RE.drawFrom=tid;
     RE.curveWpts=[];  // clear bends after committing edge
     redraw();
@@ -7818,15 +7857,46 @@ window.addEventListener('keydown',e=>{
 // Right-click during draw = add bend waypoint (no node)
 // Node right-click context menu
 // ── Node type classification ──
+// Node kinds the user can set by hand = the ones auto-detect produces:
+// 'rr' דרך-דרך · 'rp' דרך-שביל (junctions) · 'end' קצה (a street that ends
+// without a junction — stored as n.end; not counted as a junction anywhere)
+function _reApplyNodeType(n,type){
+  if(type==='end'){ n.nodeType=null; if(!n.end) n.end='dead'; }
+  else if(type){ n.nodeType=type; delete n.end; }
+}
+function _reNodeKind(n){ return n?(n.end?'end':(n.nodeType||null)):null; }
+function _reMarkNeedsType(on){
+  for(const id of ['rep-ntype-rr','rep-ntype-rp','rep-ntype-end']){
+    const b=document.getElementById(id); if(b) b.classList.toggle('needs-type',on);
+  }
+}
+// Line kinds: 'road' (blue) / 'path' (green — incl. a path through a park).
+// In draw mode it sets the kind of the next lines; otherwise it re-types the selected line.
+function setEdgeCat(cat){
+  if(RE.tool!=='draw'&&RE.sel?.type==='edge'){
+    const e=RE.edges.find(x=>x.id===RE.sel.id);
+    if(e){ _rePushHistory(); e.cat=cat; if(cat==='road') delete e.viaOpen; redraw(); }
+  } else {
+    RE.activeEdgeCat=cat;
+    if(RE.tool!=='draw') _showToast(cat==='path'?'קווים חדשים ייצוירו כשביל · לשינוי קו קיים — בחרו אותו ולחצו על הסוג':'קווים חדשים ייצוירו כדרך · לשינוי קו קיים — בחרו אותו ולחצו על הסוג',3500);
+  }
+  _updateEdgeCatButtons();
+}
+function _edgeIsPath(e){ return e.cat==='path'||!!e.viaOpen; }
+function _updateEdgeCatButtons(){
+  let cat=RE.activeEdgeCat||'road';
+  if(RE.tool!=='draw'&&RE.sel?.type==='edge'){ const e=RE.edges.find(x=>x.id===RE.sel.id); if(e) cat=_edgeIsPath(e)?'path':'road'; }
+  const r=document.getElementById('rep-ecat-road'), p=document.getElementById('rep-ecat-path');
+  if(r) r.classList.toggle('active',cat==='road');
+  if(p) p.classList.toggle('active',cat==='path');
+}
 function setNodeType(type){
   // In addnode/draw mode (or pending): set active auto-type
   if(RE.pendingAddnode||RE.tool==='addnode'||RE.tool==='draw'){
     RE.activeNodeType=type;
     if(RE.tool==='draw'){
       // Stay in draw mode — just clear the needs-type highlight
-      const el=id=>document.getElementById(id);
-      if(el('rep-ntype-rr')) el('rep-ntype-rr').classList.remove('needs-type');
-      if(el('rep-ntype-rp')) el('rep-ntype-rp').classList.remove('needs-type');
+      _reMarkNeedsType(false);
       RE.pendingAddnode=false;
       _updateNodeTypeButtons();
       return;
@@ -7848,10 +7918,11 @@ function setNodeType(type){
   }
   // Toggle: if ALL targets already have this type, clear; otherwise set
   _rePushHistory();
-  const allHave=targetIds.every(id=>(RE.nodes.find(n=>n.id===id)?.nodeType===type));
+  const allHave=targetIds.every(id=>_reNodeKind(RE.nodes.find(n=>n.id===id))===type);
   for(const id of targetIds){
-    const n=RE.nodes.find(n=>n.id===id);
-    if(n){ n.nodeType=allHave?null:type; if(n.nodeType) delete n.end; } // tagged as a junction → no longer a dead end
+    const n=RE.nodes.find(n=>n.id===id); if(!n) continue;
+    if(allHave){ n.nodeType=null; delete n.end; }       // toggle off → unclassified
+    else _reApplyNodeType(n,type);                       // junction type clears "end", and vice versa
   }
   // Clear selection so nodes show their type color immediately
   RE.sel=null;RE.selNodes.clear();
@@ -7865,19 +7936,18 @@ function _updateNodeTypeButtons(){
     // In addnode mode: show the active auto-type
     type=RE.activeNodeType;
   } else if(RE.selNodes.size>0){
-    const types=new Set([...RE.selNodes].map(id=>RE.nodes.find(n=>n.id===id)?.nodeType??null));
+    const types=new Set([...RE.selNodes].map(id=>_reNodeKind(RE.nodes.find(n=>n.id===id))));
     if(types.size===1) type=[...types][0];
   } else if(RE.sel?.type==='node'){
-    type=RE.nodes.find(n=>n.id===RE.sel.id)?.nodeType??null;
+    type=_reNodeKind(RE.nodes.find(n=>n.id===RE.sel.id));
   }
-  const tr=document.getElementById('rep-ntype-rr');
-  const tp=document.getElementById('rep-ntype-rp');
-  if(tr){tr.classList.toggle('active',type==='rr');if(!RE.pendingAddnode)tr.classList.remove('needs-type');}
-  if(tp){tp.classList.toggle('active',type==='rp');if(!RE.pendingAddnode)tp.classList.remove('needs-type');}
-  const cr=document.getElementById('re-node-ctx-rr');
-  const cp=document.getElementById('re-node-ctx-rp');
-  if(cr) cr.style.outline=type==='rr'?'2px solid #e03030':'';
-  if(cp) cp.style.outline=type==='rp'?'2px solid #22aa44':'';
+  for(const[k,col] of [['rr','#e03030'],['rp','#22aa44'],['end','#cfd8e3']]){
+    const b=document.getElementById('rep-ntype-'+k);
+    if(b){ b.classList.toggle('active',type===k); if(!RE.pendingAddnode) b.classList.remove('needs-type'); }
+    const c=document.getElementById('re-node-ctx-'+k);
+    if(c) c.style.outline=type===k?'2px solid '+col:'';
+  }
+  _updateEdgeCatButtons();
 }
 
 function _showNodeCtx(nodeId,clientX,clientY){
