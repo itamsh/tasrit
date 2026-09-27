@@ -537,7 +537,12 @@ body.theme-light .pr-cap{background:#f4f8fd;border-color:#bfccdb}
 .pr-ab b{color:#fff;font-size:12.5px}
 .pr-ab span{color:#a9bdd3}
 .pr-ab .pr-abarr{margin-right:auto;color:#7ecfff;font-size:11.5px}
-.pr-ab.on{background:#23456b;border-color:#5aa0e0}
+.pr-ab.on{background:#2a2f45;border:2px solid #e74c3c;box-shadow:0 0 0 3px rgba(231,76,60,.18)}
+.pr-ab .pr-abarr.close{background:#c0392b;color:#fff;font-weight:700;font-size:12px;padding:4px 12px;border-radius:6px}
+.pr-ab.on:hover .pr-abarr.close{background:#e74c3c}
+.pr-abnext{margin:14px 0 6px;text-align:center}
+.pr-abnext button{background:#c0392b;border:none;color:#fff;font-weight:700;font-size:13px;padding:9px 18px;border-radius:8px;cursor:pointer}
+.pr-abnext button:hover{background:#e74c3c}
 .pr-ab:hover{border-color:#5aa0e0}
 .pr-abwarn{color:#f5c35a!important}
 #pr-panel.pr-in-assump #pr-domains,#pr-panel.pr-in-assump #pr-tabs{display:none} /* בעריכת ההנחות — רק ההנחות, בלי כותרות התחומים והלשוניות */
@@ -553,7 +558,7 @@ body.theme-light .pr-cap{background:#f4f8fd;border-color:#bfccdb}
 body.theme-light .pr-ab{background:#e8f1fb;border-color:#9dbde0;color:#1a3560}
 body.theme-light .pr-ab b{color:#1a3560}
 body.theme-light .pr-ab span{color:#4a5d74}
-body.theme-light .pr-ab.on{background:#d3e5f8;border-color:#5a8fd0}
+body.theme-light .pr-ab.on{background:#fdf0ee;border-color:#e74c3c}
 body.theme-light .pr-resd{background:#e3f5ea;border-color:#3aa06a;color:#1e7a4a}
 body.theme-light .pr-resin{background:#fff;color:#1c2b3c;border-color:#8fb0d6}
 body.theme-light .pr-resb{color:#2a5a90;border-color:#8fb0d6}
@@ -706,7 +711,7 @@ function _assumpBar(){
   const sum=T.pop==null?'<span class="pr-abwarn">⚠ מלאו קודם יח"ד, נפשות ושנתון — כל החישובים נשענים עליהם</span>'
     :`<span>${fmtN(T.unitsAll??T.units)} יח"ד</span><span>${fmtN(T.popAll??T.pop)} נפש</span><span>${fmtN(T.coh,T.coh<100?1:0)} ילדים בשנתון</span>${I.plan_name?`<span>${E(I.plan_name)}</span>`:''}`;
   return `<button class="pr-ab${on?' on':''}" onclick="PR.toggleAssump()" title="זהות הנספח והנחות האוכלוסייה — משותפות לכל התחומים">
-    <b>⚙ זהות והנחות</b>${sum}<span class="pr-abarr">${on?'▴ סגירה':'▾ עריכה'}</span></button>`;
+    <b>⚙ זהות והנחות</b>${sum}<span class="pr-abarr${on?' close':''}">${on?'✕ סגירה — חזרה לתחומים':'▾ עריכה'}</span></button>`;
 }
 PR.setTab=function(t){
   if(t!=='assump') PR.lastTab=t;
@@ -856,7 +861,9 @@ function _renderAssump(){
     </div></div>`;
 
   // "שרשרת ההנחות" הוסרה — טבלת המקטעים כבר מציגה יח"ד → אוכלוסייה → ילדים בשנתון (הערת המשתמש)
-  return _renderPlanDocs()+idh+ctx+segs;
+  // סוף הטופס: כפתור בולט להמשך — כדי שלא ייראה שזה כל מה שיש
+  const nx=`<div class="pr-abnext"><button onclick="PR.toggleAssump()">סיימתי עם ההנחות — המשך לתחומים (חינוך, מוסדות ציבור…) ←</button></div>`;
+  return _renderPlanDocs()+idh+ctx+segs+nx;
 }
 
 // מסמכי התוכנית שנמשכו מ"מידע תכנוני" (דרך התוסף) — לפתיחה לצד התשריט בזמן ההזנה
