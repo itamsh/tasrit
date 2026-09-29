@@ -247,7 +247,7 @@ const CSS=`
 .fc-chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 10px 10px}
 .fc-chip{border-radius:12px;padding:2px 9px;font-size:11.5px;background:#22344d;border:1px solid #34506f}
 .fc-chip.ok{border-color:#2e8b50;color:#9fe0b4}.fc-chip.no{color:#9ab;opacity:.8}.fc-chip.warn{border-color:#b9770e;color:#f7c56b}
-.fc-f{display:grid;grid-template-columns:1fr 92px 60px;gap:4px 8px;align-items:center;padding:5px 0;border-bottom:1px dashed #243650}
+.fc-f{display:grid;grid-template-columns:1fr 92px 58px 96px;gap:4px 8px;align-items:center;padding:5px 0;border-bottom:1px dashed #243650}
 .fc-f label{font-size:12.5px}.fc-f .u{font-size:11px;color:#8aa}
 .fc-f input,.fc-f select{background:#0f1824;color:#e6eef8;border:1px solid #34506f;border-radius:5px;padding:3px 6px;font-size:12.5px;width:100%;box-sizing:border-box}
 .fc-f input.conf{border-color:#2e8b50;background:#12281b}
@@ -266,6 +266,18 @@ const CSS=`
 .fc-small{font-size:11px;color:#8aa}
 .fc-note{font-size:11.5px;color:#9ab;padding:6px 10px;line-height:1.55}
 .fc-tw{overflow-x:auto}
+.fc-bn{border-radius:8px;padding:9px 11px;margin:0 0 12px;line-height:1.55;font-size:12.5px}
+.fc-bn.warn{background:#3a2a10;border:2px solid #f0b429}.fc-bn.ok{background:#12301f;border:2px solid #2e8b50}
+.fc-bn-h{font-weight:700;font-size:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.fc-bn-c{font-weight:600;font-size:12px;background:rgba(255,255,255,.12);border-radius:10px;padding:1px 8px}
+.fc-bn-l{margin-top:6px}
+.fc-cf{background:#22344d;border:1px solid #3a5070;color:#cde;border-radius:5px;padding:2px 6px;cursor:pointer;font-size:11px;white-space:nowrap}
+.fc-cf.on{background:#1e6b3a;border-color:#2e8b50;color:#fff}
+body.theme-light .fc-bn.warn{background:#fff6dc;color:#4a3500}
+body.theme-light .fc-bn.ok{background:#e9f7ee;color:#10391f}
+body.theme-light .fc-bn-c{background:rgba(0,0,0,.07)}
+body.theme-light .fc-cf{background:#fff;color:#1a3560;border-color:#bfccdb}
+body.theme-light .fc-cf.on{background:#1e6b3a;color:#fff}
 .fc-tbl th{white-space:nowrap}
 .fc-x{cursor:pointer;border-bottom:1px dotted #6a8ab0}.fc-x:hover{color:#7ecfff}
 .fc-info{background:#2a4a6e;border:1px solid #3d6a9a;color:#fff;border-radius:6px;padding:3px 10px;cursor:pointer;font-size:12px}
@@ -370,6 +382,38 @@ FC.resultFor=function(cn){ try{ if(!FC.ensure()) return null; return FC._by[Stri
 FC.setF=function(i,el){ const x=FIELDS[i]; let v=el.value;
   if(x.type!=='sel'&&x.type!=='text') v=v===''?null:+v;
   FC.spec.f[x.k]=v; FC.spec.conf[x.k]=true; el.classList.add('conf'); FC._dirty=true; };
+FC.confF=function(i){ const x=FIELDS[i]; FC.spec.conf[x.k]=!FC.spec.conf[x.k]; FC._dirty=true; FC.render(); };
+// שדות הליבה שהבודק צריך לעבור עליהם בתקנון (לפי סדר הטופס)
+const CORE_FIELDS=['marakmiMaxFloors','dMM','dMT','dTT','coverage','freePct','pbMode','bonusPct'];
+function _coreStatus(){ const need=[...CORE_FIELDS]; if(_noLinesPlan()) need.push('setback');
+  const done=need.filter(k=>FC.spec.conf[k]); return {need,done}; }
+function _noLinesPlan(){ const arc=state.layers&&state.layers.arc; return !arc||!arc.features.some(f=>typeof _isBuildLine==='function'&&_isBuildLine(f.properties.MAVAT_CODE)); }
+FC.gotoForm=function(){ const d=$('fc-sec-rules'); if(!d) return; d.open=true; d.scrollIntoView({behavior:'smooth',block:'start'}); };
+function _annexLine(){
+  const md=(state.mavatDocs||{}).binui, has=!!(state.files&&state.files.binui&&state.files.binui.length);
+  const rule=`בודקים בטבלה 1.7 בתקנון ("מסמכי התכנית"): אם נספח הבינוי <b>"מחייב חלקית"</b> לעניין קווי בניין, מספר מבנים, מיקום או מספר מגדלים, או קומות —
+    צריך לעיין בו ולמלא את השדות המתאימים בטופס (ר' "כללים לקבוצות תאים" ו"נסיגה אחידה"). נספח <b>רקע</b> — לא נדרש לבדיקה.`;
+  if(!has) return `<div class="fc-bn-l">📄 <b>נספח הבינוי לא נטען.</b> ${rule} אפשר לטעון אותו מהחיווי מתחת לשם התוכנית ("⬇ נספח בינוי").</div>`;
+  const st=md&&md.section?(/נספחים/.test(md.section)?'<b>נספח מחייב</b> (במבא"ת תחת "נספחים")':'<b>מסמך רקע</b> — לא מחייב'):'מעמד לא ידוע';
+  return `<div class="fc-bn-l">📄 <b>נספח הבינוי נטען</b> — ${st}${md&&md.title?`: "${E(md.title)}"`:''}. ${rule}</div>`;
+}
+function _banner(){
+  const {need,done}=_coreStatus(), all=done.length===need.length, none=!done.length;
+  const nl=_noLinesPlan();
+  return `<div class="fc-bn ${all?'ok':'warn'}">
+    <div class="fc-bn-h">${all?'✅ בדיקה לפי כללי התוכנית':none?'⚠ בדיקה ראשונית — לפי ברירות מחדל בלבד':'⚠ בדיקה חלקית — חלק מהכללים עדיין ברירת מחדל'}
+      <span class="fc-bn-c">אושרו ${done.length} מתוך ${need.length} כללים</span></div>
+    ${all?`<div class="fc-bn-l">כללי התוכנית אושרו. אם נספח הבינוי מחייב לעניין מספר מבנים או מגדלים — ודאו שמולאו גם "כללים לקבוצות תאים".</div>`
+      :`<div class="fc-bn-l">הממשק עשה את החלק האוטומטי (טבלה 5 + קווי הבניין מהתשריט). <b>את כללי התוכנית הוא לא יודע לקרוא מהתקנון — צריך להזין אותם.</b>
+        עד אז התוצאות מבוססות על ברירות המחדל של תקנון המאסטר, ואינן יכולות לתת ✗. עוברים על ${need.length} שדות מול התקנון (בערך 5–10 דקות):
+        לכל שדה מופיע איפה לחפש; אם הערך בתקנון זהה לברירת המחדל — לוחצים "✓ תואם לתקנון".</div>
+        <button class="fc-btn fc-run" style="margin-top:6px" onclick="FC.gotoForm()">מלאו את כללי התוכנית ←</button>`}
+    ${nl?(FC.spec.f.setback!=null&&FC.spec.f.setback!==''
+      ?`<div class="fc-bn-l">ℹ אין קווי בניין בתשריט — הוזנה נסיגה אחידה של ${E(FC.spec.f.setback)} מ'. המעטפה מקורבת, ולכן תאים שלא נכנסים יסומנו ⚠ ולא ✗.</div>`
+      :`<div class="fc-bn-l" style="color:#ffb3a7">⛔ <b>אין קווי בניין בתשריט של התוכנית הזו.</b> כנראה שהם בנספח הבינוי — מלאו "נסיגה אחידה מגבול התא", אחרת המעטפה היא התא כולו וכמעט כל תא ייראה כנכנס.</div>`):''}
+    ${_annexLine()}
+  </div>`;
+}
 FC.setG=function(i,part,el){ const x=GROUPS[i]; const g=FC.spec.g[x.k];
   if(part==='def') g.def=el.value===''?null:+el.value; else g.exc=el.value; FC._dirty=true; };
 FC.setA=function(i,el){ const x=ASSUME[i]; FC.spec.a[x.k]=el.value===''?x.def:+el.value; FC._dirty=true; };
@@ -403,7 +447,8 @@ function _fieldsHtml(){
     const inp=x.type==='sel'?`<select class="${cls}" onchange="FC.setF(${i},this)">${x.opts.map(o=>`<option value="${o[0]}"${v===o[0]?' selected':''}>${E(o[1])}</option>`).join('')}</select>`
       :`<input class="${cls}" ${x.type==='text'?'':'type="number" step="any"'} value="${E(v??'')}" placeholder="${x.def==null?'לא נקבע':''}" onchange="FC.setF(${i},this)">`;
     const hint=[x.where?'איפה: '+x.where:'',x.say||''].filter(Boolean).join(' · ');
-    return `<div class="fc-f"><label>${E(x.label)}</label>${inp}<span class="u">${E(x.unit||'')}</span>${hint?`<div class="fc-hint">${E(hint)}</div>`:''}</div>`;
+    const btn=`<button class="fc-cf${C[x.k]?' on':''}" onclick="FC.confF(${i})" title="${C[x.k]?'לחיצה מבטלת את האישור':'הערך בתקנון זהה לערך שבשדה'}">${C[x.k]?'✓ אושר':'✓ תואם לתקנון'}</button>`;
+    return `<div class="fc-f"><label>${E(x.label)}</label>${inp}<span class="u">${E(x.unit||'')}</span>${btn}${hint?`<div class="fc-hint">${E(hint)}</div>`:''}</div>`;
   }).join('');
 }
 function _groupsHtml(){
@@ -432,7 +477,7 @@ function _resultsHtml(){
   return `<div class="fc-sum">${cnts}
     <div class="fc-small">${R.rows.length} תאים נבדקו · שטח ליח"ד (חציון): ${fmt(R.apuPlan)} מ"ר ·
       תכסית משתמעת (מגורים): ${cov!=null?cov.toFixed(0)+'%':'—'} <span title="זכויות מעל הקרקע חלקי מספר הקומות בטבלה חלקי שטח התאים. מספר הקומות בטבלה הוא לרוב תקרת המבנה הגבוה בתא, ולכן זו הערכת חסר של התכסית בפועל — לא להשוות ישירות לסף 40% של המאסטר.">ⓘ</span></div>
-    ${unconf?`<div class="fc-small" style="color:#f7c56b">⚠ ${unconf} מכללי המרחקים/השטח הפנוי עדיין ברירת מחדל — הם לא יכולים לתת ✗ עד שיאושרו (שינוי ערך = אישור).</div>`:''}
+    ${unconf?`<div class="fc-small" style="color:#f7c56b">⚠ ${unconf} מכללי המרחקים/השטח הפנוי עדיין לא אושרו — הם לא יכולים לתת ✗ עד שיאושרו (שינוי ערך או "✓ תואם לתקנון").</div>`:''}
     ${FC._dirty?'<div class="fc-small" style="color:#f7c56b">הטופס שונה — לחצו "▶ בדיקה" לעדכון.</div>':''}</div>
     <div class="fc-small" style="padding:0 10px 6px">לחיצה על שורה מתמקדת בתא במפה · <b>לחיצה על נתון</b> (מסומן בקו מנוקד) פותחת תחקור מלא של החישוב.</div>
     <div class="fc-tw"><table class="fc-tbl"><thead><tr><th>תא</th><th>ייעוד</th><th>קומות</th><th>זכויות מעל<br>הקרקע (מ"ר)</th><th>קיבולת<br>מחושבת (מ"ר)</th><th>ניצול</th><th>תוצאה</th></tr></thead><tbody>
@@ -447,14 +492,15 @@ FC.render=function(){
   if(!$('fc-body')) return;
   if(!state.table5){ $('fc-body').innerHTML='<div class="fc-note">צריך טבלה 5 לתוכנית הזו (ר׳ החיווי מתחת לשם התוכנית).</div>'; return; }
   const scroll=$('fc-body').scrollTop;
-  $('fc-body').innerHTML=`
-    <details class="fc-sec" open><summary>מה נמצא אוטומטית</summary>${_autoChips()}</details>
-    <details class="fc-sec"${FC.res&&FC.res.rows.length?'':' open'}><summary>כללי התוכנית <span class="fc-small">— ערך אחד לכל התוכנית; ירוק = אושר מהתקנון</span></summary><div class="fc-in">${_fieldsHtml()}</div></details>
-    <details class="fc-sec"><summary>כללים לקבוצות תאים <span class="fc-small">— מספר מבנים, רבי-קומות, חובת מרקמי</span></summary><div class="fc-in">${_groupsHtml()}</div></details>
-    <details class="fc-sec"><summary>הנחות (מתקדם)</summary><div class="fc-in">${_assumeHtml()}</div></details>
+  const cs=_coreStatus(), incomplete=cs.done.length<cs.need.length;
+  $('fc-body').innerHTML=`${_banner()}
+    <details class="fc-sec"><summary>1. מה הממשק מצא אוטומטית</summary>${_autoChips()}</details>
+    <details class="fc-sec" id="fc-sec-rules"${incomplete?' open':''}><summary>2. כללי התוכנית — <span style="color:#f7c56b">למלא מהתקנון</span> <span class="fc-small">(ערך אחד לכל התוכנית; ירוק = אושר)</span></summary><div class="fc-in">${_fieldsHtml()}</div></details>
+    <details class="fc-sec"><summary>3. כללים לקבוצות תאים <span class="fc-small">— אם התקנון או נספח מחייב קובעים מספר מבנים / רבי-קומות / חובת מרקמי</span></summary><div class="fc-in">${_groupsHtml()}</div></details>
+    <details class="fc-sec"><summary>4. הנחות (מתקדם — לא חובה)</summary><div class="fc-in">${_assumeHtml()}</div></details>
     <div style="display:flex;gap:8px;margin:0 0 10px"><button class="fc-btn fc-run" onclick="FC.runNow()">▶ בדיקה</button>
       <button class="fc-btn" onclick="FC.resetForm()">איפוס הטופס</button></div>
-    <details class="fc-sec" open><summary>תוצאות</summary>${_resultsHtml()}
+    <details class="fc-sec" open><summary>תוצאות ${incomplete?'<span style="color:#f7c56b">— בדיקה ראשונית (ברירות מחדל)</span>':'— לפי כללי התוכנית'}</summary>${_resultsHtml()}
       <div class="fc-note">✗ לא נכנס גם בהנחות המקילות (רק כללי התוכנית מכשילים) · ⚠ לא נכנס בהנחות הרגילות · לבדיקה = חריג מול תאים דומים באותה תוכנית ·
       חסר? = הזכויות מנצלות פחות מחצי מהקיבולת · ✓ נמצא תרחיש שמכיל את הזכויות. הקיבולת היא חסם עליון (לא תכנון בינוי).</div></details>`;
   $('fc-body').scrollTop=scroll;
