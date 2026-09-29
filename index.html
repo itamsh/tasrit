@@ -1813,7 +1813,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 // ── App version — bump on EVERY deploy (date + that day's deploy number), so the
 //    user and Claude can confirm they're looking at the same build. Shown in the
 //    map toolbar and the loading-page footer.
-const APP_VERSION='2026.09.29-1';
+const APP_VERSION='2026.09.29-2';
 // Version of the road-network DETECTION ALGORITHM only — bump when _rnDetect's
 // output changes, so a network saved from an older run is flagged as stale
 // (networks are saved per project and are NOT re-detected on load).
@@ -2343,6 +2343,7 @@ async function parseAll(){
 const XPLAN_BASE='https://ags.iplan.gov.il/arcgisiplan/rest/services/PlanningPublic/Xplan/MapServer';
 const XPLAN_LAYERS={4:'plan',3:'pol',2:'arc',1:'gvul'}; // Xplan layer id → viewer layer key
 
+const XPLAN_TIMEOUT_MS=20000; // מגבלת זמן לניסיון אחד מול Xplan
 async function _xplanQuery(layerId,planNum){
   const feats=[]; let offset=0; const page=1000;
   const where=`pl_number='${String(planNum).replace(/'/g,"''")}'`;
@@ -2350,14 +2351,23 @@ async function _xplanQuery(layerId,planNum){
     const url=`${XPLAN_BASE}/${layerId}/query?where=${encodeURIComponent(where)}`+
       `&outFields=*&returnGeometry=true&outSR=2039&f=geojson`+
       `&resultOffset=${offset}&resultRecordCount=${page}`;
-    // שרת Xplan מחזיר לפעמים שגיאה זמנית בלי כותרת CORS ("Failed to fetch") — עד 2 ניסיונות חוזרים
-    let r,j,lastErr;
+    // שרת Xplan מחזיר לפעמים שגיאה זמנית בלי כותרת CORS ("Failed to fetch") — עד 2 ניסיונות חוזרים.
+    // וגם נתקע לפעמים בלי לענות בכלל (29/09/2026: שאילתות גאומטריה לא חזרו גם אחרי דקות, והכפתור נשאר על "טוען…")
+    // → מגבלת זמן לכל ניסיון; אחרי ניסיון שנגמר בזמן — עוד ניסיון אחד בלבד (סה"כ ~40 שניות לכל היותר).
+    let r,j,lastErr,timedOut=0;
     for(let a=0;a<3;a++){
-      try{ r=await fetch(url); if(r.ok){ j=await r.json(); break; } lastErr=new Error(`שגיאת רשת (שכבה ${layerId}, קוד ${r.status})`); }
-      catch(e){ lastErr=e; }
+      const ac=new AbortController(), to=setTimeout(()=>ac.abort(),XPLAN_TIMEOUT_MS);
+      try{ r=await fetch(url,{signal:ac.signal}); if(r.ok){ j=await r.json(); clearTimeout(to); break; } lastErr=new Error(`שגיאת רשת (שכבה ${layerId}, קוד ${r.status})`); }
+      catch(e){ lastErr=e; if(e&&e.name==='AbortError') timedOut++; }
+      clearTimeout(to);
+      if(timedOut>=2) break;
       await new Promise(res=>setTimeout(res,700*(a+1)));
     }
-    if(!j) throw new Error(`שרת Xplan לא הגיב (שכבה ${layerId}) — נסו שוב בעוד רגע. ${lastErr&&lastErr.message||''}`);
+    if(!j){
+      if(timedOut) throw new Error(`שרת Xplan של מינהל התכנון לא עונה כרגע (שכבה ${layerId}).
+ייתכן שהשירות מושבת זמנית — נסו שוב בעוד כמה דקות, או טענו את התוכנית מקבצי SHP.`);
+      throw new Error(`שרת Xplan לא הגיב (שכבה ${layerId}) — נסו שוב בעוד רגע. ${lastErr&&lastErr.message||''}`);
+    }
     if(j&&j.error) console.warn(`Xplan layer ${layerId} query failed:`,j.error); // השרת מחזיר 200 עם error — שלא ייראה כ"אין נתונים" בשקט
     const fs=(j&&j.features)||[];
     feats.push(...fs);
