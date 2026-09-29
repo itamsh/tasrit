@@ -85,10 +85,11 @@ function cellsFromT5(t5){
   for(const cn of Object.keys(t5||{})){
     const all=t5[cn]||[], rows=all.length===1?all:all.filter(r=>!isSum(r));
     if(!rows.length) continue;
-    const x={cn,yiud:(rows[0].yiud||'').trim(),above:0,resArea:0,units:0,floors:0,cov:null,maxB:null,gova:null};
+    const x={cn,yiud:(rows[0].yiud||'').trim(),above:0,resArea:0,units:0,floors:0,cov:null,maxB:null,gova:null,det:[]};
     for(const r of rows){
       const a=(r.ikariMal||r.sherutMal)?num(r.ikariMal)+num(r.sherutMal):num(r.kollMal);
       x.above+=a;
+      x.det.push({use:r.shimush||r.yiud||'—',ikari:num(r.ikariMal),sherut:num(r.sherutMal),koll:(r.ikariMal||r.sherutMal)?null:num(r.kollMal),above:a,units:num(r.yihud),floors:num(r.komMal)});
       const u=num(r.yihud); x.units+=u; if(u&&isRes(r)) x.resArea+=a;
       x.floors=Math.max(x.floors,num(r.komMal));
       if(num(r.tachsit)) x.cov=num(r.tachsit);
@@ -127,10 +128,11 @@ function capacity(spec,x,g,a,loose){
   const cov=x.cov??(F.coverage!=null&&F.coverage!==''?+F.coverage:null);
   const free=+(use('freePct',0)||0);
   const budget=Math.min(g.env,(1-free/100)*g.cellA,cov?cov/100*g.cellA:Infinity);
-  const T=loose?LOOSE.plateT:(+a.upfT)*((+a.unit)+(CORE_T[+a.upfT]??24));
+  const core=CORE_T[+a.upfT]??24, T=loose?LOOSE.plateT:(+a.upfT)*((+a.unit)+core);
   const eff=loose?LOOSE.eff:+a.eff, Dm=loose?LOOSE.Dm:+a.Dm;
   const dil=D=>g.env+g.per*D/2+Math.PI*D*D/4;
-  let kmax=Ft?(ruleFor(spec,'maxTowers',cn)??99):0;
+  const kRule=Ft?ruleFor(spec,'maxTowers',cn):null;
+  let kmax=Ft?(kRule??99):0;
   while(kmax>0&&kmax*(Math.sqrt(T)+dtt)**2>dil(dtt)) kmax--;
   const nMin=Math.max(1,ruleFor(spec,'minBuildings',cn)??1);
   const nMax=ruleFor(spec,'maxBuildings',cn)??x.maxB??99;
@@ -138,7 +140,12 @@ function capacity(spec,x,g,a,loose){
   const except=String(F.pbExcept||'').split(/[,;]+/).map(s=>s.trim()).filter(Boolean);
   const addOn=F.pbMode==='add'&&!except.includes(x.yiud);
   const ring=d=>0.5*((Math.sqrt(T)+d)**2-T);
-  let best=null;
+  let best=null; const scen=[];
+  const det={thr,Fm,Ft,dmm,dmt,dtt,cov,covSrc:x.cov!=null?'טבלה 5':(cov?'הטופס':null),free,env:g.env,cellA:g.cellA,
+    freeCap:(1-free/100)*g.cellA,covCap:cov?cov/100*g.cellA:null,budget,T,upf:+a.upfT,unit:+a.unit,core,eff,Dm,band:bandAt(g,Dm),
+    kRule,kmax,nMin,nMax,nMaxSrc:ruleFor(spec,'maxBuildings',cn)!=null?'הטופס':(x.maxB!=null?'טבלה 5':null),mReq,addOn,
+    addM:+F.pbMarakmi||0,addT:+F.pbTower||+F.pbMarakmi||0,bonus:+F.bonusPct||0,scale:x.scale||1,loose,
+    relaxed:loose?['dMM','dMT','dTT','freePct'].filter(k=>!C[k]):[]};
   for(let k=0;k<=kmax;k++) for(const extra of [0,1]){
     const nmMin=Math.max(k?0:1,nMin-k,mReq), nm=nmMin+(extra&&Fm?1:0);
     if(extra&&!Fm) continue;
@@ -151,8 +158,11 @@ function capacity(spec,x,g,a,loose){
     const n=k+nm;
     const need=x.above*(1+(+F.bonusPct||0)/100)*(x.scale||1)+(addOn?n*(k?(+F.pbTower||+F.pbMarakmi||0):(+F.pbMarakmi||0)):0);
     const slack=cap-need;
-    if(!best||slack>best.slack) best={k,nm,Fm,Ft,TF,MF,cap,need,slack,budget,T};
+    const s={k,nm,Fm,Ft,TF,MF,TL,gaps,cap,need,slack,budget,T,n};
+    scen.push(s);
+    if(!best||slack>best.slack) best=s;
   }
+  if(best){ best.det=det; best.scen=scen; }
   return best;
 }
 
@@ -171,7 +181,7 @@ function run(spec,cells,geomOf,opts){
     const xs=Object.assign({},x,{scale:(opts.scale&&opts.scale[x.cn])||1});
     const nom=capacity(spec,xs,g,spec.a,false), lo=capacity(spec,xs,g,spec.a,true);
     const r={cn:x.cn,yiud:x.yiud,floors:x.floors,units:x.units,cellA:g.cellA,env:g.env,approx,noLines,
-      need:nom?nom.need:xs.above,cap:nom?nom.cap:0,capL:lo?lo.cap:0,nom,flags:[]};
+      need:nom?nom.need:xs.above,cap:nom?nom.cap:0,capL:lo?lo.cap:0,nom,lo,x:xs,flags:[]};
     if(!nom||!lo){ r.verdict='✗'; r.why='אין תרחיש בינוי שעומד בכללים (מספר מבנים / חובת מרקמי)'; rows.push(r); continue; }
     r.ratio=nom.need/nom.cap;
     if(lo.need>lo.cap) r.verdict=approx?'⚠':'✗';
@@ -192,14 +202,15 @@ function run(spec,cells,geomOf,opts){
     let peers=ok.filter(o=>o!==r&&o.yiud===r.yiud&&o.floors===r.floors);
     if(peers.length<3) peers=ok.filter(o=>o!==r&&o.yiud===r.yiud&&(o.floors>thr)===(r.floors>thr));
     if(peers.length<3) peers=ok.filter(o=>o!==r&&(o.floors>thr)===(r.floors>thr));
-    r.peer=peers.length>=3?r.ratio/med(peers.map(o=>o.ratio)):null; r.peerN=peers.length;
+    r.peerList=peers.map(o=>({cn:o.cn,ratio:o.ratio})); r.peerMed=peers.length?med(peers.map(o=>o.ratio)):null;
+    r.peer=peers.length>=3?r.ratio/r.peerMed:null; r.peerN=peers.length;
     const x=cells[r.cn]; r.apu=x&&x.units?x.resArea*((opts.scale&&opts.scale[r.cn])||1)/x.units:null;
   }
   const apuPlan=med(ok.filter(r=>r.apu).map(r=>r.apu));
   for(const r of ok){
     const same=ok.filter(o=>o!==r&&o.apu&&o.yiud===r.yiud);
     const ref=same.length>=3?med(same.map(o=>o.apu)):apuPlan;
-    r.apuRel=r.apu&&ref?r.apu/ref:null;
+    r.apuRef=ref; r.apuRefSrc=same.length>=3?`${same.length} תאים באותו ייעוד`:'כל התוכנית'; r.apuRel=r.apu&&ref?r.apu/ref:null;
     if(r.peer&&r.peer>=1.25&&r.ratio>=0.7) r.flags.push(`צפוף פי ${r.peer.toFixed(2)} מ-${r.peerN} תאים דומים`);
     if(r.apuRel&&r.apuRel>=1.15) r.flags.push(`שטח ליח"ד ${fmt(r.apu)} מ"ר — פי ${r.apuRel.toFixed(2)} מתאים דומים`);
     if(r.apuRel&&r.apuRel<=0.85) r.flags.push(`שטח ליח"ד ${fmt(r.apu)} מ"ר — נמוך (פי ${r.apuRel.toFixed(2)})`);
@@ -254,6 +265,41 @@ const CSS=`
 .fc-why{font-size:11px;color:#9ab;margin-top:2px}
 .fc-small{font-size:11px;color:#8aa}
 .fc-note{font-size:11.5px;color:#9ab;padding:6px 10px;line-height:1.55}
+.fc-tw{overflow-x:auto}
+.fc-tbl th{white-space:nowrap}
+.fc-x{cursor:pointer;border-bottom:1px dotted #6a8ab0}.fc-x:hover{color:#7ecfff}
+.fc-info{background:#2a4a6e;border:1px solid #3d6a9a;color:#fff;border-radius:6px;padding:3px 10px;cursor:pointer;font-size:12px}
+.t5v-fc-hdr{white-space:nowrap}
+.t5v-fc-x{cursor:pointer}.t5v-fc-x:hover{outline:1px dashed #6a8ab0}
+#fc-pop{display:none;position:fixed;inset:0;background:rgba(5,12,22,.55);z-index:9000;align-items:center;justify-content:center}
+#fc-pop.vis{display:flex}
+#fc-pop .fcx-box{width:min(760px,94vw);max-height:88vh;display:flex;flex-direction:column;background:#141e2c;color:#d6e2f0;border:1px solid #3d6a9a;border-radius:10px;box-shadow:0 10px 40px rgba(0,0,0,.5);direction:rtl}
+#fc-pop .fcx-hd{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#1f2e42;border-bottom:1px solid #2d4060;border-radius:10px 10px 0 0}
+#fc-pop .fcx-hd b{flex:1;color:#7ecfff;font-size:14px}
+#fc-pop .fcx-hd button{background:#2c3e55;border:1px solid #3a5070;color:#cde;border-radius:6px;padding:3px 10px;cursor:pointer}
+#fc-pop .fcx-bd{overflow:auto;padding:12px 16px 20px;font-size:13px;line-height:1.6}
+.fcx-intro{background:#1a2a40;border:1px solid #2d4060;border-radius:8px;padding:8px 10px;margin-bottom:10px}
+.fcx-sec{border-top:1px solid #2d4060;padding:8px 0 10px}
+.fcx-sec.on{background:#1b2d45;border:1px solid #f1c40f;border-radius:8px;padding:8px 10px}
+.fcx-sec h4{margin:0 0 6px;color:#9fd3ff;font-size:13.5px}
+.fcx-eq{background:#0f1824;border:1px solid #2d4060;border-radius:6px;padding:6px 10px;margin:6px 0;font-family:inherit}
+.fcx-w{font-size:12px;color:#9fb2c8;margin-top:3px}
+.fcx-t{border-collapse:collapse;width:100%;font-size:12px;margin:4px 0}
+.fcx-t th,.fcx-t td{border:1px solid #2d4060;padding:3px 6px;text-align:right;white-space:nowrap}
+.fcx-t th{background:#1f2e42;color:#9fd3ff}.fcx-t td.fcx-w{white-space:normal}
+.fcx-t tr.s td{background:#1d3a2a}
+body.theme-light #fc-pop .fcx-box{background:#fff;color:#1c2b3c;border-color:#8fb0d6}
+body.theme-light #fc-pop .fcx-hd{background:#e6edf5;border-color:#bfccdb}
+body.theme-light #fc-pop .fcx-hd b{color:#1a3560}
+body.theme-light .fcx-intro{background:#eef3f9;border-color:#cfd9e6}
+body.theme-light .fcx-sec{border-color:#dde5ef}
+body.theme-light .fcx-sec.on{background:#fffbe6}
+body.theme-light .fcx-sec h4{color:#1a3560}
+body.theme-light .fcx-eq{background:#f6f9fc;border-color:#cfd9e6}
+body.theme-light .fcx-w{color:#4a5d73}
+body.theme-light .fcx-t th{background:#e6edf5;color:#1a3560}
+body.theme-light .fcx-t th,body.theme-light .fcx-t td{border-color:#cfd9e6}
+body.theme-light .fcx-t tr.s td{background:#e3f4e8}
 body.theme-light #fc-panel{background:#f4f7fb;color:#1c2b3c;border-left-color:#bfccdb}
 body.theme-light #fc-hdr{background:#e6edf5;border-color:#bfccdb}
 body.theme-light #fc-hdr h2{color:#1a3560}
@@ -271,9 +317,10 @@ body.theme-light .fc-run{background:#1e6b3a;color:#fff}
 function _ensureDom(){
   if($('fc-panel')) return true;
   const main=$('main-area'), wrap=$('canvas-wrap'); if(!main||!wrap) return false;
-  const st=document.createElement('style'); st.id='fc-css'; st.textContent=CSS; document.head.appendChild(st);
+  _css();
   const p=document.createElement('div'); p.id='fc-panel';
   p.innerHTML=`<div id="fc-hdr"><h2>🏗 בקרת בינוי — האם הזכויות נכנסות בתאים</h2>
+    <button class="fc-info" onclick="FC.explainMethod()">ⓘ איך זה עובד</button>
     <button onclick="FC.close()">✕ סגירה</button></div><div id="fc-body"></div>`;
   main.insertBefore(p,wrap); return true;
 }
@@ -387,12 +434,14 @@ function _resultsHtml(){
       תכסית משתמעת (מגורים): ${cov!=null?cov.toFixed(0)+'%':'—'} <span title="זכויות מעל הקרקע חלקי מספר הקומות בטבלה חלקי שטח התאים. מספר הקומות בטבלה הוא לרוב תקרת המבנה הגבוה בתא, ולכן זו הערכת חסר של התכסית בפועל — לא להשוות ישירות לסף 40% של המאסטר.">ⓘ</span></div>
     ${unconf?`<div class="fc-small" style="color:#f7c56b">⚠ ${unconf} מכללי המרחקים/השטח הפנוי עדיין ברירת מחדל — הם לא יכולים לתת ✗ עד שיאושרו (שינוי ערך = אישור).</div>`:''}
     ${FC._dirty?'<div class="fc-small" style="color:#f7c56b">הטופס שונה — לחצו "▶ בדיקה" לעדכון.</div>':''}</div>
-    <table class="fc-tbl"><thead><tr><th>תא</th><th>ייעוד</th><th>ק'</th><th>זכויות מעל<br>הקרקע</th><th>קיבולת<br>מחושבת</th><th>ניצול</th><th>תוצאה</th></tr></thead><tbody>
-    ${rows.map(r=>`<tr onclick="FC.focus('${E(r.cn)}')"><td><b>${E(r.cn)}</b></td><td>${E(r.yiud)}</td><td>${r.floors||''}</td>
-      <td>${fmt(r.need)}</td><td>${fmt(r.cap)}</td><td>${r.ratio?Math.round(r.ratio*100)+'%':'—'}</td>
-      <td><span class="fc-v" style="background:${COL[r.verdict]}">${E(LBL[r.verdict])}</span>
-        <div class="fc-why">${E(r.why||'')}${r.flags.length?'<br>• '+r.flags.map(E).join('<br>• '):''}</div></td></tr>`).join('')}
-    </tbody></table>`;
+    <div class="fc-small" style="padding:0 10px 6px">לחיצה על שורה מתמקדת בתא במפה · <b>לחיצה על נתון</b> (מסומן בקו מנוקד) פותחת תחקור מלא של החישוב.</div>
+    <div class="fc-tw"><table class="fc-tbl"><thead><tr><th>תא</th><th>ייעוד</th><th>קומות</th><th>זכויות מעל<br>הקרקע (מ"ר)</th><th>קיבולת<br>מחושבת (מ"ר)</th><th>ניצול</th><th>תוצאה</th></tr></thead><tbody>
+    ${rows.map(r=>{ const c=E(r.cn), x=(f,v)=>`<span class="fc-x" onclick="FC.explain('${c}','${f}',event)">${v}</span>`;
+      return `<tr onclick="FC.focus('${c}')"><td><b>${c}</b></td><td>${E(r.yiud)}</td><td>${x('floors',r.floors||'—')}</td>
+      <td>${x('need',fmt(r.need))}</td><td>${x('cap',fmt(r.cap))}</td><td>${x('ratio',r.ratio?Math.round(r.ratio*100)+'%':'—')}</td>
+      <td><span class="fc-v fc-x" style="background:${COL[r.verdict]}" onclick="FC.explain('${c}','verdict',event)">${E(LBL[r.verdict])}</span>
+        <div class="fc-why">${E(r.why||'')}${r.flags.length?'<br>• '+r.flags.map(E).join('<br>• '):''}</div></td></tr>`; }).join('')}
+    </tbody></table></div>`;
 }
 FC.render=function(){
   if(!$('fc-body')) return;
@@ -431,6 +480,133 @@ FC.cellInfoHtml=function(cn){
     ${r.flags.length?`<div style="font-size:11px;opacity:.85">• ${r.flags.map(E).join('<br>• ')}</div>`:''}</div>`;
 };
 
+// ── תחקור: פירוט מלא של החישוב לתא (נפתח בלחיצה על כל נתון) ──
+const f1=v=>v==null||!isFinite(v)?'—':(+v).toLocaleString('he-IL',{maximumFractionDigits:1});
+const pct=v=>v==null||!isFinite(v)?'—':Math.round(v*100)+'%';
+const f2=v=>v==null||!isFinite(v)?'—':(+v).toLocaleString('he-IL',{maximumFractionDigits:2});
+const FNAME={dMM:'מרחק מרקמי–מרקמי',dMT:'מרחק מרקמי–רב-קומות',dTT:'מרחק רב-קומות–רב-קומות',freePct:'שטח פנוי'};
+function _sec(id,title,body,on){ return `<div class="fcx-sec${on?' on':''}" id="fcx-${id}"><h4>${title}</h4>${body}</div>`; }
+function _eq(formula,words){ return `<div class="fcx-eq">${formula}${words?`<div class="fcx-w">${words}</div>`:''}</div>`; }
+function explainHtml(r,focus){
+  const x=r.x, N=r.nom, D=N?N.det:null, L=r.lo, LD=L?L.det:null, F=FC.spec.f;
+  const out=[];
+  out.push(`<div class="fcx-intro">הבדיקה שואלת: <b>האם אפשר לבנות בתא ${E(r.cn)} את כל השטחים שטבלה 5 נותנת לו</b>, בלי לחרוג מקווי הבניין,
+    מהמרחקים בין מבנים, מהשטח שחייב להישאר פנוי ומשאר כללי התוכנית. היא מחשבת <b>כמה לכל היותר</b> אפשר לבנות בתא (קיבולת),
+    ומשווה לזכויות. הקיבולת היא <b>חסם עליון</b> — לא תכנון בינוי: אם הזכויות גדולות ממנה, אין סידור בינוי שמכיל אותן.</div>`);
+  // 1. demand
+  const rowsT=(x.det||[]).map(d=>`<tr><td>${E(d.use)}</td><td>${d.koll!=null?'—':fmt(d.ikari)}</td><td>${d.koll!=null?'—':fmt(d.sherut)}</td><td>${d.koll!=null?fmt(d.koll):'—'}</td><td><b>${fmt(d.above)}</b></td><td>${d.units||''}</td><td>${d.floors||''}</td></tr>`).join('');
+  let need=`<table class="fcx-t"><tr><th>שימוש</th><th>עיקרי מעל</th><th>שירות מעל</th><th>סה"כ מעל</th><th>נספר</th><th>יח"ד</th><th>קומות</th></tr>${rowsT}
+    <tr class="s"><td>סה"כ</td><td></td><td></td><td></td><td><b>${fmt(x.above)}</b></td><td>${x.units||''}</td><td>${x.floors||''}</td></tr></table>
+    <div class="fcx-w">נספרים רק השטחים <b>מעל הכניסה הקובעת</b> (מה שמתחת — מרתפים — לא תופס את קרקע התא מעל הקרקע). כל השימושים בתא נספרים יחד,
+    כי הם נבנים באותם מבנים.</div>`;
+  if(D){
+    const parts=[`${fmt(x.above)}`];
+    if(D.bonus) parts[0]+=` × (1 + ${D.bonus}%)`;
+    if(D.scale!==1) parts[0]+=` × ${D.scale} (ניפוח בדיקה)`;
+    if(D.addOn) parts.push(`${N.n} מבנים × ${fmt(N.k?D.addT:D.addM)} מ"ר`);
+    need+=_eq(parts.length>1||D.bonus||D.scale!==1?`${parts.join(' + ')} = <b>${fmt(N.need)} מ"ר</b>`:`הנדרש = <b>${fmt(N.need)} מ"ר</b>`,
+      (D.bonus?`תוספת ${D.bonus}% מחוץ לטבלה (שדה "תוספת זכויות"). `:'')+
+      (D.addOn?`"שטחים משותפים לכל בניין" במצב <b>תוספת</b> — לכל מבנה בתרחיש נוספים ${fmt(D.addM)} מ"ר (ברב-קומות ${fmt(D.addT)}); לכן הנדרש תלוי במספר המבנים.`
+        :(F.pbMode==='add'?`התוספת לכל בניין לא חלה על הייעוד "${E(x.yiud)}".`:'השטחים המשותפים כלולים בטבלה — אין תוספת לכל בניין.')));
+  }
+  out.push(_sec('need','1. הזכויות הנדרשות (מטבלה 5)',need,focus==='need'));
+  if(!D){ out.push(_sec('verdict','התוצאה',`<div class="fcx-w">${E(r.why||'')}</div>`,true)); return out.join(''); }
+  // 2. land budget
+  const lim=[['המעטפה — השטח בתוך קווי הבניין',D.env,r.noLines?(r.approx?'אין קווי בניין בתשריט — הערכה לפי מלבן שווה-ערך':'אין קווי בניין בתשריט — נלקח התא כולו'):"נמדד על התשריט: כל אזור בתוך קווי הבניין ברוחב 8 מ' לפחות (בלי רצועות הנסיגה)"],
+    [`התא פחות השטח שחייב להישאר פנוי (${D.free}%)`,D.freeCap,`${fmt(D.cellA)} × (1 − ${D.free}%)`],
+    ...(D.covCap!=null?[[`תכסית מרבית ${D.cov}% (${D.covSrc})`,D.covCap,`${fmt(D.cellA)} × ${D.cov}%`]]:[])];
+  const mn=Math.min(...lim.map(l=>l[1]));
+  out.push(_sec('land','2. כמה קרקע אפשר לכסות במבנים',`<table class="fcx-t"><tr><th>מגבלה</th><th>מ"ר</th><th>איך</th></tr>
+    ${lim.map(l=>`<tr${Math.abs(l[1]-mn)<1?' class="s"':''}><td>${l[0]}</td><td><b>${fmt(l[1])}</b></td><td class="fcx-w">${l[2]}</td></tr>`).join('')}</table>
+    ${_eq(`תקציב הקרקע = הקטן מביניהם = <b>${fmt(D.budget)} מ"ר</b>`,`שטח התא (מדוד): ${fmt(D.cellA)} מ"ר. סך טביעות הרגל של כל המבנים לא יכול לעבור את תקציב הקרקע.`)}`,focus==='land'));
+  // 3. floors
+  out.push(_sec('floors','3. קומות',`<div class="fcx-w">בטבלה 5: <b>${x.floors} קומות</b> מעל הכניסה. זו בדרך כלל <b>תקרה</b> — קומות המבנה הגבוה בתא, לא של כל המבנים.
+    סף המרקמי (שדה בטופס): <b>${D.thr} קומות</b>.
+    ${D.Ft?`הקומות בטבלה גבוהות מהסף, ולכן בתא מותרים <b>רבי-קומות של ${D.Ft} קומות</b>, ולצידם מבנים מרקמיים של עד <b>${D.Fm}</b> קומות.`
+      :`הקומות בטבלה לא גבוהות מהסף, ולכן כל המבנים מרקמיים, עד <b>${D.Fm} קומות</b>.`}</div>`,focus==='floors'));
+  // 4. towers
+  if(D.Ft){
+    const dRing=N.nm?D.dmt:D.dtt, ring1=0.5*((Math.sqrt(D.T)+dRing)**2-D.T);
+    out.push(_sec('towers','4. רבי-קומות (מגדלים)',`${_eq(`שטח קומת מגדל = ${D.upf} יח"ד × (${fmt(D.unit)} + ${D.core}) = <b>${fmt(D.T)} מ"ר</b>`,
+      `הנחה: ${D.upf} דירות בקומה, דירה ממוצעת ${fmt(D.unit)} מ"ר, ועוד ${D.core} מ"ר גרעין לכל דירה — מטבלת הגרעינים בתקנון המאסטר (מגדל, ${D.upf} יח"ד בקומה). ניתן לשינוי ב"הנחות".`)}
+      <div class="fcx-w">מספר רבי-קומות מרבי: ${D.kRule!=null?`<b>${D.kRule}</b> (כלל בטופס)`:'לא נקבע בטופס'}; מבחינה גאומטרית נכנסים עד <b>${D.kmax}</b>
+      (כל מגדל צריך ריבוע בצלע √${fmt(D.T)} + ${f1(D.dtt)} מ' מרחק).</div>
+      ${_eq(`שטח שהמרחק גוזל סביב מגדל = ½ × ((√${fmt(D.T)} + ${f1(dRing)})² − ${fmt(D.T)}) ≈ <b>${fmt(ring1)} מ"ר</b>`,
+        `סביב כל מגדל נשארת רצועה ברוחב המרחק הנדרש (${N.nm?`מרקמי–רב-קומות ${f1(D.dmt)} מ'`:`רב-קומות–רב-קומות ${f1(D.dtt)} מ'`}) שבה אי אפשר לבנות מבנה אחר. נספרת מחצית ממנה — מקלה, כי חלק מהרצועה נופל מחוץ למעטפה.`)}`,focus==='towers'));
+  }
+  // 5. marakmi
+  out.push(_sec('marakmi',`${D.Ft?'5':'4'}. מבנים מרקמיים`,`${_eq(`רצועת עומק ${f1(D.Dm)} מ' לאורך קצה המעטפה = <b>${fmt(D.band)} מ"ר</b>`,
+    `מבנים מרקמיים (בנייה לאורך הרחוב, בלוקים) לא יכולים להיות עמוקים מאוד. לכן השטח שלהם מוגבל לרצועה בעומק ${f1(D.Dm)} מ' מקצה המעטפה (הנחה, ניתן לשינוי). בתא צר — הרצועה היא כל המעטפה.`)}
+    ${N.nm>1?_eq(`רווחים בין מבנים = (${N.nm} − 1) × ${f1(D.dmm)} מ' × ${f1(D.Dm)} מ' = <b>${fmt(N.gaps)} מ"ר</b>`,`בין כל שני מבנים מרקמיים נשאר רווח לפי מרחק מרקמי–מרקמי.`):''}
+    ${N.nm?_eq(`טביעת רגל מרקמית = min(${fmt(D.band)}, ${fmt(D.budget)} − ${fmt(N.TF)} − ${fmt(N.TL)})${N.nm>1?` − ${fmt(N.gaps)}`:''} = <b>${fmt(N.MF)} מ"ר</b>`,
+      `הקטן מבין הרצועה לבין מה שנשאר מתקציב הקרקע אחרי המגדלים והמרחקים סביבם.`):'<div class="fcx-w">בתרחיש שנבחר אין מבנים מרקמיים.</div>'}`,focus==='marakmi'));
+  // 6. capacity
+  out.push(_sec('cap',`${D.Ft?'6':'5'}. הקיבולת`,_eq(`${f2(D.eff)} × (${fmt(N.TF)} × ${N.Ft} + ${fmt(N.MF)} × ${N.Fm}) = <b>${fmt(N.cap)} מ"ר</b>`,
+    `יעילות קומה ${f2(D.eff)} (ניכוי פירים, מגרעות ונסיגות — הנחה) × (טביעת המגדלים × קומות המגדל + טביעת המרקמיים × קומות המרקמי).
+     בתרחיש הזה: ${N.k} רבי-קומות ו-${N.nm} מבנים מרקמיים.`)+
+    `<div class="fcx-w">יחס הניצול = הנדרש ÷ הקיבולת = ${fmt(N.need)} ÷ ${fmt(N.cap)} = <b>${pct(N.need/N.cap)}</b></div>`,focus==='cap'||focus==='ratio'));
+  // 7. scenarios
+  const sc=[...N.scen].sort((a,b)=>b.slack-a.slack).slice(0,8);
+  out.push(_sec('scen','תרחישים שנבדקו',`<div class="fcx-w">המנוע עובר על כל הצירופים המותרים של מספר רבי-קומות ומספר מבנים מרקמיים
+    (בכפוף למספר מבנים מזערי ${D.nMin}${D.nMax<99?`, מרבי ${D.nMax} (${D.nMaxSrc})`:''}${D.mReq?`, חובת ${D.mReq} מרקמיים`:''}) ובוחר את זה שמשאיר הכי הרבה מקום.</div>
+    <table class="fcx-t"><tr><th>רבי-קומות</th><th>מרקמיים</th><th>קיבולת</th><th>נדרש</th><th>יתרה</th></tr>
+    ${sc.map(s=>`<tr${s===N?' class="s"':''}><td>${s.k}</td><td>${s.nm}</td><td>${fmt(s.cap)}</td><td>${fmt(s.need)}</td><td>${fmt(s.slack)}</td></tr>`).join('')}</table>`,false));
+  // 8. loose
+  if(L&&LD) out.push(_sec('loose','הרצה מקילה',`<div class="fcx-w">כדי לא לפסול תא בגלל הנחה שלנו, החישוב רץ שוב בהנחות המקילות ביותר:
+    יעילות קומה 1.0 (בלי ניכוי), קומת מגדל עד 900 מ"ר, עומק מרקמי 20 מ'${LD.relaxed.length?`, ו<b>בלי</b> הכללים שעדיין לא אושרו בטופס (${LD.relaxed.map(k=>FNAME[k]).join(', ')} = 0)`:''}.</div>
+    ${_eq(`קיבולת מקילה = <b>${fmt(L.cap)} מ"ר</b> (נדרש ${fmt(L.need)})`,'')}`,false));
+  // 9. verdict
+  const rule=r.verdict==='✗'?`גם בהרצה המקילה הקיבולת (${fmt(L.cap)}) קטנה מהנדרש (${fmt(L.need)}) — רק כללי התוכנית שאושרו מכשילים, ולכן <b>✗ לא נכנס</b>.`
+    :r.verdict==='⚠'?`בהנחות הרגילות הקיבולת (${fmt(N.cap)}) קטנה מהנדרש, אבל בהרצה המקילה (${fmt(L.cap)}) נכנס — התוצאה <b>תלויה בהנחות</b>.${r.approx?' (או שהמעטפה מקורבת — אין קווי בניין בתשריט.)':''}`
+    :r.verdict==='חסר?'?`הזכויות מנצלות פחות מחצי מהקיבולת (${pct(r.ratio)}) — ייתכן שהתא מקבל פחות זכויות ממה שהוא יכול לשאת. <b>לא בהכרח טעות</b>: לעתים זה מרווח מכוון (טופוגרפיה, תקרת קומות אחידה).`
+    :r.verdict==='לבדיקה'?`הזכויות נכנסות, אבל התא חריג מול תאים דומים בתוכנית (ר' למטה) — כדאי לבדוק את השורה שלו בטבלה 5.`
+    :`נמצא תרחיש שמכיל את הזכויות (ניצול ${pct(r.ratio)}).`;
+  out.push(_sec('verdict','התוצאה',`<div class="fcx-w">${rule}</div>`,focus==='verdict'));
+  // 10. comparisons
+  if(r.ratio){
+    const pl=(r.peerList||[]).slice().sort((a,b)=>b.ratio-a.ratio).slice(0,12);
+    out.push(_sec('peers','השוואה לתאים דומים',`<div class="fcx-w">בתוכנית אחת הזכויות מחושבות בדרך כלל באותה שיטה, ולכן תאים דומים (אותו ייעוד ואותן קומות) מנצלים אחוז דומה מהקיבולת,
+      והשטח ליח"ד כמעט קבוע (בגוף הידע: ±5%). תא שבולט מול עמיתיו — כדאי לבדוק.</div>
+      ${r.peerN>=3?_eq(`ניצול התא ${pct(r.ratio)} ÷ חציון ${r.peerN} תאים דומים ${pct(r.peerMed)} = <b>×${f2(r.peer)}</b>`,
+        `סימון אם ×1.25 ומעלה וגם הניצול עצמו 70% ומעלה. תאים דומים: ${pl.map(p=>`${E(p.cn)} (${pct(p.ratio)})`).join(', ')}${r.peerN>12?' …':''}`):'<div class="fcx-w">אין מספיק תאים דומים להשוואה (צריך 3 לפחות).</div>'}
+      ${r.apu?_eq(`שטח ליח"ד = ${fmt(x.resArea*(D.scale||1))} ÷ ${x.units} = ${fmt(r.apu)} מ"ר · מול ${r.apuRefSrc}: ${fmt(r.apuRef)} → <b>×${f2(r.apuRel)}</b>`,
+        'שטח המגורים מעל הקרקע (כולל שירות וגרעינים) חלקי מספר יח"ד. סימון מ-×1.15 ומעלה או ×0.85 ומטה.'):''}`,focus==='peers'));
+  }
+  out.push(_sec('limits','מה הבדיקה לא בודקת',`<div class="fcx-w">היא לא מתכננת בינוי אמיתי ולא בודקת: צמידות לקו בניין / דופן רציפה, תחומי חיפוש לרבי-קומות מהנספח,
+    מגבלות גובה מוחלטות, טופוגרפיה, תכנון קומת הקרקע והמרתף. מגדלים מחושבים כריבועים ומרקמיים כרצועה — קירוב. לכן ✓ פירושו "לא נפסל", ולא "תוכנן".</div>`,false));
+  return out.join('');
+}
+const METHOD=`<div class="fcx-intro"><b>מה הבדיקה עושה.</b> לכל תא מגורים או תעסוקה היא משווה בין שני מספרים:
+  <b>הנדרש</b> — שטחי הבנייה מעל הקרקע שטבלה 5 נותנת לתא, ו<b>הקיבולת</b> — כמה לכל היותר אפשר לבנות בתא לפי כללי התוכנית.</div>
+  ${_sec('m1','איך מחושבת הקיבולת',`<div class="fcx-w">(1) <b>תקציב קרקע</b> — הקטן מבין: השטח בתוך קווי הבניין שבתשריט, התא פחות השטח שחייב להישאר פנוי, ותכסית מרבית (אם נקבעה).
+  (2) <b>קומות</b> — מטבלה 5; מעל סף המרקמי מותרים רבי-קומות, ולצידם מבנים מרקמיים עד הסף.
+  (3) <b>רבי-קומות</b> — שטח קומה לפי נוסחת המאסטר (יח"ד בקומה × (דירה + גרעין)); סביב כל מגדל נגרע שטח לפי המרחק הנדרש.
+  (4) <b>מרקמיים</b> — רצועה בעומק סביר לאורך קצה המעטפה, פחות רווחים בין המבנים.
+  (5) הקיבולת = יעילות קומה × (טביעת מגדלים × קומות מגדל + טביעת מרקמיים × קומות מרקמי). נבדקים כל הצירופים של מספר מגדלים ומבנים — ונבחר הטוב ביותר.</div>`,false)}
+  ${_sec('m2','מה פירוש התוצאות',`<div class="fcx-w"><b>✗ לא נכנס</b> — גם בהנחות המקילות ביותר, ורק לפי כללים שאושרו מהתקנון.
+  <b>⚠ תלוי בהנחות</b> — לא נכנס בהנחות הרגילות, נכנס במקילות. <b>לבדיקה</b> — נכנס, אבל חריג מול תאים דומים באותה תוכנית (ניצול או שטח ליח"ד).
+  <b>חסר?</b> — הזכויות מנצלות פחות מחצי מהקיבולת. <b>✓</b> — נמצא תרחיש שמכיל את הזכויות (חסם עליון — "לא נפסל", לא "תוכנן").</div>`,false)}
+  ${_sec('m3','כללים, הנחות ואישור',`<div class="fcx-w">כללי התוכנית (מרחקים, שטח פנוי וכו') מתחילים בברירות מחדל מתקנון המאסטר. <b>שינוי ערך = אישור שהוא מהתקנון</b> (מסגרת ירוקה).
+  רק כלל מאושר יכול להכשיל ל-✗; כלל שלא אושר מוקל בהרצה המקילה. ההנחות (יעילות, דירה, יח"ד בקומה, עומק) לעולם לא מכשילות ל-✗.</div>`,false)}
+  ${_sec('m4','השוואות בתוך התוכנית',`<div class="fcx-w">בתוכנית אחת הזכויות מחושבות בדרך כלל באותה שיטה, ולכן תאים דומים מנצלים אחוז דומה מהקיבולת, והשטח ליח"ד כמעט קבוע.
+  תא שבולט מול עמיתיו מסומן "לבדיקה" — גם אם הוא נכנס. כך נתפסות גם חריגות של 15–20% שהחסם העליון לבדו לא תופס.</div>`,false)}
+  <div class="fcx-w" style="margin-top:8px">לחיצה על כל נתון בטבלת התוצאות (או בעמודות בלשונית טבלה 5) פותחת את התחקור המלא של התא.</div>`;
+function _pop(title,html,focus){
+  let p=$('fc-pop');
+  if(!p){ p=document.createElement('div'); p.id='fc-pop';
+    p.innerHTML=`<div class="fcx-box"><div class="fcx-hd"><b id="fcx-title"></b><button onclick="FC.closeExplain()">✕</button></div><div class="fcx-bd" id="fcx-bd"></div></div>`;
+    p.addEventListener('click',e=>{ if(e.target===p) FC.closeExplain(); }); document.body.appendChild(p); }
+  _css();
+  $('fcx-title').textContent=title; $('fcx-bd').innerHTML=html; p.classList.add('vis');
+  const t=focus&&$('fcx-'+focus); $('fcx-bd').scrollTop=t?Math.max(0,t.offsetTop-60):0;
+}
+FC._explainHtml=explainHtml; // לבדיקות
+FC.explain=function(cn,focus,ev){ if(ev) ev.stopPropagation(); const r=FC.resultFor(cn); if(!r) return;
+  _pop(`תחקור בקרת בינוי — תא ${cn} (${r.yiud})`,explainHtml(r,focus),focus); };
+FC.explainMethod=function(){ _pop('איך בקרת הבינוי עובדת',METHOD); };
+FC.closeExplain=function(){ const p=$('fc-pop'); if(p) p.classList.remove('vis'); };
+if(typeof document!=='undefined') document.addEventListener('keydown',e=>{ if(e.key==='Escape') FC.closeExplain(); });
+
 // ── columns in the "טבלה 5" tab ──
 FC.t5HeadHtml=function(){
   return `<th class="t5v-calc-hdr t5v-fc-hdr" title="בקרת בינוי — חסם עליון: כמה אפשר לבנות בתא לפי קווי הבניין והכללים (לשונית 🏗 בקרת בינוי)">קיבולת מחושבת<br><small>מ"ר מעל הקרקע</small></th>
@@ -440,8 +616,10 @@ FC.t5HeadHtml=function(){
 FC.t5CellsHtml=function(cn,rowspan){
   const r=FC.resultFor(cn), rs=rowspan>1?` rowspan="${rowspan}"`:'';
   if(!r) return `<td class="t5v-calc-cell"${rs} style="color:#888">—</td><td class="t5v-calc-cell"${rs} style="color:#888">—</td><td class="t5v-calc-cell"${rs} style="color:#888">—</td>`;
-  return `<td class="t5v-calc-cell"${rs}>${fmt(r.cap)}</td><td class="t5v-calc-cell"${rs}>${r.ratio?Math.round(r.ratio*100)+'%':'—'}</td>
-    <td class="t5v-calc-cell"${rs} title="${E((r.why||'')+(r.flags.length?' · '+r.flags.join(' · '):''))}"><span class="fc-v" style="background:${COL[r.verdict]};color:#fff;border-radius:8px;padding:1px 7px;font-weight:600;white-space:nowrap">${E(LBL[r.verdict])}</span></td>`;
+  const c=E(r.cn);
+  return `<td class="t5v-calc-cell t5v-fc-x"${rs} onclick="FC.explain('${c}','cap',event)" title="לחץ לתחקור החישוב">${fmt(r.cap)} <span style="font-size:9px;opacity:.6">🔍</span></td>
+    <td class="t5v-calc-cell t5v-fc-x"${rs} onclick="FC.explain('${c}','ratio',event)" title="לחץ לתחקור החישוב">${r.ratio?Math.round(r.ratio*100)+'%':'—'} <span style="font-size:9px;opacity:.6">🔍</span></td>
+    <td class="t5v-calc-cell t5v-fc-x"${rs} onclick="FC.explain('${c}','verdict',event)" title="${E((r.why||'')+(r.flags.length?' · '+r.flags.join(' · '):''))} — לחץ לתחקור"><span class="fc-v" style="background:${COL[r.verdict]};color:#fff;border-radius:8px;padding:1px 7px;font-weight:600;white-space:nowrap">${E(LBL[r.verdict])}</span></td>`;
 };
 
 // ── project persistence ──
@@ -449,6 +627,9 @@ FC.getSpec=function(){ return FC.spec; };
 FC.setSpec=function(s){ FC.spec=normalizeSpec(s); FC.res=null; FC._dirty=false; if(FC.open){ FC.ensure(true); FC.render(); } };
 FC.reset=function(){ FC.spec=emptySpec(); FC.res=null; FC.sel=null; if(FC.open) FC.close(); };
 FC.hasUser=function(s){ s=s||FC.spec; return !!(s&&(Object.keys(s.conf||{}).length||Object.values(s.g||{}).some(g=>(g.def!=null&&g.def!=='')||g.exc))); };
+
+function _css(){ if(typeof document==='undefined'||$('fc-css')) return; const st=document.createElement('style'); st.id='fc-css'; st.textContent=CSS; document.head.appendChild(st); }
+if(typeof document!=='undefined'){ if(document.head) _css(); else document.addEventListener('DOMContentLoaded',_css); } // גם לעמודות בלשונית טבלה 5
 
 root.FC=FC;
 root.openFitCheck=function(){ FC.toggle(); };
