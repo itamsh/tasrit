@@ -1208,6 +1208,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
       <button class="tb-tab" id="btn-prog" onclick="_tbTab('prog')" title="קורא הפרוגרמה — הבנת נספח הפרוגרמה על גבי התשריט">📊 פרוגרמה</button>
       <button class="tb-tab" id="btn-tama" onclick="_tbTab('tama')" title="בדיקת תאימות תמ״א 35/4">📐 תמ״א 35/4</button>
       <button class="tb-tab" id="btn-t5" onclick="_tbTab('t5')" title="טבלה 5 — זכויות בנייה">📋 טבלה 5</button>
+      <button class="tb-tab" id="btn-fc" onclick="_tbTab('fc')" title="בקרת בינוי — האם הזכויות בטבלה 5 נכנסות בתאי השטח">🏗 בקרת בינוי</button>
       <button class="tb-btn" id="btn-word" style="display:none" onclick="openWordDoc()">📝 תקנון</button>
       <span style="flex:1"></span>
       <span class="tb-lbl t5-hide">צביעה:</span>
@@ -1812,7 +1813,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 // ── App version — bump on EVERY deploy (date + that day's deploy number), so the
 //    user and Claude can confirm they're looking at the same build. Shown in the
 //    map toolbar and the loading-page footer.
-const APP_VERSION='2026.09.27-15';
+const APP_VERSION='2026.09.29-1';
 // Version of the road-network DETECTION ALGORITHM only — bump when _rnDetect's
 // output changes, so a network saved from an older run is flagged as stale
 // (networks are saved per project and are NOT re-detected on load).
@@ -3299,17 +3300,19 @@ function _tbCloseAll(){
   try{ const t=document.getElementById('tama-panel'); if(t&&t.classList.contains('vis')) closeTamaView(); }catch(e){}
   try{ const t=document.getElementById('prog-panel'); if(t&&t.classList.contains('vis')) closeProgView(); }catch(e){}
   try{ if(window.PR&&PR.open) PR.close(); }catch(e){}
+  try{ if(window.FC&&FC.open) FC.close(); }catch(e){}
   try{ if(document.getElementById('toolbar').classList.contains('rn-mode')) closeRoadNetPanel(); }catch(e){}
 }
 function _tbTab(t){
-  const ids={t5:'btn-t5',prog:'btn-prog',tama:'btn-tama',road:'btn-road-net'};
+  const ids={t5:'btn-t5',prog:'btn-prog',tama:'btn-tama',road:'btn-road-net',fc:'btn-fc'};
   if(t!=='tsharit'&&_tbIsOn(ids[t])){ _tbCloseAll(); _tbSync(); return; } // לחיצה על הלשונית הפעילה = חזרה לתשריט
-  if(t==='t5'&&!state.table5){ _showToast('טבלה 5 לא נטענה לתוכנית הזו — ר׳ החיווי מתחת לשם התוכנית',4000); return; }
+  if((t==='t5'||t==='fc')&&!state.table5){ _showToast('טבלה 5 לא נטענה לתוכנית הזו — ר׳ החיווי מתחת לשם התוכנית',4000); return; }
   _tbCloseAll();
   if(t==='t5') openTable5View();
   else if(t==='prog') (window.openProgReader||openProgView)();
   else if(t==='tama') openTamaView();
   else if(t==='road') onRoadNetClick();
+  else if(t==='fc'&&window.FC) FC.openPanel();
   _tbSync();
 }
 function _tbColor(m){
@@ -3320,7 +3323,7 @@ function _tbColor(m){
   _tbSync();
 }
 function _tbSync(){
-  const any=['btn-t5','btn-prog','btn-tama','btn-road-net'].some(_tbIsOn);
+  const any=['btn-t5','btn-prog','btn-tama','btn-road-net','btn-fc'].some(_tbIsOn);
   const ts=document.getElementById('btn-tsharit'); if(ts) ts.classList.toggle('active',!any);
   const cy=document.getElementById('btn-color-yiud'); if(cy) cy.classList.toggle('active',!state.rachakMode&&!state.densityMode);
   const tb=document.getElementById('toolbar');
@@ -3519,6 +3522,7 @@ function _buildT5FromGrid(grid, rowCount){
     komMal:findCol('קומות > מעל'),komMitahat:findCol('קומות > מתחת'),
     kvQdami:findCol('קדמי'),kvAhori:findCol('אחורי'),kvYmani:findCol('ימני'),kvSmali:findCol('שמאלי'),
     mirpasot:findCol('מרפסות'),tachsit:findCol('תכסית'),
+    maxBld:findCol('מספר מבנים'), // "מספר מבנים מרבי בתא שטח" (חלק מהתוכניות) — לבקרת הבינוי
   };
   const cleanVal=v=>{
     if(!v) return '';
@@ -3545,6 +3549,7 @@ function _buildT5FromGrid(grid, rowCount){
       kvQdami:getCell(gr,CI.kvQdami),kvAhori:getCell(gr,CI.kvAhori),
       kvYmani:getCell(gr,CI.kvYmani),kvSmali:getCell(gr,CI.kvSmali),
       mirpasot:getCell(gr,CI.mirpasot),tachsit:getCell(gr,CI.tachsit),
+      maxBld:getCell(gr,CI.maxBld),
     };
     parsed.push({label:numVal,nums,row});
   }
@@ -4543,6 +4548,7 @@ function redraw(){
   _drawCalcPoly();
   drawMeasurement();
   if(window.PR&&PR.open) try{PR.drawLayer(ctx);}catch(e){console.error(e);}
+  if(window.FC&&FC.open) try{FC.drawLayer(ctx);}catch(e){console.error(e);}
   // Overlay-panel row hover — glowing yellow outline, same idea as the
   // iplan-plan-filter extension's client-side highlight Graphic.
   if(_ovHoverRings&&_ovHoverRings.length){
@@ -5044,23 +5050,34 @@ function _calcBuildEnvArea(zoneFeat){
   }
   if(seed<0) return null;
 
-  // ── Flood buildable region from seed, blocked by walls and zone boundary ──
-  const seen=new Uint8Array(N);
-  head=0; tail=0;
-  q[tail++]=seed; seen[seed]=1;
-  let count=0;
-  while(head<tail){
-    const k=q[head++];
-    count++;
-    const ix=k%nx, iy=(k-ix)/nx;
-    const nb=[[ix-1,iy],[ix+1,iy],[ix,iy-1],[ix,iy+1]];
-    for(const [jx,jy] of nb){
-      if(jx<0||jx>=nx||jy<0||jy>=ny) continue;
-      const kk=ci(jx,jy);
-      if(seen[kk]||!inside[kk]||wall[kk]) continue;
-      seen[kk]=1; q[tail++]=kk;
+  // ── Buildable regions (בקרת בינוי, 2026.09.29): every connected free region whose OWN half-width is
+  // at least 4 m. Drops the setback strips between the cell edge and a building line (a few metres wide),
+  // keeps separate buildable zones (e.g. housing / employment split by an inner building line — before this
+  // only the region around the deepest point was counted, e.g. 3006 cells 405/408, 3008 cells 201–203).
+  const free=new Uint8Array(N); for(let k=0;k<N;k++) free[k]=inside[k]&&!wall[k]?1:0;
+  const D=new Float32Array(N), R2=Math.SQRT2;              // chamfer distance inside the free mask (cells)
+  for(let k=0;k<N;k++) D[k]=free[k]?1e9:0;
+  for(let y=0;y<ny;y++)for(let x=0;x<nx;x++){const k=y*nx+x; if(!free[k])continue; let v=D[k];
+    if(x>0)v=Math.min(v,D[k-1]+1); if(y>0){v=Math.min(v,D[k-nx]+1); if(x>0)v=Math.min(v,D[k-nx-1]+R2); if(x<nx-1)v=Math.min(v,D[k-nx+1]+R2);} D[k]=v;}
+  for(let y=ny-1;y>=0;y--)for(let x=nx-1;x>=0;x--){const k=y*nx+x; if(!free[k])continue; let v=D[k];
+    if(x<nx-1)v=Math.min(v,D[k+1]+1); if(y<ny-1){v=Math.min(v,D[k+nx]+1); if(x<nx-1)v=Math.min(v,D[k+nx+1]+R2); if(x>0)v=Math.min(v,D[k+nx-1]+R2);} D[k]=v;}
+  const cm=h*mpu, MINHALF=4;                                // cell size (m), minimum half-width (m)
+  const seen=new Uint8Array(N), lab=new Uint8Array(N);
+  for(let s0=0;s0<N;s0++){
+    if(!free[s0]||lab[s0]) continue;
+    head=0; tail=0; q[tail++]=s0; lab[s0]=1; let mx=0; const members=[];
+    while(head<tail){
+      const k=q[head++]; members.push(k); if(D[k]>mx) mx=D[k];
+      const ix=k%nx, iy=(k-ix)/nx;
+      for(const kk of [ix>0?k-1:-1, ix<nx-1?k+1:-1, iy>0?k-nx:-1, iy<ny-1?k+nx:-1])
+        if(kk>=0&&!lab[kk]&&free[kk]){ lab[kk]=1; q[tail++]=kk; }
     }
+    if((mx-0.5)*cm>=MINHALF||members.includes(seed)) for(const k of members) seen[k]=1;
   }
+  let count=0, per=0; const DEPTHS=[8,10,12,15,18,20], band=DEPTHS.map(()=>0);
+  for(let k=0;k<N;k++){ if(!seen[k]) continue; count++;
+    if(!seen[k-1]||!seen[k+1]||!seen[k-nx]||!seen[k+nx]) per++;
+    const dm=(D[k]-0.5)*cm; for(let i=0;i<DEPTHS.length;i++) if(dm<=DEPTHS[i]) band[i]++; }
 
   // Add half the bordering wall cells so the setback-line thickness isn't lost
   let wallEdge=0;
@@ -5073,8 +5090,17 @@ function _calcBuildEnvArea(zoneFeat){
       if(seen[ci(jx,jy)]){ wallEdge++; break; }
     }
   }
-  const cells=count+wallEdge*0.5;
-  return cells*h*h*mpu*mpu;
+  const cells=count+wallEdge*0.5, env=cells*cm*cm;
+  // Extra geometry for the building fit check (fitcheck.js): perimeter + area within D m of the envelope edge
+  zoneFeat._buildGeom={env, per:per*cm, band:Object.fromEntries(DEPTHS.map((d,i)=>[d,band[i]*cm*cm])), cellA:_featureAreaM2(zoneFeat)};
+  return env;
+}
+// Envelope geometry for the fit check; {noLines:true} when the cell has no building lines on the map.
+function _calcBuildGeom(f){
+  if(f._buildGeom!==undefined) return f._buildGeom;
+  const env=_calcBuildEnvArea(f);
+  if(f._buildGeom===undefined) f._buildGeom=(env==null&&f.geometry)?{noLines:true,cellA:_featureAreaM2(f)}:null;
+  return f._buildGeom;
 }
 
 function drawRoadWidth(polyCoords,span){
@@ -5779,7 +5805,8 @@ function showInfo(feat){
   }
 
   // קורא הפרוגרמה — אילו מוסדות מהנספח שובצו בתא הזה
-  if(window.PR&&PR.cellInfoHtml){ try{ html=html+PR.cellInfoHtml(num); }catch(e){} } // בסוף החלונית — פחות חשוב מנתוני התא
+  if(window.PR&&PR.cellInfoHtml){ try{ html=html+PR.cellInfoHtml(num); }catch(e){} }
+  if(window.FC&&FC.open&&FC.cellInfoHtml){ try{ html=html+FC.cellInfoHtml(num); }catch(e){} } // בקרת בינוי // בסוף החלונית — פחות חשוב מנתוני התא
   document.getElementById('info-body').innerHTML=html;
   document.getElementById('info-panel').classList.add('vis');
 }
@@ -8240,6 +8267,7 @@ function _renderT5Panel(){
     {k:'komMal',     label:'קומות<br>מעל'},
     {k:'komMitahat', label:'קומות<br>מתחת'},
     {k:'tachsit',    label:'תכסית<br><small>%</small>'},
+    {k:'maxBld',     label:'מבנים<br><small>מרבי</small>'},
     {k:'mirpasot',   label:'מרפסות<br><small>מ"ר</small>'},
     {k:'kvQdami',    label:`ק"ב קדמי<br><small>מ'</small>`},
     {k:'kvAhori',    label:`ק"ב אחורי<br><small>מ'</small>`},
@@ -8249,7 +8277,7 @@ function _renderT5Panel(){
 
   const NUMERIC_KEYS=new Set(['magras','ikariMal','sherutMal','ikariMitahat','sherutMitahat',
     'kollMal','kollMitahat','kollSuma','ahuz','yihud','gova','komMal','komMitahat',
-    'tachsit','mirpasot','kvQdami','kvAhori','kvYmani','kvSmali']);
+    'tachsit','mirpasot','kvQdami','kvAhori','kvYmani','kvSmali','maxBld']);
 
   // ── Plan-feature lookup (num -> feature) for building-envelope area ──
   const featByNum={};
@@ -8342,6 +8370,7 @@ function _renderT5Panel(){
       <button class="${T5_PARAMS.ahuzMode==='rachak'?'on':''}" onclick="T5_PARAMS.ahuzMode='rachak';_t5Refresh()">רח"ק</button>
     </div></th>`;
   thead+=`<th class="t5v-calc-hdr">צפיפות<br><small>יח"ד / דונם</small></th>`;
+  if(window.FC&&FC.t5HeadHtml) thead+=FC.t5HeadHtml(); // בקרת בינוי
   thead+='</tr></thead>';
 
   // ── Rows ──
@@ -8400,6 +8429,7 @@ function _renderT5Panel(){
       tbody+=`<td class="t5v-calc-cell" rowspan="${groupLen}" onclick="_t5ShowCalcDetail('${num}',event,'ahuzBinyan')" title="לחץ לתחקור החישוב">${ahuzTxt} <span style="font-size:9px;opacity:.6">🔍</span></td>`;
       const densityTxt=cc.density!=null?cc.density.toFixed(1):'';
       tbody+=`<td class="t5v-calc-cell" rowspan="${groupLen}" style="${cc.density!=null?'':'color:#666'}">${densityTxt||'—'}</td>`;
+      if(window.FC&&FC.t5CellsHtml){ try{ tbody+=FC.t5CellsHtml(cc.grp?null:num,groupLen); }catch(e){ tbody+='<td></td><td></td><td></td>'; } } // בקרת בינוי
     }
     tbody+='</tr>';
   }
@@ -12575,6 +12605,7 @@ function _projSetActive(id){try{id?localStorage.setItem(_PROJ_ACTIVE_KEY,id):loc
 // Reset ALL user-input state to defaults so a new/loaded plan starts clean —
 // prevents road nets / TAMA / program entries from a previous plan leaking in.
 function _projClearAllInputs(){
+  try{ if(window.FC) FC.reset(); else window._FC_PENDING=null; }catch(e){} // בקרת בינוי — לא לגרור טופס לתוכנית אחרת
   // Road network
   RE.nodes=[];RE.edges=[];RE.pendingEdges=[];RE.nId=0;RE.eId=0;RE.phase=0;
   RE.active=false;RE.finalized=false;RE.visible=true;
@@ -12620,6 +12651,7 @@ function _projCollectInputs(){
     },
     program:{flowInputs:_flowInputs,sensOvr:_sensOvr,t5params:T5_PARAMS},
     programSpec:window.PR?PR.getSpec():(window._PR_PENDING||null), // קורא הפרוגרמה
+    fitcheck:window.FC?FC.getSpec():(window._FC_PENDING||null), // בקרת בינוי
     mavatDocs:state.mavatDocs||null, // איזו גרסה נמשכה מ"מידע תכנוני" (סט + תאריך)
     gridAngle:state.gridAngle||0
   };
@@ -12668,6 +12700,7 @@ function _projApplyInputs(inp){
   // קורא הפרוגרמה — אם הסקריפט עוד לא נטען, נשמר להחלה בטעינתו
   state.mavatDocs=inp.mavatDocs||null;
   if(window.PR) PR.setSpec(inp.programSpec||null); else window._PR_PENDING=inp.programSpec||null;
+  if(window.FC) FC.setSpec(inp.fitcheck||null); else window._FC_PENDING=inp.fitcheck||null; // בקרת בינוי
   try{redraw();}catch(e){}
 }
 async function _projCollectFiles(){
@@ -12806,6 +12839,7 @@ async function _projAfterLaunch(){
 function _mapVisible(){ const m=document.getElementById('map-page'); return !!m&&getComputedStyle(m).display!=='none'; }
 function _inputsHaveUser(inp){
   try{
+    if(window.FC&&inp&&inp.fitcheck&&FC.hasUser(inp.fitcheck)) return true; // בקרת בינוי
     const s=inp&&inp.programSpec;
     if(s){
       if((s.provision||[]).length) return true;
@@ -13061,5 +13095,6 @@ function toggleTheme(){
 </script>
 <!-- קורא הפרוגרמה (פרוגרמה/ROADMAP_program_reader.md) — קובץ נפרד -->
 <script src="prog_reader.js"></script>
+<script src="fitcheck.js"></script>
 </body>
 </html>
