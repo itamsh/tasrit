@@ -275,6 +275,21 @@ const CSS=`
 .fc-cf input{margin:0;cursor:pointer}
 .fc-cf.on{background:#12301f;border-color:#2e8b50;color:#9fe0b4}
 .fc-fh{border-bottom:1px solid #34506f;padding-bottom:3px}.fc-fh span{font-size:11px;color:#8aa;font-weight:600}
+.fc-topic{border:1px solid #6b5a1e;border-right:4px solid #f0b429;border-radius:7px;padding:7px 10px 8px;margin:8px 0;background:#1a1f22}
+.fc-topic.done{border-color:#2e6b44;border-right-color:#2e8b50;background:#14231b}
+.fc-th{display:flex;align-items:center;gap:8px;justify-content:space-between}.fc-th b{font-size:13.5px;color:#e6eef8}
+.fc-tr{display:grid;grid-template-columns:1fr 92px 46px;gap:4px 8px;align-items:center;padding:4px 0}
+.fc-tr-t{grid-template-columns:1fr}
+.fc-tl{font-size:12.5px}
+.fc-tr input,.fc-tr select{background:#0f1824;color:#e6eef8;border:1px solid #34506f;border-radius:5px;padding:3px 6px;font-size:12.5px;width:100%;box-sizing:border-box}
+.fc-tpl{font-size:12.5px;line-height:2}.fc-tpl input.sm{width:62px;display:inline-block;margin:0 3px}
+.fc-opt{border:1px dashed #34506f;border-radius:6px;padding:4px 8px;margin-top:6px}
+.fc-opt-h{font-size:11px;color:#8aa;margin-bottom:2px}
+body.theme-light .fc-topic{background:#fffdf5;border-color:#e0c26b;border-right-color:#f0b429}
+body.theme-light .fc-topic.done{background:#f3fbf5;border-color:#9fd3b0;border-right-color:#2e8b50}
+body.theme-light .fc-th b{color:#1a3560}
+body.theme-light .fc-tr input,body.theme-light .fc-tr select{background:#fff;color:#1c2b3c;border-color:#bfccdb}
+body.theme-light .fc-opt{border-color:#cfd9e6}
 body.theme-light .fc-bn.warn{background:#fff6dc;color:#4a3500}
 body.theme-light .fc-bn.ok{background:#e9f7ee;color:#10391f}
 body.theme-light .fc-bn-c{background:rgba(0,0,0,.07)}
@@ -381,14 +396,7 @@ FC.ensure=function(force){
 FC.resultFor=function(cn){ try{ if(!FC.ensure()) return null; return FC._by[String(cn)]||null; }catch(e){ return null; } };
 
 // ── form events (indices only in handlers — no Hebrew text inside onclick) ──
-FC.setF=function(i,el){ const x=FIELDS[i]; let v=el.value;
-  if(x.type!=='sel'&&x.type!=='text') v=v===''?null:+v;
-  FC.spec.f[x.k]=v; FC.spec.conf[x.k]=true; el.classList.add('conf'); FC._dirty=true; };
-FC.confF=function(i){ const x=FIELDS[i]; FC.spec.conf[x.k]=!FC.spec.conf[x.k]; FC._dirty=true; FC.render(); };
-// שדות הליבה שהבודק צריך לעבור עליהם בתקנון (לפי סדר הטופס)
-const CORE_FIELDS=['marakmiMaxFloors','dMM','dMT','dTT','coverage','freePct','pbMode','bonusPct'];
-function _coreStatus(){ const need=[...CORE_FIELDS]; if(_noLinesPlan()) need.push('setback');
-  const done=need.filter(k=>FC.spec.conf[k]); return {need,done}; }
+function _coreStatus(){ const need=_activeTopics(); return {need,done:need.filter(topicDone)}; }
 function _noLinesPlan(){ const arc=state.layers&&state.layers.arc; return !arc||!arc.features.some(f=>typeof _isBuildLine==='function'&&_isBuildLine(f.properties.MAVAT_CODE)); }
 FC.gotoForm=function(){ const d=$('fc-sec-rules'); if(!d) return; d.open=true; d.scrollIntoView({behavior:'smooth',block:'start'}); };
 function _annexLine(){
@@ -404,11 +412,11 @@ function _banner(){
   const nl=_noLinesPlan();
   return `<div class="fc-bn ${all?'ok':'warn'}">
     <div class="fc-bn-h">${all?'✅ בדיקה לפי כללי התוכנית':none?'⚠ בדיקה ראשונית — לפי ברירות מחדל בלבד':'⚠ בדיקה חלקית — חלק מהכללים עדיין ברירת מחדל'}
-      <span class="fc-bn-c">נבדקו ${done.length} מתוך ${need.length} כללים</span></div>
+      <span class="fc-bn-c">נבדקו ${done.length} מתוך ${need.length} נושאים</span></div>
     ${all?`<div class="fc-bn-l">כל כללי התוכנית נבדקו מול התקנון. אם נספח הבינוי מחייב לעניין מספר מבנים או מגדלים — ודאו שמולאו גם "כללים לקבוצות תאים".</div>`
       :`<div class="fc-bn-l">הממשק עשה את החלק האוטומטי (טבלה 5 + קווי הבניין מהתשריט). <b>את כללי התוכנית הוא לא יודע לקרוא מהתקנון — צריך להזין אותם.</b>
-        עד אז התוצאות מבוססות על ברירות המחדל של תקנון המאסטר, ואינן יכולות לתת ✗. עוברים על ${need.length} שדות מול התקנון (בערך 5–10 דקות):
-        לכל שדה מופיע איפה לחפש; אחרי הבדיקה מסמנים "בדקתי בתקנון" (גם אם הערך נשאר כמו שהוא).</div>
+        עד אז התוצאות מבוססות על ברירות המחדל של תקנון המאסטר, ואינן יכולות לתת ✗. עוברים על ${need.length} נושאים מול התקנון (בערך 5–10 דקות):
+        לכל נושא מופיע איפה לחפש; אחרי הבדיקה מסמנים "בדקתי בתקנון" (גם אם הערכים נשארים כמו שהם).</div>
         <button class="fc-btn fc-run" style="margin-top:6px" onclick="FC.gotoForm()">מלאו את כללי התוכנית ←</button>`}
     ${nl?(FC.spec.f.setback!=null&&FC.spec.f.setback!==''
       ?`<div class="fc-bn-l">ℹ אין קווי בניין בתשריט — הוזנה נסיגה אחידה של ${E(FC.spec.f.setback)} מ'. המעטפה מקורבת, ולכן תאים שלא נכנסים יסומנו ⚠ ולא ✗.</div>`
@@ -442,18 +450,62 @@ function _autoChips(){
     ${chip(has('tachsit'),'תכסית בטבלה')}${chip(has('maxBld'),'מספר מבנים מרבי בטבלה')}${chip(has('gova'),"גובה (מ') בטבלה")}
   </div>`;
 }
+// ── הטופס מקובץ לפי נושאים: נושא = סעיף אחד בתקנון, עם "בדקתי בתקנון" אחד לכל הנושא ──
+// row.f = שדה יחיד; row.tpl = משפט עם שדות בתוכו ({k}); row.opt = "אם התוכנית מפצלת"; row.when = מוצג רק בתנאי
+const TOPICS=[
+  {id:'thr',title:'סף מרקמי',where:'1.9 הגדרות · הערות לטבלה 5',say:'"בניין פשוט/מרקמי — שאינו רב-קומות … ועד X קומות". מאסטר: 10. רב-קומות = מעל 29 מ\' מהכניסה לקומה העליונה',
+    rows:[{label:'קומות מרביות למבנה מרקמי',f:'marakmiMaxFloors'}]},
+  {id:'dist',title:'מרחקים בין מבנים',where:'6.1.1 "הוראות להעמדת מבנים" · 4.1.2 · לפעמים 6.3 / 6.4',say:'"המרחק בין שני מבנים … יהיה לפחות". מאסטר: 8 / 10 / 15 מ\', ועוד 1 מ\' לכל קומה מעל 25',
+    rows:[{label:'מרקמי – מרקמי',f:'dMM'},{label:'מרקמי – רב-קומות',f:'dMT'},{label:'רב-קומות – רב-קומות',f:'dTT'},
+      {opt:true,label:'תוספת בין רבי-קומות גבוהים',tpl:"{dTTadd} מ' לכל קומה מעל קומה {dTTabove}"},
+      {opt:true,label:'מרחק שונה בין חזיתות ארוכות (מרקמי – מרקמי)',f:'dMMlong'},
+      {opt:true,label:'מרחק מופחת למבנים נמוכים',tpl:"{dMMlow} מ' בין מבנים של עד {dMMlowUpTo} קומות"}]},
+  {id:'cov',title:'תכסית מרבית עילית',where:'עמודת תכסית בטבלה 5 · הערות לטבלה · פרק 4',say:'"תכסית … לא תעלה על". אם יש עמודה בטבלה 5 — היא נקלטת אוטומטית, והשדה נשאר ריק',
+    rows:[{label:'תכסית מרבית (אם אינה בטבלה 5)',f:'coverage'}]},
+  {id:'free',title:'שטח שחייב להישאר פנוי / מגונן',where:'6.1 נטיעות · 6.5 פיתוח · פרק ניהול הנגר',say:'"לפחות X% משטח התא יהיה פנוי מבינוי / מגונן / מחלחל"',
+    rows:[{label:'אחוז מהתא',f:'freePct'}]},
+  {id:'pb',title:'שטחים משותפים לכל בניין',where:'הערות לטבלה 5 · 4.1.2',say:'"לכל בניין תותר תוספת של X מ"ר…" (תוספת) / "מתוך השטחים בטבלה, לכל מבנה X מ"ר…" (חובה מתוך הטבלה)',
+    rows:[{label:'איך התקנון מתייחס אליהם',f:'pbMode'},
+      {when:'add',label:'תוספת לכל מבנה מרקמי',f:'pbMarakmi'},{when:'add',label:'תוספת לכל רב-קומות (ריק = כמו מרקמי)',f:'pbTower'},
+      {when:'add',label:'התוספת לא חלה על הייעודים (שמות כמו בטבלה 5, מופרדים בפסיק)',f:'pbExcept'}]},
+  {id:'bonus',title:'תוספת זכויות מחוץ לטבלה',where:'הערות לטבלה 5 · פרק 6',say:'למשל "תתאפשר תוספת של 5% ליח"ד ולזכויות". מרפסות — לא כאן (הן מחוץ למעטפה)',
+    rows:[{label:'תוספת כללית',f:'bonusPct'}]},
+  {id:'setback',title:'נסיגה אחידה מגבול התא',where:'נספח הבינוי · הערות לטבלה 5 ("קווי הבניין לפי נספח הבינוי")',say:'רק לתוכנית שאין בתשריט שלה קווי בניין. מספר אחד מקורב — התוצאה תסומן ⚠',
+    onlyNoLines:true,rows:[{label:'נסיגה מגבול התא',f:'setback'}]},
+];
+const FIDX=Object.fromEntries(FIELDS.map((x,i)=>[x.k,i]));
+const topicKeys=T=>T.rows.flatMap(r=>r.f?[r.f]:(r.tpl.match(/\{(\w+)\}/g)||[]).map(s=>s.slice(1,-1)));
+const topicOf=k=>TOPICS.find(T=>topicKeys(T).includes(k));
+const topicDone=T=>!!FC.spec.conf['t:'+T.id];
+function _activeTopics(){ return TOPICS.filter(T=>!T.onlyNoLines||_noLinesPlan()); }
+FC.setF=function(i,el){ const x=FIELDS[i]; let v=el.value;
+  if(x.type!=='sel'&&x.type!=='text') v=v===''?null:+v;
+  FC.spec.f[x.k]=v; const T=topicOf(x.k); if(T){ FC.spec.conf['t:'+T.id]=true; for(const k of topicKeys(T)) FC.spec.conf[k]=true; }
+  FC._dirty=true; FC.render(); };
+FC.confT=function(ti){ const T=TOPICS[ti], on=!topicDone(T); FC.spec.conf['t:'+T.id]=on;
+  for(const k of topicKeys(T)) { if(on) FC.spec.conf[k]=true; else delete FC.spec.conf[k]; } FC._dirty=true; FC.render(); };
+function _inp(k,small){ const i=FIDX[k], x=FIELDS[i], v=FC.spec.f[k];
+  if(x.type==='sel') return `<select onchange="FC.setF(${i},this)">${x.opts.map(o=>`<option value="${o[0]}"${v===o[0]?' selected':''}>${E(o[1])}</option>`).join('')}</select>`;
+  return `<input class="${small?'sm':''}" ${x.type==='text'?'':'type="number" step="any"'} value="${E(v??'')}" placeholder="${x.def==null?'לא נקבע':''}" onchange="FC.setF(${i},this)">`; }
 function _fieldsHtml(){
-  const F=FC.spec.f, C=FC.spec.conf;
-  return `<div class="fc-note"><b>לכל שדה:</b> מחפשים בתקנון (המיקום כתוב מתחת לשדה), מתקנים את הערך אם צריך, ומסמנים <b>"בדקתי בתקנון"</b>.
-    אם התקנון לא מתייחס לנושא — משאירים את ברירת המחדל (או שדה ריק) ומסמנים. שדה שלא סומן נחשב <b>ברירת מחדל שלא נבדקה</b>.</div>
-    <div class="fc-f fc-fh"><span></span><span>ערך</span><span>יחידה</span><span>בדקתי בתקנון</span></div>`+FIELDS.map((x,i)=>{
-    const v=F[x.k], cls=C[x.k]?'conf':'';
-    const inp=x.type==='sel'?`<select class="${cls}" onchange="FC.setF(${i},this)">${x.opts.map(o=>`<option value="${o[0]}"${v===o[0]?' selected':''}>${E(o[1])}</option>`).join('')}</select>`
-      :`<input class="${cls}" ${x.type==='text'?'':'type="number" step="any"'} value="${E(v??'')}" placeholder="${x.def==null?'לא נקבע':''}" onchange="FC.setF(${i},this)">`;
-    const hint=[x.where?'איפה: '+x.where:'',x.say||''].filter(Boolean).join(' · ');
-    const btn=`<label class="fc-cf${C[x.k]?' on':''}" title="${C[x.k]?'נבדק מול התקנון. לחיצה מבטלת.':'עדיין ברירת מחדל — לא נבדק מול התקנון'}"><input type="checkbox"${C[x.k]?' checked':''} onchange="FC.confF(${i})"> בדקתי בתקנון</label>`;
-    return `<div class="fc-f"><label>${E(x.label)}</label>${inp}<span class="u">${E(x.unit||'')}</span>${btn}${hint?`<div class="fc-hint">${E(hint)}</div>`:''}</div>`;
-  }).join('');
+  const F=FC.spec.f;
+  const intro=`<div class="fc-note"><b>לכל נושא:</b> מוצאים את הסעיף בתקנון (המיקום כתוב בראש הנושא), מתקנים ערכים אם צריך, ומסמנים <b>"בדקתי בתקנון"</b>.
+    אם התקנון לא מתייחס לנושא — משאירים את ברירת המחדל (או שדה ריק) ומסמנים. נושא שלא סומן נחשב <b>ברירת מחדל שלא נבדקה</b>.</div>`;
+  return intro+_activeTopics().map(T=>{ const ti=TOPICS.indexOf(T), done=topicDone(T);
+    const rows=T.rows.filter(r=>!r.when||F.pbMode===r.when);
+    const main=rows.filter(r=>!r.opt), opt=rows.filter(r=>r.opt);
+    const line=r=>{ if(r.tpl){ const html=E(r.tpl).replace(/\{(\w+)\}/g,(m,k)=>_inp(k,true));
+        return `<div class="fc-tr fc-tr-t"><span class="fc-tl">${E(r.label)}</span><span class="fc-tpl">${html}</span></div>`; }
+      const x=FIELDS[FIDX[r.f]];
+      return `<div class="fc-tr"><span class="fc-tl">${E(r.label)}</span>${_inp(r.f)}<span class="u">${E(x.unit||'')}</span></div>`; };
+    const pbNote=T.id==='pb'&&F.pbMode!=='add'?`<div class="fc-hint">${F.pbMode==='deduct'?'"חובה מתוך הטבלה" — השטח כבר בתוך הזכויות, אין מה להוסיף.':'"כלולים בטבלה" — אין תוספת לכל בניין.'} אם התקנון נותן תוספת לכל בניין — בחרו "תוספת מעל הטבלה" ויופיעו שדות הסכום.</div>`:'';
+    return `<div class="fc-topic${done?' done':''}">
+      <div class="fc-th"><b>${E(T.title)}</b>
+        <label class="fc-cf${done?' on':''}" title="${done?'נבדק מול התקנון. לחיצה מבטלת.':'עדיין ברירת מחדל — לא נבדק מול התקנון'}"><input type="checkbox"${done?' checked':''} onchange="FC.confT(${ti})"> בדקתי בתקנון</label></div>
+      <div class="fc-hint">איפה בתקנון: ${E(T.where)} · ${E(T.say)}</div>
+      ${main.map(line).join('')}${pbNote}
+      ${opt.length?`<div class="fc-opt"><div class="fc-opt-h">אם התוכנית מפצלת / מוסיפה — ${T.id==='dist'?'רוב התוכניות לא':'לא חובה'}:</div>${opt.map(line).join('')}</div>`:''}
+    </div>`; }).join('');
 }
 function _groupsHtml(){
   return `<div class="fc-note">ערך אחד חל על כל תאי המגורים; בשדה החריגים — "תא:ערך" מופרדים בפסיק (למשל <b>404:2, 602:3</b>).</div>`+
