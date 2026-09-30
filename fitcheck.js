@@ -313,6 +313,8 @@ body.theme-light .fc-cf.on{background:#e9f7ee;color:#1e6b3a;border-color:#2e8b50
 .fcx-sec h4{margin:0 0 6px;color:#9fd3ff;font-size:13.5px}
 .fcx-eq{background:#0f1824;border:1px solid #2d4060;border-radius:6px;padding:6px 10px;margin:6px 0;font-family:inherit}
 .fcx-w{font-size:12px;color:#9fb2c8;margin-top:3px}
+.fcx-m{unicode-bidi:isolate;direction:ltr;white-space:nowrap;background:rgba(126,207,255,.08);border-radius:4px;padding:0 4px}
+body.theme-light .fcx-m{background:rgba(26,53,96,.07)}
 .fcx-t{border-collapse:collapse;width:100%;font-size:12px;margin:4px 0}
 .fcx-t th,.fcx-t td{border:1px solid #2d4060;padding:3px 6px;text-align:right;white-space:nowrap}
 .fcx-t th{background:#1f2e42;color:#9fd3ff}.fcx-t td.fcx-w{white-space:normal}
@@ -588,6 +590,7 @@ const pct=v=>v==null||!isFinite(v)?'—':Math.round(v*100)+'%';
 const f2=v=>v==null||!isFinite(v)?'—':(+v).toLocaleString('he-IL',{maximumFractionDigits:2});
 const FNAME={dMM:'מרחק מרקמי–מרקמי',dMT:'מרחק מרקמי–רב-קומות',dTT:'מרחק רב-קומות–רב-קומות',freePct:'שטח פנוי'};
 function _sec(id,title,body,on){ return `<div class="fcx-sec${on?' on':''}" id="fcx-${id}"><h4>${title}</h4>${body}</div>`; }
+const M=s=>`<bdi class="fcx-m" dir="ltr">${s}</bdi>`; // חשבון (מספרים וסימנים) — משמאל לימין, בלי שיתהפך בתוך עברית
 function _eq(formula,words){ return `<div class="fcx-eq">${formula}${words?`<div class="fcx-w">${words}</div>`:''}</div>`; }
 function explainHtml(r,focus){
   const x=r.x, N=r.nom, D=N?N.det:null, L=r.lo, LD=L?L.det:null, F=FC.spec.f;
@@ -602,11 +605,12 @@ function explainHtml(r,focus){
     <div class="fcx-w">נספרים רק השטחים <b>מעל הכניסה הקובעת</b> (מה שמתחת — מרתפים — לא תופס את קרקע התא מעל הקרקע). כל השימושים בתא נספרים יחד,
     כי הם נבנים באותם מבנים.</div>`;
   if(D){
-    const parts=[`${fmt(x.above)}`];
-    if(D.bonus) parts[0]+=` × (1 + ${D.bonus}%)`;
-    if(D.scale!==1) parts[0]+=` × ${D.scale} (ניפוח בדיקה)`;
-    if(D.addOn) parts.push(`${N.n} מבנים × ${fmt(N.k?D.addT:D.addM)} מ"ר`);
-    need+=_eq(parts.length>1||D.bonus||D.scale!==1?`${parts.join(' + ')} = <b>${fmt(N.need)} מ"ר</b>`:`הנדרש = <b>${fmt(N.need)} מ"ר</b>`,
+    let expr=fmt(x.above);
+    if(D.bonus) expr+=` × (1 + ${D.bonus}%)`;
+    if(D.scale!==1) expr+=` × ${D.scale}`;
+    if(D.addOn) expr=`${expr} + ${N.n} × ${fmt(N.k?D.addT:D.addM)}`;
+    const how=[D.bonus?'הזכויות בטבלה ועוד תוספת הזכויות':'',D.scale!==1?'כפול ניפוח בדיקה':'',D.addOn?`ועוד תוספת לכל מבנה (${N.n} מבנים)`:''].filter(Boolean).join(', ');
+    need+=_eq(how?`הנדרש (${how}) = ${M(expr)} = <b>${fmt(N.need)} מ"ר</b>`:`הנדרש = <b>${fmt(N.need)} מ"ר</b>`,
       (D.bonus?`תוספת ${D.bonus}% מחוץ לטבלה (שדה "תוספת זכויות"). `:'')+
       (D.addOn?`"שטחים משותפים לכל בניין" במצב <b>תוספת</b> — לכל מבנה בתרחיש נוספים ${fmt(D.addM)} מ"ר (ברב-קומות ${fmt(D.addT)}); לכן הנדרש תלוי במספר המבנים.`
         :(F.pbMode==='add'?`התוספת לכל בניין לא חלה על הייעוד "${E(x.yiud)}".`:'השטחים המשותפים כלולים בטבלה — אין תוספת לכל בניין.')));
@@ -615,8 +619,8 @@ function explainHtml(r,focus){
   if(!D){ out.push(_sec('verdict','התוצאה',`<div class="fcx-w">${E(r.why||'')}</div>`,true)); return out.join(''); }
   // 2. land budget
   const lim=[['המעטפה — השטח בתוך קווי הבניין',D.env,r.noLines?(r.approx?'אין קווי בניין בתשריט — הערכה לפי מלבן שווה-ערך':'אין קווי בניין בתשריט — נלקח התא כולו'):"נמדד על התשריט: כל אזור בתוך קווי הבניין ברוחב 8 מ' לפחות (בלי רצועות הנסיגה)"],
-    [`התא פחות השטח שחייב להישאר פנוי (${D.free}%)`,D.freeCap,`${fmt(D.cellA)} × (1 − ${D.free}%)`],
-    ...(D.covCap!=null?[[`תכסית מרבית ${D.cov}% (${D.covSrc})`,D.covCap,`${fmt(D.cellA)} × ${D.cov}%`]]:[])];
+    [`התא פחות השטח שחייב להישאר פנוי (${D.free}%)`,D.freeCap,`שטח התא × (100% פחות ${D.free}%) = ${M(`${fmt(D.cellA)} × ${100-D.free}%`)}`],
+    ...(D.covCap!=null?[[`תכסית מרבית ${D.cov}% (${D.covSrc})`,D.covCap,`שטח התא × התכסית = ${M(`${fmt(D.cellA)} × ${D.cov}%`)}`]]:[])];
   const mn=Math.min(...lim.map(l=>l[1]));
   out.push(_sec('land','2. כמה קרקע אפשר לכסות במבנים',`<table class="fcx-t"><tr><th>מגבלה</th><th>מ"ר</th><th>איך</th></tr>
     ${lim.map(l=>`<tr${Math.abs(l[1]-mn)<1?' class="s"':''}><td>${l[0]}</td><td><b>${fmt(l[1])}</b></td><td class="fcx-w">${l[2]}</td></tr>`).join('')}</table>
@@ -629,24 +633,24 @@ function explainHtml(r,focus){
   // 4. towers
   if(D.Ft){
     const dRing=N.nm?D.dmt:D.dtt, ring1=0.5*((Math.sqrt(D.T)+dRing)**2-D.T);
-    out.push(_sec('towers','4. רבי-קומות (מגדלים)',`${_eq(`שטח קומת מגדל = ${D.upf} יח"ד × (${fmt(D.unit)} + ${D.core}) = <b>${fmt(D.T)} מ"ר</b>`,
+    out.push(_sec('towers','4. רבי-קומות (מגדלים)',`${_eq(`שטח קומת מגדל = יח"ד בקומה × (שטח דירה + גרעין לדירה) = ${M(`${D.upf} × (${fmt(D.unit)} + ${D.core})`)} = <b>${fmt(D.T)} מ"ר</b>`,
       `הנחה: ${D.upf} דירות בקומה, דירה ממוצעת ${fmt(D.unit)} מ"ר, ועוד ${D.core} מ"ר גרעין לכל דירה — מטבלת הגרעינים בתקנון המאסטר (מגדל, ${D.upf} יח"ד בקומה). ניתן לשינוי ב"הנחות".`)}
       <div class="fcx-w">מספר רבי-קומות מרבי: ${D.kRule!=null?`<b>${D.kRule}</b> (כלל בטופס)`:'לא נקבע בטופס'}; מבחינה גאומטרית נכנסים עד <b>${D.kmax}</b>
-      (כל מגדל צריך ריבוע בצלע √${fmt(D.T)} + ${f1(D.dtt)} מ' מרחק).</div>
-      ${_eq(`שטח שהמרחק גוזל סביב מגדל = ½ × ((√${fmt(D.T)} + ${f1(dRing)})² − ${fmt(D.T)}) ≈ <b>${fmt(ring1)} מ"ר</b>`,
+      (כל מגדל צריך ריבוע שצלעו היא צלע קומת המגדל ועוד המרחק הנדרש: ${M(`√${fmt(D.T)} + ${f1(D.dtt)}`)} מ').</div>
+      ${_eq(`שטח שהמרחק גוזל סביב מגדל = מחצית מ(הריבוע המורחב פחות קומת המגדל) = ${M(`½ × ((√${fmt(D.T)} + ${f1(dRing)})² − ${fmt(D.T)})`)} ≈ <b>${fmt(ring1)} מ"ר</b>`,
         `סביב כל מגדל נשארת רצועה ברוחב המרחק הנדרש (${N.nm?`מרקמי–רב-קומות ${f1(D.dmt)} מ'`:`רב-קומות–רב-קומות ${f1(D.dtt)} מ'`}) שבה אי אפשר לבנות מבנה אחר. נספרת מחצית ממנה — מקלה, כי חלק מהרצועה נופל מחוץ למעטפה.`)}`,focus==='towers'));
   }
   // 5. marakmi
   out.push(_sec('marakmi',`${D.Ft?'5':'4'}. מבנים מרקמיים`,`${_eq(`רצועת עומק ${f1(D.Dm)} מ' לאורך קצה המעטפה = <b>${fmt(D.band)} מ"ר</b>`,
     `מבנים מרקמיים (בנייה לאורך הרחוב, בלוקים) לא יכולים להיות עמוקים מאוד. לכן השטח שלהם מוגבל לרצועה בעומק ${f1(D.Dm)} מ' מקצה המעטפה (הנחה, ניתן לשינוי). בתא צר — הרצועה היא כל המעטפה.`)}
-    ${N.nm>1?_eq(`רווחים בין מבנים = (${N.nm} − 1) × ${f1(D.dmm)} מ' × ${f1(D.Dm)} מ' = <b>${fmt(N.gaps)} מ"ר</b>`,`בין כל שני מבנים מרקמיים נשאר רווח לפי מרחק מרקמי–מרקמי.`):''}
-    ${N.nm?_eq(`טביעת רגל מרקמית = min(${fmt(D.band)}, ${fmt(D.budget)} − ${fmt(N.TF)} − ${fmt(N.TL)})${N.nm>1?` − ${fmt(N.gaps)}`:''} = <b>${fmt(N.MF)} מ"ר</b>`,
-      `הקטן מבין הרצועה לבין מה שנשאר מתקציב הקרקע אחרי המגדלים והמרחקים סביבם.`):'<div class="fcx-w">בתרחיש שנבחר אין מבנים מרקמיים.</div>'}`,focus==='marakmi'));
+    ${N.nm>1?_eq(`רווחים בין מבנים = (מספר המבנים פחות 1) × המרחק × עומק המבנה = ${M(`(${N.nm} − 1) × ${f1(D.dmm)} × ${f1(D.Dm)}`)} = <b>${fmt(N.gaps)} מ"ר</b>`,`בין כל שני מבנים מרקמיים נשאר רווח לפי מרחק מרקמי–מרקמי.`):''}
+    ${N.nm?_eq(`טביעת רגל מרקמית = הקטן מבין הרצועה (${fmt(D.band)}) לבין מה שנשאר מתקציב הקרקע (${M(`${fmt(D.budget)} − ${fmt(N.TF)} − ${fmt(N.TL)}`)} = ${fmt(D.budget-N.TF-N.TL)})${N.nm>1?`, פחות הרווחים (${fmt(N.gaps)})`:''} = <b>${fmt(N.MF)} מ"ר</b>`,
+      `מה שנשאר מתקציב הקרקע = התקציב, פחות טביעת הרגל של המגדלים, פחות השטח שהמרחקים סביבם גוזלים.`):'<div class="fcx-w">בתרחיש שנבחר אין מבנים מרקמיים.</div>'}`,focus==='marakmi'));
   // 6. capacity
-  out.push(_sec('cap',`${D.Ft?'6':'5'}. הקיבולת`,_eq(`${f2(D.eff)} × (${fmt(N.TF)} × ${N.Ft} + ${fmt(N.MF)} × ${N.Fm}) = <b>${fmt(N.cap)} מ"ר</b>`,
-    `יעילות קומה ${f2(D.eff)} (ניכוי פירים, מגרעות ונסיגות — הנחה) × (טביעת המגדלים × קומות המגדל + טביעת המרקמיים × קומות המרקמי).
-     בתרחיש הזה: ${N.k} רבי-קומות ו-${N.nm} מבנים מרקמיים.`)+
-    `<div class="fcx-w">יחס הניצול = הנדרש ÷ הקיבולת = ${fmt(N.need)} ÷ ${fmt(N.cap)} = <b>${pct(N.need/N.cap)}</b></div>`,focus==='cap'||focus==='ratio'));
+  out.push(_sec('cap',`${D.Ft?'6':'5'}. הקיבולת`,_eq(`הקיבולת = ${M(`${f2(D.eff)} × (${fmt(N.TF)} × ${N.Ft} + ${fmt(N.MF)} × ${N.Fm})`)} = <b>${fmt(N.cap)} מ"ר</b>`,
+    `במילים: יעילות הקומה (הנחה: ${f2(D.eff)} — ניכוי לפירים, מגרעות ונסיגות), כפול שטח כל הקומות: טביעת הרגל של המגדלים כפול קומות המגדל,
+     ועוד טביעת הרגל של המרקמיים כפול קומות המרקמי. בתרחיש הזה: ${N.k} רבי-קומות ו-${N.nm} מבנים מרקמיים.`)+
+    `<div class="fcx-w">יחס הניצול = הנדרש חלקי הקיבולת = ${M(`${fmt(N.need)} ÷ ${fmt(N.cap)}`)} = <b>${pct(N.need/N.cap)}</b></div>`,focus==='cap'||focus==='ratio'));
   // 7. scenarios
   const sc=[...N.scen].sort((a,b)=>b.slack-a.slack).slice(0,8);
   out.push(_sec('scen','תרחישים שנבדקו',`<div class="fcx-w">המנוע עובר על כל הצירופים המותרים של מספר רבי-קומות ומספר מבנים מרקמיים
@@ -669,9 +673,9 @@ function explainHtml(r,focus){
     const pl=(r.peerList||[]).slice().sort((a,b)=>b.ratio-a.ratio).slice(0,12);
     out.push(_sec('peers','השוואה לתאים דומים',`<div class="fcx-w">בתוכנית אחת הזכויות מחושבות בדרך כלל באותה שיטה, ולכן תאים דומים (אותו ייעוד ואותן קומות) מנצלים אחוז דומה מהקיבולת,
       והשטח ליח"ד כמעט קבוע (בגוף הידע: ±5%). תא שבולט מול עמיתיו — כדאי לבדוק.</div>
-      ${r.peerN>=3?_eq(`ניצול התא ${pct(r.ratio)} ÷ חציון ${r.peerN} תאים דומים ${pct(r.peerMed)} = <b>×${f2(r.peer)}</b>`,
+      ${r.peerN>=3?_eq(`ניצול התא חלקי החציון של ${r.peerN} תאים דומים = ${M(`${pct(r.ratio)} ÷ ${pct(r.peerMed)}`)} = <b>פי ${f2(r.peer)}</b>`,
         `סימון אם ×1.25 ומעלה וגם הניצול עצמו 70% ומעלה. תאים דומים: ${pl.map(p=>`${E(p.cn)} (${pct(p.ratio)})`).join(', ')}${r.peerN>12?' …':''}`):'<div class="fcx-w">אין מספיק תאים דומים להשוואה (צריך 3 לפחות).</div>'}
-      ${r.apu?_eq(`שטח ליח"ד = ${fmt(x.resArea*(D.scale||1))} ÷ ${x.units} = ${fmt(r.apu)} מ"ר · מול ${r.apuRefSrc}: ${fmt(r.apuRef)} → <b>×${f2(r.apuRel)}</b>`,
+      ${r.apu?_eq(`שטח ליח"ד = שטח המגורים חלקי יח"ד = ${M(`${fmt(x.resArea*(D.scale||1))} ÷ ${x.units}`)} = ${fmt(r.apu)} מ"ר · מול ${r.apuRefSrc}: ${fmt(r.apuRef)} מ"ר → <b>פי ${f2(r.apuRel)}</b>`,
         'שטח המגורים מעל הקרקע (כולל שירות וגרעינים) חלקי מספר יח"ד. סימון מ-×1.15 ומעלה או ×0.85 ומטה.'):''}`,focus==='peers'));
   }
   out.push(_sec('limits','מה הבדיקה לא בודקת',`<div class="fcx-w">היא לא מתכננת בינוי אמיתי ולא בודקת: צמידות לקו בניין / דופן רציפה, תחומי חיפוש לרבי-קומות מהנספח,
