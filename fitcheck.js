@@ -271,13 +271,15 @@ const CSS=`
 .fc-bn-h{font-weight:700;font-size:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .fc-bn-c{font-weight:600;font-size:12px;background:rgba(255,255,255,.12);border-radius:10px;padding:1px 8px}
 .fc-bn-l{margin-top:6px}
-.fc-cf{background:#22344d;border:1px solid #3a5070;color:#cde;border-radius:5px;padding:2px 6px;cursor:pointer;font-size:11px;white-space:nowrap}
-.fc-cf.on{background:#1e6b3a;border-color:#2e8b50;color:#fff}
+.fc-cf{display:flex;align-items:center;gap:4px;background:#2a2410;border:1px solid #6b5a1e;color:#f7c56b;border-radius:5px;padding:2px 6px;cursor:pointer;font-size:11.5px;white-space:nowrap}
+.fc-cf input{margin:0;cursor:pointer}
+.fc-cf.on{background:#12301f;border-color:#2e8b50;color:#9fe0b4}
+.fc-fh{border-bottom:1px solid #34506f;padding-bottom:3px}.fc-fh span{font-size:11px;color:#8aa;font-weight:600}
 body.theme-light .fc-bn.warn{background:#fff6dc;color:#4a3500}
 body.theme-light .fc-bn.ok{background:#e9f7ee;color:#10391f}
 body.theme-light .fc-bn-c{background:rgba(0,0,0,.07)}
-body.theme-light .fc-cf{background:#fff;color:#1a3560;border-color:#bfccdb}
-body.theme-light .fc-cf.on{background:#1e6b3a;color:#fff}
+body.theme-light .fc-cf{background:#fff8e6;color:#7a5a00;border-color:#e0c26b}
+body.theme-light .fc-cf.on{background:#e9f7ee;color:#1e6b3a;border-color:#2e8b50}
 .fc-tbl th{white-space:nowrap}
 .fc-x{cursor:pointer;border-bottom:1px dotted #6a8ab0}.fc-x:hover{color:#7ecfff}
 .fc-info{background:#2a4a6e;border:1px solid #3d6a9a;color:#fff;border-radius:6px;padding:3px 10px;cursor:pointer;font-size:12px}
@@ -402,11 +404,11 @@ function _banner(){
   const nl=_noLinesPlan();
   return `<div class="fc-bn ${all?'ok':'warn'}">
     <div class="fc-bn-h">${all?'✅ בדיקה לפי כללי התוכנית':none?'⚠ בדיקה ראשונית — לפי ברירות מחדל בלבד':'⚠ בדיקה חלקית — חלק מהכללים עדיין ברירת מחדל'}
-      <span class="fc-bn-c">אושרו ${done.length} מתוך ${need.length} כללים</span></div>
-    ${all?`<div class="fc-bn-l">כללי התוכנית אושרו. אם נספח הבינוי מחייב לעניין מספר מבנים או מגדלים — ודאו שמולאו גם "כללים לקבוצות תאים".</div>`
+      <span class="fc-bn-c">נבדקו ${done.length} מתוך ${need.length} כללים</span></div>
+    ${all?`<div class="fc-bn-l">כל כללי התוכנית נבדקו מול התקנון. אם נספח הבינוי מחייב לעניין מספר מבנים או מגדלים — ודאו שמולאו גם "כללים לקבוצות תאים".</div>`
       :`<div class="fc-bn-l">הממשק עשה את החלק האוטומטי (טבלה 5 + קווי הבניין מהתשריט). <b>את כללי התוכנית הוא לא יודע לקרוא מהתקנון — צריך להזין אותם.</b>
         עד אז התוצאות מבוססות על ברירות המחדל של תקנון המאסטר, ואינן יכולות לתת ✗. עוברים על ${need.length} שדות מול התקנון (בערך 5–10 דקות):
-        לכל שדה מופיע איפה לחפש; אם הערך בתקנון זהה לברירת המחדל — לוחצים "✓ תואם לתקנון".</div>
+        לכל שדה מופיע איפה לחפש; אחרי הבדיקה מסמנים "בדקתי בתקנון" (גם אם הערך נשאר כמו שהוא).</div>
         <button class="fc-btn fc-run" style="margin-top:6px" onclick="FC.gotoForm()">מלאו את כללי התוכנית ←</button>`}
     ${nl?(FC.spec.f.setback!=null&&FC.spec.f.setback!==''
       ?`<div class="fc-bn-l">ℹ אין קווי בניין בתשריט — הוזנה נסיגה אחידה של ${E(FC.spec.f.setback)} מ'. המעטפה מקורבת, ולכן תאים שלא נכנסים יסומנו ⚠ ולא ✗.</div>`
@@ -442,12 +444,14 @@ function _autoChips(){
 }
 function _fieldsHtml(){
   const F=FC.spec.f, C=FC.spec.conf;
-  return FIELDS.map((x,i)=>{
+  return `<div class="fc-note"><b>לכל שדה:</b> מחפשים בתקנון (המיקום כתוב מתחת לשדה), מתקנים את הערך אם צריך, ומסמנים <b>"בדקתי בתקנון"</b>.
+    אם התקנון לא מתייחס לנושא — משאירים את ברירת המחדל (או שדה ריק) ומסמנים. שדה שלא סומן נחשב <b>ברירת מחדל שלא נבדקה</b>.</div>
+    <div class="fc-f fc-fh"><span></span><span>ערך</span><span>יחידה</span><span>בדקתי בתקנון</span></div>`+FIELDS.map((x,i)=>{
     const v=F[x.k], cls=C[x.k]?'conf':'';
     const inp=x.type==='sel'?`<select class="${cls}" onchange="FC.setF(${i},this)">${x.opts.map(o=>`<option value="${o[0]}"${v===o[0]?' selected':''}>${E(o[1])}</option>`).join('')}</select>`
       :`<input class="${cls}" ${x.type==='text'?'':'type="number" step="any"'} value="${E(v??'')}" placeholder="${x.def==null?'לא נקבע':''}" onchange="FC.setF(${i},this)">`;
     const hint=[x.where?'איפה: '+x.where:'',x.say||''].filter(Boolean).join(' · ');
-    const btn=`<button class="fc-cf${C[x.k]?' on':''}" onclick="FC.confF(${i})" title="${C[x.k]?'לחיצה מבטלת את האישור':'הערך בתקנון זהה לערך שבשדה'}">${C[x.k]?'✓ אושר':'✓ תואם לתקנון'}</button>`;
+    const btn=`<label class="fc-cf${C[x.k]?' on':''}" title="${C[x.k]?'נבדק מול התקנון. לחיצה מבטלת.':'עדיין ברירת מחדל — לא נבדק מול התקנון'}"><input type="checkbox"${C[x.k]?' checked':''} onchange="FC.confF(${i})"> בדקתי בתקנון</label>`;
     return `<div class="fc-f"><label>${E(x.label)}</label>${inp}<span class="u">${E(x.unit||'')}</span>${btn}${hint?`<div class="fc-hint">${E(hint)}</div>`:''}</div>`;
   }).join('');
 }
@@ -477,7 +481,7 @@ function _resultsHtml(){
   return `<div class="fc-sum">${cnts}
     <div class="fc-small">${R.rows.length} תאים נבדקו · שטח ליח"ד (חציון): ${fmt(R.apuPlan)} מ"ר ·
       תכסית משתמעת (מגורים): ${cov!=null?cov.toFixed(0)+'%':'—'} <span title="זכויות מעל הקרקע חלקי מספר הקומות בטבלה חלקי שטח התאים. מספר הקומות בטבלה הוא לרוב תקרת המבנה הגבוה בתא, ולכן זו הערכת חסר של התכסית בפועל — לא להשוות ישירות לסף 40% של המאסטר.">ⓘ</span></div>
-    ${unconf?`<div class="fc-small" style="color:#f7c56b">⚠ ${unconf} מכללי המרחקים/השטח הפנוי עדיין לא אושרו — הם לא יכולים לתת ✗ עד שיאושרו (שינוי ערך או "✓ תואם לתקנון").</div>`:''}
+    ${unconf?`<div class="fc-small" style="color:#f7c56b">⚠ ${unconf} מכללי המרחקים/השטח הפנוי עדיין לא נבדקו מול התקנון — הם לא יכולים לתת ✗ עד שיסומנו "בדקתי בתקנון".</div>`:''}
     ${FC._dirty?'<div class="fc-small" style="color:#f7c56b">הטופס שונה — לחצו "▶ בדיקה" לעדכון.</div>':''}</div>
     <div class="fc-small" style="padding:0 10px 6px">לחיצה על שורה מתמקדת בתא במפה · <b>לחיצה על נתון</b> (מסומן בקו מנוקד) פותחת תחקור מלא של החישוב.</div>
     <div class="fc-tw"><table class="fc-tbl"><thead><tr><th>תא</th><th>ייעוד</th><th>קומות</th><th>זכויות מעל<br>הקרקע (מ"ר)</th><th>קיבולת<br>מחושבת (מ"ר)</th><th>ניצול</th><th>תוצאה</th></tr></thead><tbody>
@@ -495,7 +499,7 @@ FC.render=function(){
   const cs=_coreStatus(), incomplete=cs.done.length<cs.need.length;
   $('fc-body').innerHTML=`${_banner()}
     <details class="fc-sec"><summary>1. מה הממשק מצא אוטומטית</summary>${_autoChips()}</details>
-    <details class="fc-sec" id="fc-sec-rules"${incomplete?' open':''}><summary>2. כללי התוכנית — <span style="color:#f7c56b">למלא מהתקנון</span> <span class="fc-small">(ערך אחד לכל התוכנית; ירוק = אושר)</span></summary><div class="fc-in">${_fieldsHtml()}</div></details>
+    <details class="fc-sec" id="fc-sec-rules"${incomplete?' open':''}><summary>2. כללי התוכנית — <span style="color:#f7c56b">למלא מהתקנון</span> <span class="fc-small">(ערך אחד לכל התוכנית)</span></summary><div class="fc-in">${_fieldsHtml()}</div></details>
     <details class="fc-sec"><summary>3. כללים לקבוצות תאים <span class="fc-small">— אם התקנון או נספח מחייב קובעים מספר מבנים / רבי-קומות / חובת מרקמי</span></summary><div class="fc-in">${_groupsHtml()}</div></details>
     <details class="fc-sec"><summary>4. הנחות (מתקדם — לא חובה)</summary><div class="fc-in">${_assumeHtml()}</div></details>
     <div style="display:flex;gap:8px;margin:0 0 10px"><button class="fc-btn fc-run" onclick="FC.runNow()">▶ בדיקה</button>
@@ -632,8 +636,8 @@ const METHOD=`<div class="fcx-intro"><b>מה הבדיקה עושה.</b> לכל �
   ${_sec('m2','מה פירוש התוצאות',`<div class="fcx-w"><b>✗ לא נכנס</b> — גם בהנחות המקילות ביותר, ורק לפי כללים שאושרו מהתקנון.
   <b>⚠ תלוי בהנחות</b> — לא נכנס בהנחות הרגילות, נכנס במקילות. <b>לבדיקה</b> — נכנס, אבל חריג מול תאים דומים באותה תוכנית (ניצול או שטח ליח"ד).
   <b>חסר?</b> — הזכויות מנצלות פחות מחצי מהקיבולת. <b>✓</b> — נמצא תרחיש שמכיל את הזכויות (חסם עליון — "לא נפסל", לא "תוכנן").</div>`,false)}
-  ${_sec('m3','כללים, הנחות ואישור',`<div class="fcx-w">כללי התוכנית (מרחקים, שטח פנוי וכו') מתחילים בברירות מחדל מתקנון המאסטר. <b>שינוי ערך = אישור שהוא מהתקנון</b> (מסגרת ירוקה).
-  רק כלל מאושר יכול להכשיל ל-✗; כלל שלא אושר מוקל בהרצה המקילה. ההנחות (יעילות, דירה, יח"ד בקומה, עומק) לעולם לא מכשילות ל-✗.</div>`,false)}
+  ${_sec('m3','כללים, הנחות ואישור',`<div class="fcx-w">כללי התוכנית (מרחקים, שטח פנוי וכו') מתחילים בברירות מחדל מתקנון המאסטר. כל שדה מסומן <b>"בדקתי בתקנון"</b> אחרי שבודקים אותו (שינוי ערך מסמן אוטומטית).
+  רק כלל שנבדק יכול להכשיל ל-✗; כלל שלא נבדק מוקל בהרצה המקילה. ההנחות (יעילות, דירה, יח"ד בקומה, עומק) לעולם לא מכשילות ל-✗.</div>`,false)}
   ${_sec('m4','השוואות בתוך התוכנית',`<div class="fcx-w">בתוכנית אחת הזכויות מחושבות בדרך כלל באותה שיטה, ולכן תאים דומים מנצלים אחוז דומה מהקיבולת, והשטח ליח"ד כמעט קבוע.
   תא שבולט מול עמיתיו מסומן "לבדיקה" — גם אם הוא נכנס. כך נתפסות גם חריגות של 15–20% שהחסם העליון לבדו לא תופס.</div>`,false)}
   <div class="fcx-w" style="margin-top:8px">לחיצה על כל נתון בטבלת התוצאות (או בעמודות בלשונית טבלה 5) פותחת את התחקור המלא של התא.</div>`;
