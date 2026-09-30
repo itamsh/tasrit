@@ -54,6 +54,7 @@ const ASSUME=[
   {k:'unit',label:'שטח דירה ממוצע (פלדלת)',def:100,unit:'מ"ר'},
   {k:'upfT',label:'יח"ד בקומה טיפוסית — מגדל',def:5,unit:''},
   {k:'Dm',label:'עומק מבנה מרקמי',def:15,unit:"מ'"},
+  {k:'minM',label:'שטח קומה מזערי למבנה מרקמי נוסף (ליד מגדל / מבנה נוסף)',def:200,unit:'מ"ר'},
 ];
 const CORE_T={3:null,4:27,5:24,6:20,7:18,8:16};          // מאסטר: גרעין ליח"ד במגדל לפי יח"ד בקומה (7–8: המשך המגמה)
 const LOOSE={eff:1.0,plateT:900,Dm:20};                    // הנחות מקילות — ✗ רק אם גם בהן לא נכנס
@@ -146,7 +147,7 @@ function capacity(spec,x,g,a,loose){
   const det={thr,Fm,Ft,dmm,dmt,dtt,cov,covSrc:x.cov!=null?'טבלה 5':(cov?'הטופס':null),free,env:g.env,cellA:g.cellA,
     freeCap:(1-free/100)*g.cellA,covCap:cov?cov/100*g.cellA:null,budget,landCap,T,upf:+a.upfT,unit:+a.unit,core,eff,Dm,band:bandAt(g,Dm),
     kRule,kmax,nMin,nMax,nMaxSrc:ruleFor(spec,'maxBuildings',cn)!=null?'הטופס':(x.maxB!=null?'טבלה 5':null),mReq,addOn,
-    addM:+F.pbMarakmi||0,addT:+F.pbTower||+F.pbMarakmi||0,bonus:+F.bonusPct||0,scale:x.scale||1,loose,
+    minM:loose?0:(+a.minM||0),addM:+F.pbMarakmi||0,addT:+F.pbTower||+F.pbMarakmi||0,bonus:+F.bonusPct||0,scale:x.scale||1,loose,
     relaxed:loose?['dMM','dMT','dTT','freePct'].filter(k=>!C[k]):[]};
   for(let k=0;k<=kmax;k++) for(const extra of [0,1]){
     const nmMin=Math.max(k?0:1,nMin-k,mReq), nm=nmMin+(extra&&Fm?1:0);
@@ -156,6 +157,8 @@ function capacity(spec,x,g,a,loose){
     const TL=k*(nm?ring(dmt):0)+Math.max(0,k-1)*(nm?0:ring(dtt));
     const gaps=Math.max(0,nm-1)*dmm*Dm;
     const MF=nm?Math.max(0,Math.min(Math.min(bandAt(g,Dm),g.env-TF-TL)-gaps,landCap-TF)):0;
+    // a leftover sliver is not a building: an additional marakmi (next to a tower, or a 2nd+ marakmi) needs a real floor plate
+    if(nm&&(k>0||nm>1)&&MF/nm<det.minM) continue;
     const cap=eff*(TF*Ft+MF*Fm);
     const n=k+nm;
     const need=x.above*(1+(+F.bonusPct||0)/100)*(x.scale||1)+(addOn?n*(k?(+F.pbTower||+F.pbMarakmi||0):(+F.pbMarakmi||0)):0);
@@ -186,15 +189,20 @@ function run(spec,cells,geomOf,opts){
       need:nom?nom.need:xs.above,cap:nom?nom.cap:0,capL:lo?lo.cap:0,nom,lo,x:xs,flags:[]};
     if(!nom||!lo){ r.verdict='✗'; r.why='אין תרחיש בינוי שעומד בכללים (מספר מבנים / חובת מרקמי)'; rows.push(r); continue; }
     r.ratio=nom.need/nom.cap;
+    // simplest scenario that holds the rights; when T5 gives tower floors, the plan means towers, so prefer scenarios with one
+    const fits=nom.scen.filter(s=>s.cap>=s.need), fitsT=nom.Ft?fits.filter(s=>s.k>0):fits;
+    r.fit=(fitsT.length?fitsT:fits).sort((p,q)=>(p.n-q.n)||(q.slack-p.slack))[0]||null;
+    r.noLand=x.cov==null&&(spec.f.coverage==null||spec.f.coverage==='')&&!(+spec.f.freePct>0);
     if(lo.need>lo.cap) r.verdict=approx?'⚠':'✗';
     else if(nom.need>nom.cap) r.verdict='⚠';
-    else if(r.ratio<0.5) r.verdict='חסר?';
+    else if(r.ratio<0.5&&!r.noLand) r.verdict='חסר?';
     else r.verdict='✓';
-    r.scen=`${nom.k?nom.k+' רבי-קומות × '+nom.Ft+" ק'":''}${nom.k&&nom.nm?' + ':''}${nom.nm?nom.nm+' מרקמי × '+nom.Fm+" ק'":''}`;
+    const sTxt=s=>`${s.k?s.k+' רבי-קומות × '+s.Ft+" ק'":''}${s.k&&s.nm?' + ':''}${s.nm?s.nm+' מרקמי × '+s.Fm+" ק'":''}`;
+    r.scen=sTxt(r.fit||nom); r.scenMax=sTxt(nom);
     const bind=nom.TF+nom.MF>=nom.budget-1?(Math.abs(nom.budget-g.env)<1?'תחום קווי הבניין':'תקציב הקרקע (שטח פנוי / תכסית)'):'עומק המבנה והמרחקים';
     r.why=r.verdict==='✗'?`גם בהנחות המקילות הקיבולת ${fmt(lo.cap)} מ"ר < ${fmt(lo.need)} מ"ר. המגביל: ${bind}.`
       :r.verdict==='⚠'?`בהנחות הרגילות הקיבולת ${fmt(nom.cap)} מ"ר < ${fmt(nom.need)} מ"ר; בהנחות המקילות נכנס. המגביל: ${bind}.`
-      :`תרחיש שמכיל את הזכויות: ${r.scen}. המגביל: ${bind}.`;
+      :`התרחיש הפשוט ביותר שמכיל את הזכויות: ${r.scen}. הקיבולת המרבית (${r.scenMax}) מוגבלת על ידי ${bind}.`;
     if(noLines) r.flags.push(approx&&spec.f.setback!=null&&spec.f.setback!==''?'אין קווי בניין בתשריט — נסיגה אחידה מקורבת':'אין קווי בניין בתשריט — תחום קווי הבניין = התא כולו');
     rows.push(r);
   }
@@ -224,7 +232,8 @@ function run(spec,cells,geomOf,opts){
   const cnt={}; for(const r of rows) cnt[r.verdict]=(cnt[r.verdict]||0)+1;
   const order={'✗':0,'⚠':1,'לבדיקה':2,'חסר?':3,'✓':4};
   rows.sort((p,q)=>(order[p.verdict]-order[q.verdict])||((q.ratio||0)-(p.ratio||0)));
-  return {rows,cnt,impliedCov,apuPlan,thr,at:Date.now()};
+  const lowNoLand=rows.filter(r=>r.noLand&&r.ratio&&r.ratio<0.5).length;
+  return {rows,cnt,impliedCov,apuPlan,thr,lowNoLand,at:Date.now()};
 }
 FC.Engine={cellsFromT5,capacity,run,emptySpec,normalizeSpec,parseExc,rectGeom};
 
@@ -537,6 +546,7 @@ function _resultsHtml(){
   return `<div class="fc-sum">${cnts}
     <div class="fc-small">${R.rows.length} תאים נבדקו · שטח ליח"ד (חציון): ${fmt(R.apuPlan)} מ"ר ·
       תכסית משתמעת (מגורים): ${cov!=null?cov.toFixed(0)+'%':'—'} <span title="זכויות מעל הקרקע חלקי מספר הקומות בטבלה חלקי שטח התאים. מספר הקומות בטבלה הוא לרוב תקרת המבנה הגבוה בתא, ולכן זו הערכת חסר של התכסית בפועל — לא להשוות ישירות לסף 40% של המאסטר.">ⓘ</span></div>
+    ${R.lowNoLand?`<div class="fc-small">ⓘ בתוכנית אין תכסית ואין שטח פנוי חובה, ולכן הקיבולת היא חסם רופף. ב-${R.lowNoLand} תאים הזכויות מנצלות פחות מחצי ממנה. זה לא סימן לחוסר, ולכן הם לא מסומנים "חסר?".</div>`:""}
     ${unconf?`<div class="fc-small" style="color:#f7c56b">⚠ ${unconf} מכללי המרחקים/השטח הפנוי עדיין לא נבדקו מול התקנון — הם לא יכולים לתת ✗ עד שיסומנו "בדקתי בתקנון".</div>`:''}
     ${FC._dirty?'<div class="fc-small" style="color:#f7c56b">הטופס שונה — לחצו "▶ בדיקה" לעדכון.</div>':''}</div>
     <div class="fc-small" style="padding:0 10px 6px">לחיצה על שורה מתמקדת בתא במפה · <b>לחיצה על נתון</b> (מסומן בקו מנוקד) פותחת תחקור מלא של החישוב.</div>
@@ -657,7 +667,8 @@ function explainHtml(r,focus){
   out.push(_sec('scen','תרחישים שנבדקו',`<div class="fcx-w">המנוע עובר על כל הצירופים המותרים של מספר רבי-קומות ומספר מבנים מרקמיים
     (בכפוף למספר מבנים מזערי ${D.nMin}${D.nMax<99?`, מרבי ${D.nMax} (${D.nMaxSrc})`:''}${D.mReq?`, חובת ${D.mReq} מרקמיים`:''}) ובוחר את זה שמשאיר הכי הרבה מקום.</div>
     <table class="fcx-t"><tr><th>רבי-קומות</th><th>מרקמיים</th><th>קיבולת</th><th>נדרש</th><th>יתרה</th></tr>
-    ${sc.map(s=>`<tr${s===N?' class="s"':''}><td>${s.k}</td><td>${s.nm}</td><td>${fmt(s.cap)}</td><td>${fmt(s.need)}</td><td>${fmt(s.slack)}</td></tr>`).join('')}</table>`,false));
+    ${r.fit?`<div class="fcx-w">התרחיש הפשוט ביותר (הכי מעט מבנים) שמכיל את הזכויות: <b>${E(r.scen)}</b> (מסומן ✔). מבנה מרקמי נוסף נספר רק אם קומתו ${fmt(D.minM)} מ"ר לפחות (הנחה).</div>`:''}
+    ${(r.fit&&!sc.includes(r.fit)?[...sc,r.fit]:sc).map(s=>`<tr${s===N?' class="s"':''}><td>${s===r.fit?'✔ ':''}${s.k}</td><td>${s.nm}</td><td>${fmt(s.cap)}</td><td>${fmt(s.need)}</td><td>${fmt(s.slack)}</td></tr>`).join('')}</table>`,false));
   // 8. loose
   if(L&&LD) out.push(_sec('loose','הרצה מקילה',`<div class="fcx-w">כדי לא לפסול תא בגלל הנחה שלנו, החישוב רץ שוב בהנחות המקילות ביותר:
     יעילות קומה 1.0 (בלי ניכוי), קומת מגדל עד 900 מ"ר, עומק מרקמי 20 מ'${LD.relaxed.length?`, ו<b>בלי</b> הכללים שעדיין לא אושרו בטופס (${LD.relaxed.map(k=>FNAME[k]).join(', ')} = 0)`:''}.</div>
@@ -667,7 +678,7 @@ function explainHtml(r,focus){
     :r.verdict==='⚠'?`בהנחות הרגילות הקיבולת (${fmt(N.cap)}) קטנה מהנדרש, אבל בהרצה המקילה (${fmt(L.cap)}) נכנס — התוצאה <b>תלויה בהנחות</b>.${r.approx?' (או שתחום קווי הבניין מקורב — אין קווי בניין בתשריט.)':''}`
     :r.verdict==='חסר?'?`הזכויות מנצלות פחות מחצי מהקיבולת (${pct(r.ratio)}) — ייתכן שהתא מקבל פחות זכויות ממה שהוא יכול לשאת. <b>לא בהכרח טעות</b>: לעתים זה מרווח מכוון (טופוגרפיה, תקרת קומות אחידה).`
     :r.verdict==='לבדיקה'?`הזכויות נכנסות, אבל התא חריג מול תאים דומים בתוכנית (ר' למטה) — כדאי לבדוק את השורה שלו בטבלה 5.`
-    :`נמצא תרחיש שמכיל את הזכויות (ניצול ${pct(r.ratio)}).`;
+    :`נמצא תרחיש שמכיל את הזכויות (ניצול ${pct(r.ratio)}).${r.noLand&&r.ratio<0.5?' בתוכנית אין תכסית ואין שטח פנוי חובה, ולכן הקיבולת היא חסם רופף. ניצול נמוך כאן אינו סימן לחוסר בזכויות.':''}`;
   out.push(_sec('verdict','התוצאה',`<div class="fcx-w">${rule}</div>`,focus==='verdict'));
   // 10. comparisons
   if(r.ratio){
@@ -692,7 +703,7 @@ const METHOD=`<div class="fcx-intro"><b>מה הבדיקה עושה.</b> לכל �
   (5) הקיבולת = יעילות קומה × (טביעת מגדלים × קומות מגדל + טביעת מרקמיים × קומות מרקמי). נבדקים כל הצירופים של מספר מגדלים ומבנים — ונבחר הטוב ביותר.</div>`,false)}
   ${_sec('m2','מה פירוש התוצאות',`<div class="fcx-w"><b>✗ לא נכנס</b> — גם בהנחות המקילות ביותר, ורק לפי כללים שאושרו מהתקנון.
   <b>⚠ תלוי בהנחות</b> — לא נכנס בהנחות הרגילות, נכנס במקילות. <b>לבדיקה</b> — נכנס, אבל חריג מול תאים דומים באותה תוכנית (ניצול או שטח ליח"ד).
-  <b>חסר?</b> — הזכויות מנצלות פחות מחצי מהקיבולת. <b>✓</b> — נמצא תרחיש שמכיל את הזכויות (חסם עליון — "לא נפסל", לא "תוכנן").</div>`,false)}
+  <b>חסר?</b> — הזכויות מנצלות פחות מחצי מהקיבולת (רק בתוכנית שיש בה תכסית או שטח פנוי חובה; בלעדיהם הקיבולת רופפת מדי). <b>✓</b> — נמצא תרחיש שמכיל את הזכויות (חסם עליון — "לא נפסל", לא "תוכנן").</div>`,false)}
   ${_sec('m3','כללים, הנחות ואישור',`<div class="fcx-w">כללי התוכנית (מרחקים, שטח פנוי וכו') מתחילים בברירות מחדל מתקנון המאסטר. כל שדה מסומן <b>"בדקתי בתקנון"</b> אחרי שבודקים אותו (שינוי ערך מסמן אוטומטית).
   רק כלל שנבדק יכול להכשיל ל-✗; כלל שלא נבדק מוקל בהרצה המקילה. ההנחות (יעילות, דירה, יח"ד בקומה, עומק) לעולם לא מכשילות ל-✗.</div>`,false)}
   ${_sec('m4','השוואות בתוך התוכנית',`<div class="fcx-w">בתוכנית אחת הזכויות מחושבות בדרך כלל באותה שיטה, ולכן תאים דומים מנצלים אחוז דומה מהקיבולת, והשטח ליח"ד כמעט קבוע.
