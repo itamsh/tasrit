@@ -128,6 +128,8 @@ function capacity(spec,x,g,a,loose){
   const cov=x.cov??(F.coverage!=null&&F.coverage!==''?+F.coverage:null);
   const free=+(use('freePct',0)||0);
   const budget=Math.min(g.env,(1-free/100)*g.cellA,cov?cov/100*g.cellA:Infinity);
+  // spacing between buildings is open ground: it uses room inside the building lines, but is not coverage and counts as free area
+  const landCap=Math.min((1-free/100)*g.cellA,cov?cov/100*g.cellA:Infinity);
   const core=CORE_T[+a.upfT]??24, T=loose?LOOSE.plateT:(+a.upfT)*((+a.unit)+core);
   const eff=loose?LOOSE.eff:+a.eff, Dm=loose?LOOSE.Dm:+a.Dm;
   const dil=D=>g.env+g.per*D/2+Math.PI*D*D/4;
@@ -142,7 +144,7 @@ function capacity(spec,x,g,a,loose){
   const ring=d=>0.5*((Math.sqrt(T)+d)**2-T);
   let best=null; const scen=[];
   const det={thr,Fm,Ft,dmm,dmt,dtt,cov,covSrc:x.cov!=null?'טבלה 5':(cov?'הטופס':null),free,env:g.env,cellA:g.cellA,
-    freeCap:(1-free/100)*g.cellA,covCap:cov?cov/100*g.cellA:null,budget,T,upf:+a.upfT,unit:+a.unit,core,eff,Dm,band:bandAt(g,Dm),
+    freeCap:(1-free/100)*g.cellA,covCap:cov?cov/100*g.cellA:null,budget,landCap,T,upf:+a.upfT,unit:+a.unit,core,eff,Dm,band:bandAt(g,Dm),
     kRule,kmax,nMin,nMax,nMaxSrc:ruleFor(spec,'maxBuildings',cn)!=null?'הטופס':(x.maxB!=null?'טבלה 5':null),mReq,addOn,
     addM:+F.pbMarakmi||0,addT:+F.pbTower||+F.pbMarakmi||0,bonus:+F.bonusPct||0,scale:x.scale||1,loose,
     relaxed:loose?['dMM','dMT','dTT','freePct'].filter(k=>!C[k]):[]};
@@ -153,7 +155,7 @@ function capacity(spec,x,g,a,loose){
     const TF=k*T; if(TF>budget) continue;
     const TL=k*(nm?ring(dmt):0)+Math.max(0,k-1)*(nm?0:ring(dtt));
     const gaps=Math.max(0,nm-1)*dmm*Dm;
-    const MF=nm?Math.max(0,Math.min(bandAt(g,Dm),budget-TF-TL)-gaps):0;
+    const MF=nm?Math.max(0,Math.min(Math.min(bandAt(g,Dm),g.env-TF-TL)-gaps,landCap-TF)):0;
     const cap=eff*(TF*Ft+MF*Fm);
     const n=k+nm;
     const need=x.above*(1+(+F.bonusPct||0)/100)*(x.scale||1)+(addOn?n*(k?(+F.pbTower||+F.pbMarakmi||0):(+F.pbMarakmi||0)):0);
@@ -644,8 +646,7 @@ function explainHtml(r,focus){
   out.push(_sec('marakmi',`${D.Ft?'5':'4'}. מבנים מרקמיים`,`${_eq(`רצועת עומק ${f1(D.Dm)} מ' לאורך קצה תחום קווי הבניין = <b>${fmt(D.band)} מ"ר</b>`,
     `מבנים מרקמיים (בנייה לאורך הרחוב, בלוקים) לא יכולים להיות עמוקים מאוד. לכן השטח שלהם מוגבל לרצועה בעומק ${f1(D.Dm)} מ' מקצה תחום קווי הבניין (הנחה, ניתן לשינוי). בתא צר — הרצועה היא כל תחום קווי הבניין.`)}
     ${N.nm>1?_eq(`רווחים בין מבנים = (מספר המבנים פחות 1) × המרחק × עומק המבנה = ${M(`(${N.nm} − 1) × ${f1(D.dmm)} × ${f1(D.Dm)}`)} = <b>${fmt(N.gaps)} מ"ר</b>`,`בין כל שני מבנים מרקמיים נשאר רווח לפי מרחק מרקמי–מרקמי.`):''}
-    ${N.nm?_eq(`טביעת רגל מרקמית = הקטן מבין הרצועה (${fmt(D.band)}) לבין מה שנשאר מתקציב הקרקע (${M(`${fmt(D.budget)} − ${fmt(N.TF)} − ${fmt(N.TL)}`)} = ${fmt(D.budget-N.TF-N.TL)})${N.nm>1?`, פחות הרווחים (${fmt(N.gaps)})`:''} = <b>${fmt(N.MF)} מ"ר</b>`,
-      `מה שנשאר מתקציב הקרקע = התקציב, פחות טביעת הרגל של המגדלים, פחות השטח שהמרחקים סביבם גוזלים.`):'<div class="fcx-w">בתרחיש שנבחר אין מבנים מרקמיים.</div>'}`,focus==='marakmi'));
+    ${N.nm?(()=>{ const room=Math.min(D.band,D.env-N.TF-N.TL)-N.gaps, land=D.landCap-N.TF; return _eq(`טביעת רגל מרקמית = הקטן מבין שתי מגבלות = <b>${fmt(N.MF)} מ"ר</b>`, `<b>(א) מקום בתחום קווי הבניין:</b> הקטן מבין הרצועה (${fmt(D.band)}) לבין ${M(`${fmt(D.env)} − ${fmt(N.TF)} − ${fmt(N.TL)}`)}${N.nm>1?`, פחות הרווחים (${fmt(N.gaps)})`:""} = ${fmt(Math.max(0,room))} מ"ר.<br><b>(ב) תכסית ושטח פנוי:</b> ${M(`${fmt(D.landCap)} − ${fmt(N.TF)}`)} = ${fmt(Math.max(0,land))} מ"ר.<br>המרחקים בין המבנים הם שטח פתוח: הם תופסים מקום בתחום קווי הבניין (א), אבל לא נספרים בתכסית ולא פוגעים בשטח הפנוי (ב).`); })():'<div class="fcx-w">בתרחיש שנבחר אין מבנים מרקמיים.</div>'}`,focus==='marakmi'));
   // 6. capacity
   out.push(_sec('cap',`${D.Ft?'6':'5'}. הקיבולת`,_eq(`הקיבולת = ${M(`${f2(D.eff)} × (${fmt(N.TF)} × ${N.Ft} + ${fmt(N.MF)} × ${N.Fm})`)} = <b>${fmt(N.cap)} מ"ר</b>`,
     `במילים: יעילות הקומה (הנחה: ${f2(D.eff)} — ניכוי לפירים, מגרעות ונסיגות), כפול שטח כל הקומות: טביעת הרגל של המגדלים כפול קומות המגדל,
