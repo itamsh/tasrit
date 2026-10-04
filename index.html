@@ -1822,7 +1822,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 // ── App version — bump on EVERY deploy (date + that day's deploy number), so the
 //    user and Claude can confirm they're looking at the same build. Shown in the
 //    map toolbar and the loading-page footer.
-const APP_VERSION='2026.10.04-3';
+const APP_VERSION='2026.10.04-4';
 // Version of the road-network DETECTION ALGORITHM only — bump when _rnDetect's
 // output changes, so a network saved from an older run is flagged as stale
 // (networks are saved per project and are NOT re-detected on load).
@@ -1847,7 +1847,7 @@ let normDash=0,normAnimId=null,normBg=null;
 let normMode='zones',normPolyPts=[],normMousePt=null;
 let normPan={active:false,sx:0,sy:0,vx0:0,vy0:0,dragged:false};
 const T5_PARAMS={serviceMarkami:15,serviceMigdali:25,ahuzMode:'ahuz'};
-const TAMA={model:0,npdReg:3.2,npdSpec:1.5,normM2:null,intensive:false,densMode:1,deduction:0,spreadDenom:'norm',pct80:0,site:'',projPop:null};
+const TAMA={model:0,npdReg:3.2,npdSpec:1.5,normM2:null,intensive:false,densMode:1,deduction:0,spreadDenom:'norm',pct80:0,smallMax:80,smallAvg:null,site:'',projPop:null};
 const NORM={incFeat:null,codeOrder:null,showOutline:true,polyRing:null};
 const RE={
   active:false, finalized:false, visible:true,
@@ -4029,13 +4029,13 @@ function renderCalcSummary(rows){
   let html=`<div class="calc-summary">`;
   html+=`<div class="t5-sum-row">סה"כ מ"ר עילי — <strong>${sumMal.toLocaleString('he-IL')}</strong> ${u('מ"ר')}${noteHtml}</div>`;
 
-  // שטח ממוצע ליח"ד = עיקרי מעל הקרקע (או סה"כ מעל הקרקע כשאין פיצול) / מס' יח"ד
+  // שטח ממוצע ליח"ד = עיקרי מעל הקרקע (או שטח כולל בפורמט החדש, ללא פיצול) / מס' יח"ד
   const resRows=useRows.filter(r=>parseNum(r.yihud)>0);
   const resMal=resRows.reduce((s,r)=>s+parseNum(hasIkari?r.ikariMal:r.kollMal),0);
   const totalYihud=resRows.reduce((s,r)=>s+parseNum(r.yihud),0);
   if(resMal>0&&totalYihud>0){
     const avg=(resMal/totalYihud).toFixed(1);
-    html+=`<div class="t5-sum-row">${hasIkari?'שטח עיקרי ממוצע ליח"ד':'שטח ממוצע ליח"ד (עיקרי + שירות)'} — <strong>${avg}</strong> ${u('מ"ר')}</div>`;
+    html+=`<div class="t5-sum-row">${hasIkari?'שטח עיקרי ממוצע ליח"ד':'שטח כולל ממוצע ליח"ד'} — <strong>${avg}</strong> ${u('מ"ר')}</div>`;
   }
 
   // מקומות חניה לפי 50 מ"ר מתחת לכ"ק
@@ -8776,6 +8776,7 @@ function closeTamaView(){
 }
 
 function _renderTamaPanel(){
+  const _ab=_tamaAreaBasis();
   const selModel=TAMA.model;
   const isInt=TAMA.intensive;
   const selThresh=selModel>0?TAMA_THRESH[selModel]:null;
@@ -8922,9 +8923,29 @@ function _renderTamaPanel(){
                  oninput="TAMA.npdSpec=+this.value;_calcTama()">
         </div>
         <div class="tama-ig" style="max-width:190px">
-          <label>% יח"ד עד 80 מ"ר (מתקנון)</label>
+          <label>% יח"ד עד ${TAMA.smallMax} מ"ר${_ab.word?' '+_ab.word:''} (מתקנון)</label>
           <input type="number" class="tama-num" value="${TAMA.pct80}" min="0" max="100" step="1"
                  oninput="TAMA.pct80=+this.value;_calcTama()">
+        </div>
+      </div>
+      <div class="tama-inputs-row">
+        <div class="tama-ig" style="max-width:190px">
+          <label>סף דירה קטנה — מ"ר${_ab.word?' '+_ab.word:''} (מתקנון)</label>
+          <input type="number" class="tama-num" value="${TAMA.smallMax}" min="20" max="200" step="1"
+                 onchange="TAMA.smallMax=+this.value||80;_renderTamaPanel()">
+        </div>
+        <div class="tama-ig" style="max-width:190px">
+          <label>גודל ממוצע לדירה קטנה — מ"ר${_ab.word?' '+_ab.word:''}</label>
+          <input type="number" class="tama-num" value="${TAMA.smallAvg!=null?TAMA.smallAvg:''}" min="20" max="200" step="1"
+                 placeholder="ריק = ${TAMA.smallMax} (שמרני)"
+                 oninput="TAMA.smallAvg=this.value===''?null:+this.value;_calcTama()">
+        </div>
+        <div class="tama-ig" style="flex:2;min-width:200px">
+          <div style="font-size:10px;color:#6688aa;line-height:1.5;margin-top:14px">${
+            _ab.basis==='main'?'בתוכנית זו טבלה 5 מפרידה בין שטח עיקרי לשירות — הסף והממוצעים לפי <b>שטח עיקרי</b>.'
+           :_ab.basis==='total'?'בתוכנית זו טבלה 5 בפורמט החדש, ללא הפרדה לעיקרי ושירות — הסף והממוצעים לפי <b>שטח כולל</b>.'
+           :_ab.basis==='mixed'?`טבלה 5 מעורבת: ${_ab.main} תאים עם שטח עיקרי ו-${_ab.total} תאים עם שטח כולל בלבד — הבסיס מעורב.`
+           :'הבסיס (עיקרי / כולל) ייקבע לפי טבלה 5 כשתיטען.'}</div>
         </div>
       </div>
     </div>
@@ -8938,6 +8959,23 @@ function _renderTamaPanel(){
     </div>
   `;
   _calcTama();
+}
+
+// Which area type Table 5 states for residential cells: old format splits main/service
+// (→ main area), new format has a single total-area column (→ total area).
+function _tamaAreaBasis(){
+  let main=0,total=0;
+  if(state.table5){
+    for(const rows of Object.values(state.table5)){
+      if(!rows.some(r=>parseFloat((r.yihud||'').replace(/,/g,''))>0)) continue;
+      if(rows.some(r=>r.ikariMal)) main++;
+      else if(rows.some(r=>r.kollMal)) total++;
+    }
+  }
+  if(main&&total) return {basis:'mixed',word:'',main,total};
+  if(main)  return {basis:'main', word:'עיקרי',main,total};
+  if(total) return {basis:'total',word:'כולל',main,total};
+  return {basis:null,word:'',main,total};
 }
 
 // modeOverride: 0=shimush, 1=yiud contains, 2=yiud exact. Defaults to TAMA.densMode.
@@ -9004,6 +9042,19 @@ function _calcTama(){
   }
   const regularUnits=totalUnits-specialUnits;
   const avgSize=totalResUnits>0?totalResMal/totalResUnits:null;
+
+  // ── Implied average of the non-small units, given the small-unit share ──
+  // (A − p·s) ÷ (1 − p); s = threshold gives the minimum (small units can't exceed it)
+  const ab=_tamaAreaBasis();
+  const pSmall=TAMA.pct80>0&&TAMA.pct80<100?TAMA.pct80/100:null;
+  const sSmall=TAMA.smallAvg!=null&&TAMA.smallAvg>0?TAMA.smallAvg:TAMA.smallMax;
+  const sIsMax=!(TAMA.smallAvg!=null&&TAMA.smallAvg>0)||TAMA.smallAvg>=TAMA.smallMax;
+  const largeAvg=avgSize!=null&&pSmall!=null?(avgSize-pSmall*sSmall)/(1-pSmall):null;
+  const largeNote=largeAvg==null?''
+    :avgSize<=TAMA.smallMax?`הממוצע הכולל (${Math.round(avgSize)} מ"ר) אינו גדול מהסף — החישוב לא מוסיף מידע`
+    :largeAvg>150?'ממוצע גבוה מאוד — ייתכן שהזכויות אינן מתיישבות עם התמהיל'
+    :'';
+  const largeTxt=largeAvg==null?'':`${sIsMax?'לפחות ':'כ-'}${Math.round(largeAvg).toLocaleString('he-IL')} מ"ר${ab.word?' '+ab.word:''}`;
   const totalPersons=totalUnits>0?(regularUnits*TAMA.npdReg+specialUnits*TAMA.npdSpec):null;
 
   // ── Plan geometry ──
@@ -9041,6 +9092,21 @@ function _calcTama(){
   const spreadRounded=spreadPct!=null?Math.round(spreadPct*10)/10:null;
   const spreadPass=spreadRounded!=null?(spreadRounded>=40&&spreadRounded<=TAMA_MIN_SPREAD):null;
 
+  // Shared breakdown of the implied large-unit average (stat card + inclusive-housing card)
+  const _r1=v=>Math.round(v).toLocaleString('he-IL');
+  const _drL=(l,v)=>`<div class="det-row"><span class="det-lbl">${l}</span><span class="det-val">${v}</span></div>`;
+  const aw=ab.word?' '+ab.word:'';
+  const largeDet=largeAvg==null?'':
+    `<hr class="det-sep"><div class="tama-ig-sub-lbl" style="margin:2px 0 4px">השלכה על שאר הדירות</div>`
+    +_drL('ממוצע כל הדירות',`${_r1(avgSize)} מ"ר${aw}`)
+    +_drL(`דירות עד ${TAMA.smallMax} מ"ר${aw}`,`${TAMA.pct80}%`)
+    +_drL(`גודל ממוצע לדירה קטנה${sIsMax?' (הסף — תרחיש שמרני)':''}`,`${_r1(sSmall)} מ"ר${aw}`)
+    +`<div class="det-formula">(${_r1(avgSize)} − ${pSmall.toFixed(2)} × ${_r1(sSmall)}) ÷ ${(1-pSmall).toFixed(2)} = ${_r1(largeAvg)} מ"ר${aw}</div>`
+    +`<div class="det-formula" style="font-style:normal;font-weight:700">שאר הדירות (${100-TAMA.pct80}%): ${largeTxt}</div>`
+    +(sIsMax?`<div style="font-size:10px;color:#889;margin-top:2px">"לפחות" — כי דירה קטנה אינה גדולה מהסף. אם הדירות הקטנות קטנות יותר, ממוצע שאר הדירות גבוה יותר (אפשר להזין גודל ממוצע לדירה קטנה למעלה).</div>`:'')
+    +(ab.basis==='mixed'?`<div style="font-size:10px;color:#b9770e;margin-top:2px">⚠ טבלה 5 מעורבת (עיקרי בחלק מהתאים, כולל בחלק) — הבסיס של הממוצע מעורב.</div>`:'')
+    +(largeNote?`<div style="font-size:10px;color:#b9770e;margin-top:2px">⚠ ${largeNote}</div>`:'');
+
   // ── Stats section ──
   const sg=document.getElementById('tama-stats-grid');
   if(sg){
@@ -9064,22 +9130,24 @@ function _calcTama(){
     const nIk=withArea.filter(c=>c.src==='עיקרי').length, nKo=withArea.length-nIk;
     const avgLbl=!withArea.length?'שטח ממוצע ליח"ד'
       :!nKo?'שטח עיקרי ממוצע ליח"ד'
-      :!nIk?'שטח ממוצע ליח"ד (עיקרי + שירות)'
+      :!nIk?'שטח כולל ממוצע ליח"ד'
       :'שטח ממוצע ליח"ד (מקורות מעורבים)';
-    const avgSub=!withArea.length?''
-      :!nKo?'שטח עיקרי מעל הקרקע בלבד, ללא שטחי שירות'
-      :!nIk?'סה"כ מעל הקרקע מטבלה 5 (אין פיצול לעיקרי)'
-      :`עיקרי ב-${nIk} תאים · סה"כ מעל הקרקע ב-${nKo} תאים`;
+    const avgSub=(!withArea.length?''
+      :!nKo?'שטח עיקרי מעל הקרקע, ללא שטחי שירות'
+      :!nIk?'פורמט חדש — שטח כולל, ללא הפרדה לעיקרי ושירות'
+      :`עיקרי ב-${nIk} תאים · שטח כולל ב-${nKo} תאים`)
+      +(largeAvg!=null?`<br>שאר הדירות (${100-TAMA.pct80}%): <b>${largeTxt}</b>${largeNote?' ⚠':''}`:'');
     let d1=noData;
     if(avgSize!=null){
       const excl=totalUnits-totalResUnits;
       d1=dr('סה"כ שטח',`${fN(totalResMal)} מ"ר`)
         +dr('יח"ד עם שטח בטבלה 5',`${fN(totalResUnits)}`)
         +(excl>0?dr('יח"ד בלי שטח (לא נכללו)',`${fN(excl)}`):'')
-        +dr('מקור השטח',[nIk?`עיקרי מעל הקרקע — ${nIk} תאים`:'',nKo?`סה"כ מעל הקרקע (עיקרי + שירות) — ${nKo} תאים`:''].filter(Boolean).join(' · '))
-        +`<div style="font-size:10px;color:#889;margin-top:2px">בכל תא נלקח השטח העיקרי אם הוא מופיע בטבלה 5; אחרת — סה"כ מעל הקרקע.${nIk&&nKo?' לכן הממוצע משלב שני סוגי שטח, וכדאי לבדוק את הטבלה למטה.':''}</div>`
+        +dr('מקור השטח',[nIk?`שטח עיקרי מעל הקרקע — ${nIk} תאים`:'',nKo?`שטח כולל (פורמט חדש) — ${nKo} תאים`:''].filter(Boolean).join(' · '))
+        +`<div style="font-size:10px;color:#889;margin-top:2px">בתוכנית שמפרידה בין עיקרי לשירות — נלקח השטח העיקרי; בפורמט החדש (ללא הפרדה) — השטח הכולל.${nIk&&nKo?' כאן הטבלה משלבת את שני הפורמטים, וכדאי לבדוק את הטבלה למטה.':''}</div>`
         +`<hr class="det-sep"><div class="det-formula">${fN(totalResMal)} ÷ ${fN(totalResUnits)} = ${fN(avgSize)} מ"ר ליח"ד</div>`
-        +cellTbl(['תא','מ"ר','יח"ד','מ"ר/יח"ד','סוג שטח'],c=>`<tr><td>${_esc(c.num)}</td><td>${fN(c.m2)}</td><td>${fN(c.m2Units)}</td><td>${fN(c.m2/c.m2Units)}</td><td>${c.src==='עיקרי'?'עיקרי':'סה"כ'}</td></tr>`,withArea);
+        +largeDet
+        +cellTbl(['תא','מ"ר','יח"ד','מ"ר/יח"ד','סוג שטח'],c=>`<tr><td>${_esc(c.num)}</td><td>${fN(c.m2)}</td><td>${fN(c.m2Units)}</td><td>${fN(c.m2/c.m2Units)}</td><td>${c.src==='עיקרי'?'עיקרי':'כולל'}</td></tr>`,withArea);
     }
     let d2=noData;
     if(totalPersons!=null){
@@ -9174,17 +9242,18 @@ function _calcTama(){
   const inclPass=effInclPct!=null&&inclVal!=null?inclVal>=effInclPct:null;
   let det3='';
   if(inclVal!=null&&effInclPct!=null){
-    det3+=_dr('% יח"ד עד 80 מ"ר (מהתקנון)',`${inclVal}%`);
+    det3+=_dr(`% יח"ד עד ${TAMA.smallMax} מ"ר${aw} (מהתקנון)`,`${inclVal}%`);
     det3+=_dsep;
     det3+=`<div class="det-formula">${inclVal}% ${inclVal>=effInclPct?'≥':'<'} ${effInclPct}% (יעד מינימום)</div>`;
     if(TAMA.deduction>0&&inclPctBase!=null)
       det3+=`<div class="det-formula" style="margin-top:4px">יעד מותאם ≥ ${effInclPct}% — הפחתה ${TAMA.deduction}% מבסיס ${inclPctBase}%</div>`;
+    det3+=largeDet;
   } else if(inclPctBase==null&&thresh){
-    det3=`<span style="color:#aaa;font-size:10px">לדגם זה הדיור המכליל לשיקול מוסד התכנון — אין סף חובה</span>`;
+    det3=`<span style="color:#aaa;font-size:10px">לדגם זה הדיור המכליל לשיקול מוסד התכנון — אין סף חובה</span>`+largeDet;
   } else if(!thresh){
     det3=`<span style="color:#aaa;font-size:10px">בחר דגם יישוב</span>`;
   } else {
-    det3=`<span style="color:#aaa;font-size:10px">הזן % יח"ד עד 80 מ"ר בשדה "קלט" למעלה</span>`;
+    det3=`<span style="color:#aaa;font-size:10px">הזן % יח"ד עד ${TAMA.smallMax} מ"ר בשדה "קלט" למעלה</span>`;
   }
 
   const cardDetails=[det0,det1,det2,det3];
@@ -9211,8 +9280,9 @@ function _calcTama(){
      val:spreadPct!=null?spreadPct.toFixed(1):null, unit:'%',
      denom:spreadDenomInfo,
      thr:'טווח: 40%–50%', pass:spreadPass},
-    {ltr:'דיור מכליל', ttl:'% יח"ד עד 80 מ"ר (פרוקסי לדיור מכליל)',
+    {ltr:'דיור מכליל', ttl:`% יח"ד עד ${TAMA.smallMax} מ"ר${aw} (פרוקסי לדיור מכליל)`,
      val:inclVal!=null?inclVal.toFixed(1):null, unit:'%',
+     denom:largeAvg!=null?`שאר הדירות: ${largeTxt}${largeNote?' ⚠':''}`:null,
      thr:effInclPct!=null
        ?(TAMA.deduction>0?`מינימום: ${effInclPct}% — הפחתה ${TAMA.deduction}% מבסיס ${inclPctBase}%`:`מינימום: ${effInclPct}%`)
        :inclPctBase==null&&thresh?'לשיקול מוסד התכנון':'בחר דגם יישוב',
@@ -9248,7 +9318,7 @@ function _saveTamaState(){
     localStorage.setItem('tama_state',JSON.stringify({
       model:TAMA.model, npdReg:TAMA.npdReg, npdSpec:TAMA.npdSpec,
       intensive:TAMA.intensive, densMode:TAMA.densMode, deduction:TAMA.deduction,
-      spreadDenom:TAMA.spreadDenom, pct80:TAMA.pct80, site:TAMA.site, projPop:TAMA.projPop,
+      spreadDenom:TAMA.spreadDenom, pct80:TAMA.pct80, smallMax:TAMA.smallMax, smallAvg:TAMA.smallAvg, site:TAMA.site, projPop:TAMA.projPop,
       normM2:TAMA.normM2,
       normIncFeat:NORM.incFeat?[...NORM.incFeat]:null,
       normPolyRing:NORM.polyRing||null
@@ -9268,6 +9338,8 @@ function _restoreTamaState(){
     if(s.deduction!=null)  TAMA.deduction=s.deduction;
     if(s.spreadDenom!=null)TAMA.spreadDenom=s.spreadDenom;
     if(s.pct80!=null)      TAMA.pct80=s.pct80;
+    if(s.smallMax!=null)   TAMA.smallMax=s.smallMax;
+    if(s.smallAvg!==undefined) TAMA.smallAvg=s.smallAvg;
     if(s.site!=null)       TAMA.site=s.site;
     if(s.projPop!=null)   TAMA.projPop=s.projPop;
     if(s.normM2!=null)     TAMA.normM2=s.normM2;
@@ -12712,7 +12784,7 @@ function _projClearAllInputs(){
   const rnb=document.getElementById('btn-road-net'); if(rnb) rnb.classList.remove('active','loaded');
   // TAMA + NORM → defaults
   TAMA.model=0;TAMA.npdReg=3.2;TAMA.npdSpec=1.5;TAMA.normM2=null;TAMA.intensive=false;
-  TAMA.densMode=1;TAMA.deduction=0;TAMA.spreadDenom='norm';TAMA.pct80=0;
+  TAMA.densMode=1;TAMA.deduction=0;TAMA.spreadDenom='norm';TAMA.pct80=0;TAMA.smallMax=80;TAMA.smallAvg=null;
   NORM.incFeat=null;NORM.codeOrder=null;NORM.polyRing=null;NORM.showOutline=true;
   // Program
   _flowInputs={models:{},builtin:{},mixed:{},mixedEntries:{}};
@@ -12740,6 +12812,7 @@ function _projCollectInputs(){
     tama:{
       model:TAMA.model,npdReg:TAMA.npdReg,npdSpec:TAMA.npdSpec,intensive:TAMA.intensive,
       densMode:TAMA.densMode,deduction:TAMA.deduction,spreadDenom:TAMA.spreadDenom,pct80:TAMA.pct80,site:TAMA.site,
+      smallMax:TAMA.smallMax,smallAvg:TAMA.smallAvg,
       normM2:TAMA.normM2,normIncFeat:NORM.incFeat?[...NORM.incFeat]:null,normPolyRing:NORM.polyRing||null
     },
     program:{flowInputs:_flowInputs,sensOvr:_sensOvr,t5params:T5_PARAMS},
@@ -12778,6 +12851,7 @@ function _projApplyInputs(inp){
     if(s.npdSpec!=null)TAMA.npdSpec=s.npdSpec; if(s.intensive!=null)TAMA.intensive=s.intensive;
     if(s.densMode!=null)TAMA.densMode=s.densMode; if(s.deduction!=null)TAMA.deduction=s.deduction;
     if(s.spreadDenom!=null)TAMA.spreadDenom=s.spreadDenom; if(s.pct80!=null)TAMA.pct80=s.pct80;
+    TAMA.smallMax=s.smallMax!=null?s.smallMax:80; TAMA.smallAvg=s.smallAvg!=null?s.smallAvg:null;
     if(s.site!=null)TAMA.site=s.site;
     if(s.normM2!=null)TAMA.normM2=s.normM2;
     NORM.incFeat=s.normIncFeat?new Set(s.normIncFeat):NORM.incFeat;
