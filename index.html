@@ -1823,7 +1823,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 // ── App version — bump on EVERY deploy (date + that day's deploy number), so the
 //    user and Claude can confirm they're looking at the same build. Shown in the
 //    map toolbar and the loading-page footer.
-const APP_VERSION='2026.10.04-9';
+const APP_VERSION='2026.10.04-10';
 // Version of the road-network DETECTION ALGORITHM only — bump when _rnDetect's
 // output changes, so a network saved from an older run is flagged as stale
 // (networks are saved per project and are NOT re-detected on load).
@@ -8457,8 +8457,14 @@ function _renderT5Panel(){
     const rows=rowsOf(num);
     const dataRows=rows.length===1?rows:rows.filter(r=>!isSumRow(r));
     let totalAbove=0, komMalVal=null, magrasVal=null, yihudTotal=0, hasYihud=false;
+    let resAbove=0, resUnits=0; // residential uses only (מגורים / דיור מוגן / דיור מיוחד…)
     const detailRows=[];
     for(const row of dataRows){
+      if(/מגורים|דיור/.test(row.shimush||row.yiud||'')){
+        const nv=k=>{const v=parseFloat(String(row[k]||'').replace(/,/g,''));return isNaN(v)?0:v;};
+        resAbove+=hasIkari?nv('ikariMal')+nv('sherutMal'):nv('kollMal'); // all above-ground rights
+        resUnits+=nv('yihud');
+      }
       const area=hasIkari
         ?parseFloat(String(row.ikariMal||'0').replace(/,/g,''))
         :parseFloat(String(row.kollMal||'0').replace(/,/g,''));
@@ -8508,6 +8514,8 @@ function _renderT5Panel(){
       tachsit:tachsitVal,
       ahuzBinyan:(totalAbove>0&&magrasVal>0)?totalAbove/magrasVal*100:null,
       density:densityVal,
+      avgUnit:(resAbove>0&&resUnits>0)?resAbove/resUnits:null,
+      resAbove, resUnits,
       buildEnv:(buildEnv!=null&&buildEnv>0)?buildEnv:null,
       measMagras:(measMagras!=null&&measMagras>0)?measMagras:null,
       rows:detailRows
@@ -8531,6 +8539,7 @@ function _renderT5Panel(){
       <button class="${T5_PARAMS.ahuzMode==='rachak'?'on':''}" onclick="T5_PARAMS.ahuzMode='rachak';_t5Refresh()">רח"ק</button>
     </div></th>`;
   thead+=`<th class="t5v-calc-hdr">צפיפות<br><small>יח"ד / דונם</small></th>`;
+  thead+=`<th class="t5v-calc-hdr">שטח יח"ד ממוצע<br><small>מ"ר עילי למגורים / יח"ד</small></th>`;
   if(window.FC&&FC.t5HeadHtml) thead+=FC.t5HeadHtml(); // בקרת בינוי
   thead+='</tr></thead>';
 
@@ -8590,6 +8599,8 @@ function _renderT5Panel(){
       tbody+=`<td class="t5v-calc-cell" rowspan="${groupLen}" onclick="_t5ShowCalcDetail('${num}',event,'ahuzBinyan')" title="לחץ לתחקור החישוב">${ahuzTxt} <span style="font-size:9px;opacity:.6">🔍</span></td>`;
       const densityTxt=cc.density!=null?cc.density.toFixed(1):'';
       tbody+=`<td class="t5v-calc-cell" rowspan="${groupLen}" style="${cc.density!=null?'':'color:#666'}">${densityTxt||'—'}</td>`;
+      const unitTip=cc.avgUnit!=null?` title="${fmtC(cc.resAbove)} מ״ר עילי למגורים ÷ ${fmtC(cc.resUnits)} יח״ד"`:'';
+      tbody+=`<td class="t5v-calc-cell" rowspan="${groupLen}"${unitTip}${cc.avgUnit!=null?'':' style="color:#666"'}>${cc.avgUnit!=null?fmtC(cc.avgUnit):'—'}</td>`;
       if(window.FC&&FC.t5CellsHtml){ try{ tbody+=FC.t5CellsHtml(cc.grp?null:num,groupLen); }catch(e){ tbody+='<td></td><td></td><td></td>'; } } // בקרת בינוי
     }
     tbody+='</tr>';
