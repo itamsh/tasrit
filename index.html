@@ -241,6 +241,23 @@ canvas{position:absolute;top:0;left:0;display:block}
 #t5-hdr{background:#1f2e42;padding:9px 16px;border-bottom:1px solid #2d4060;display:flex;align-items:center;gap:12px;flex-shrink:0}
 #t5-hdr h2{font-size:14px;font-weight:600;color:#7ecfff;margin:0;flex:1}
 #t5-stats{font-size:11px;color:#7899bb}
+#t5-yiud-wrap{position:relative}
+#t5-yiud-menu{display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:50;width:340px;background:#1a2738;border:1px solid #3a5070;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.45);padding:8px;direction:rtl}
+#t5-yiud-menu.vis{display:block}
+.t5y-top{display:flex;gap:6px;margin-bottom:6px}
+.t5y-top button{flex:1;background:#243650;border:1px solid #3a5070;color:#cfe0f2;border-radius:5px;font-size:11px;padding:4px 6px;cursor:pointer;font-family:inherit}
+.t5y-top button:hover{border-color:#2980b9}
+.t5y-hint{font-size:10px;color:#7899bb;margin-bottom:6px}
+#t5-yiud-list{max-height:320px;overflow-y:auto}
+.t5y-row{display:flex;align-items:center;gap:6px;padding:4px;border-radius:5px;font-size:12px;color:#cfe0f2}
+.t5y-row:hover{background:#243650}
+.t5y-grip{cursor:grab;color:#6688aa;font-size:11px;letter-spacing:-2px;user-select:none}
+.t5y-sw{width:12px;height:12px;border-radius:3px;border:1px solid rgba(0,0,0,.35);flex-shrink:0}
+.t5y-name{flex:1}
+.t5y-cnt{font-size:10px;color:#7899bb;min-width:26px;text-align:left}
+.t5y-mv{background:none;border:1px solid #3a5070;color:#9bb5cf;border-radius:4px;font-size:9px;padding:1px 4px;cursor:pointer}
+.t5y-mv:disabled{opacity:.3;cursor:default}
+.t5v-empty{padding:30px;text-align:center;color:#7899bb;font-size:13px}
 #t5-params-bar{background:#131d2c;border-bottom:1px solid #2d4060;padding:7px 16px;display:flex;align-items:center;gap:20px;flex-shrink:0;direction:rtl;flex-wrap:wrap}
 #t5-params-bar .t5p-title{font-size:11px;color:#7ecfff;font-weight:600;white-space:nowrap;margin-left:4px}
 .t5p-item{display:flex;align-items:center;gap:7px;font-size:11px;color:#8899aa;white-space:nowrap}
@@ -946,6 +963,12 @@ body.theme-light #prog-panel,body.theme-light #tama-panel,body.theme-light #t5-p
 body.theme-light #prog-hdr,body.theme-light #tama-hdr,body.theme-light #t5-hdr{background:#dde5ef;border-bottom-color:#bfccdb}
 body.theme-light #prog-hdr h2,body.theme-light #tama-hdr h2,body.theme-light #t5-hdr h2{color:#1a3560}
 body.theme-light #t5-stats{color:#5a7090}
+body.theme-light #t5-yiud-menu{background:#fff;border-color:#bfccdb;box-shadow:0 8px 24px rgba(0,0,0,.15)}
+body.theme-light .t5y-top button{background:#eef3f9;border-color:#bfccdb;color:#1a3060}
+body.theme-light .t5y-row{color:#1a3060}
+body.theme-light .t5y-row:hover{background:#eef3f9}
+body.theme-light .t5y-hint,body.theme-light .t5y-cnt,body.theme-light .t5v-empty{color:#5a7090}
+body.theme-light .t5y-mv{border-color:#bfccdb;color:#3a5a80}
 body.theme-light #t5-params-bar{background:#e4eaf3;border-bottom-color:#bfccdb}
 body.theme-light .t5p-item{color:#5a7090}
 body.theme-light .t5p-item span{color:#7a9aaa}
@@ -1678,6 +1701,18 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
     <div id="t5-hdr">
       <h2>📋 טבלה 5 — זכויות בניה</h2>
       <span id="t5-stats"></span>
+      <div id="t5-yiud-wrap">
+        <button class="tb-btn" id="t5-yiud-btn" onclick="_t5YiudToggle()" title="בחירת ייעודים להצגה ושינוי סדרם">🏷 ייעודים <span id="t5-yiud-count"></span> ▾</button>
+        <div id="t5-yiud-menu">
+          <div class="t5y-top">
+            <button onclick="_t5YiudAll(true)">הצג הכל</button>
+            <button onclick="_t5YiudAll(false)">הסתר הכל</button>
+            <button onclick="_t5YiudReset()">סדר מקורי</button>
+          </div>
+          <div class="t5y-hint">סמנו אילו ייעודים להציג · גררו שורה (או ▲▼) כדי לשנות את סדר הייעודים בטבלה</div>
+          <div id="t5-yiud-list"></div>
+        </div>
+      </div>
       <button class="tb-btn" onclick="closeTable5View()" style="background:#2c3e55">✕ חזרה לתשריט</button>
     </div>
     <div id="t5-params-bar">
@@ -1823,7 +1858,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 // ── App version — bump on EVERY deploy (date + that day's deploy number), so the
 //    user and Claude can confirm they're looking at the same build. Shown in the
 //    map toolbar and the loading-page footer.
-const APP_VERSION='2026.10.05-1';
+const APP_VERSION='2026.10.07-1';
 // Version of the road-network DETECTION ALGORITHM only — bump when _rnDetect's
 // output changes, so a network saved from an older run is flagged as stale
 // (networks are saved per project and are NOT re-detected on load).
@@ -8304,6 +8339,7 @@ function openTable5View(){
   document.getElementById('btn-t5').classList.add('active');
   document.getElementById('t5p-markami').value = T5_PARAMS.serviceMarkami;
   document.getElementById('t5p-migdali').value = T5_PARAMS.serviceMigdali;
+  _t5YiudToggle(false); _t5YiudMenuRender();
   const html=_renderT5Panel();
   document.getElementById('t5-body').innerHTML=html;
 }
@@ -8395,9 +8431,14 @@ function _renderT5Panel(){
   // A range row ("1–296") stays ONE entry here, like in the Excel; its member cells share its rows.
   const groups=t5.__groups||{};
   const rowsOf=n=>groups[n]?groups[n].rows:t5[n];
-  const nums=(t5.__order&&t5.__order.length)
+  const allNums=(t5.__order&&t5.__order.length)
     ?t5.__order.filter(n=>t5[n]||groups[n])
     :Object.keys(t5).sort((a,b)=>+a-+b);
+  // User-chosen designation order + visibility (menu "ייעודים"); rows inside a designation keep source order
+  const yv=_t5YiudView(), byY=new Map();
+  for(const n of allNums){ const y=_t5YiudOfRows(rowsOf(n)); if(!byY.has(y)) byY.set(y,[]); byY.get(y).push(n); }
+  const nums=[];
+  for(const y of _t5YiudOrdered([...byY.keys()])) if(!yv.hidden.has(y)) nums.push(...byY.get(y));
   const flat=[];
   for(const num of nums){
     const rows=rowsOf(num);
@@ -8405,7 +8446,7 @@ function _renderT5Panel(){
     for(let i=0;i<rows.length;i++) flat.push({num,row:rows[i],isFirst:i===0,groupLen:rows.length,groupYiud});
   }
 
-  const has=k=>flat.some(x=>x.row[k]);
+  const has=k=>allNums.some(n=>rowsOf(n).some(r=>r[k])); // columns from the whole table → stable when filtering
   const hasIkari=has('ikariMal')||has('sherutMal')||has('ikariMitahat')||has('sherutMitahat');
   const hasKoll=has('kollMal')||has('kollMitahat');
 
@@ -8612,8 +8653,10 @@ function _renderT5Panel(){
   }
   tbody+='</tbody>';
 
-  const cellCount=nums.reduce((a,n)=>a+(groups[n]?groups[n].nums.length:1),0);
-  document.getElementById('t5-stats').textContent=`${cellCount} תאי שטח`;
+  const cnt=list=>list.reduce((a,n)=>a+(groups[n]?groups[n].nums.length:1),0);
+  const cellCount=cnt(nums), allCount=cnt(allNums);
+  document.getElementById('t5-stats').textContent=cellCount===allCount?`${cellCount} תאי שטח`:`${cellCount} מתוך ${allCount} תאי שטח`;
+  if(!nums.length) return `<div class="t5v-empty">לא נבחר אף ייעוד להצגה — בחרו ייעודים בתפריט "🏷 ייעודים" למעלה</div>`;
 
   return `<div class="t5v-wrap"><table class="t5v-tbl">${thead}${tbody}</table></div>`;
 }
@@ -8897,6 +8940,108 @@ const TAMA_THRESH = [
   {name:'דגם 7 — עד 2,000 (ערכים לפי מחוז/נפה)',   minNet:null, minNetInt:null, minGross:null, inclReg:null, inclInt:null},
 ];
 const TAMA_MIN_SPREAD = 50; // % — חל בדגמים 1–5 (ס' 12.2.4ז)
+
+// ── Table 5: designation (ייעוד) filter + order ──
+// Kept per parsed table (WeakMap) so it never carries over to another plan; persisted per plan in
+// localStorage only on user action. Menu handlers take indexes (designation names contain quotes).
+const _t5YiudViews=new WeakMap();
+let _t5YiudList=[];        // designations in current view order
+let _t5YiudDragFrom=-1;
+function _t5YiudOfRows(rows){ const r=(rows||[]).find(x=>x.yiud); return r?r.yiud:''; }
+function _t5YiudInfo(){
+  const t5=state.table5; if(!t5) return {names:[],count:{}};
+  const groups=t5.__groups||{}, rowsOf=n=>groups[n]?groups[n].rows:t5[n];
+  const nums=(t5.__order&&t5.__order.length)?t5.__order.filter(n=>t5[n]||groups[n]):Object.keys(t5);
+  const names=[], count={};
+  for(const n of nums){
+    const y=_t5YiudOfRows(rowsOf(n));
+    if(!(y in count)){ count[y]=0; names.push(y); }
+    count[y]+=groups[n]?groups[n].nums.length:1;
+  }
+  return {names,count};
+}
+function _t5YiudKey(){
+  const shp=state.files&&state.files.shp&&state.files.shp[0];
+  const k=_projPlanNumber()||(shp&&shp.name)||'';
+  return k?'tasrit_t5yiud:'+k:null;
+}
+function _t5YiudView(){
+  const t5=state.table5; if(!t5) return {order:[],hidden:new Set()};
+  let v=_t5YiudViews.get(t5);
+  if(!v){
+    v={order:[],hidden:new Set()};
+    const key=_t5YiudKey();
+    if(key){ try{
+      const s=JSON.parse(localStorage.getItem(key)||'null');
+      if(s){ v.order=Array.isArray(s.order)?s.order:[]; v.hidden=new Set(Array.isArray(s.hidden)?s.hidden:[]); }
+    }catch(e){} }
+    _t5YiudViews.set(t5,v);
+  }
+  return v;
+}
+function _t5YiudSave(){
+  const v=_t5YiudView(), key=_t5YiudKey(); if(!key) return;
+  try{ localStorage.setItem(key,JSON.stringify({order:v.order,hidden:[...v.hidden]})); }catch(e){}
+}
+// Saved order first (designations still in the table), then any others in source order
+function _t5YiudOrdered(names){
+  const v=_t5YiudView();
+  return [...v.order.filter(y=>names.includes(y)), ...names.filter(y=>!v.order.includes(y))];
+}
+function _t5YiudMenuRender(){
+  const box=document.getElementById('t5-yiud-list'); if(!box) return;
+  const {names,count}=_t5YiudInfo(), v=_t5YiudView();
+  _t5YiudList=_t5YiudOrdered(names);
+  const shown=_t5YiudList.filter(y=>!v.hidden.has(y)).length;
+  const lbl=document.getElementById('t5-yiud-count');
+  if(lbl) lbl.textContent=shown===_t5YiudList.length?'':`(${shown}/${_t5YiudList.length})`;
+  const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const st=box.scrollTop, last=_t5YiudList.length-1;
+  box.innerHTML=_t5YiudList.map((y,i)=>{
+    const yc=_yiudColor(y);
+    return `<div class="t5y-row" draggable="true" ondragstart="_t5YiudDrag(event,${i})" ondragover="event.preventDefault()" ondrop="_t5YiudDrop(event,${i})">`
+      +`<span class="t5y-grip" title="גררו לשינוי הסדר">⋮⋮</span>`
+      +`<input type="checkbox" ${v.hidden.has(y)?'':'checked'} onchange="_t5YiudSet(${i},this.checked)">`
+      +`<span class="t5y-sw" style="background:${yc?yc.bg:'transparent'}"></span>`
+      +`<span class="t5y-name">${esc(y||'(ללא ייעוד)')}</span>`
+      +`<span class="t5y-cnt" title="מספר תאי שטח">${count[y]}</span>`
+      +`<button class="t5y-mv" onclick="_t5YiudMove(${i},-1)" ${i===0?'disabled':''} title="למעלה">▲</button>`
+      +`<button class="t5y-mv" onclick="_t5YiudMove(${i},1)" ${i===last?'disabled':''} title="למטה">▼</button>`
+      +`</div>`;
+  }).join('');
+  box.scrollTop=st;
+}
+function _t5YiudToggle(force){
+  const m=document.getElementById('t5-yiud-menu'); if(!m) return;
+  const on=force!==undefined?force:!m.classList.contains('vis');
+  if(on) _t5YiudMenuRender();
+  m.classList.toggle('vis',on);
+}
+function _t5YiudChanged(){ _t5YiudSave(); _t5YiudMenuRender(); _t5Refresh(); }
+function _t5YiudSet(i,on){
+  const y=_t5YiudList[i]; if(y===undefined) return;
+  const v=_t5YiudView(); if(on) v.hidden.delete(y); else v.hidden.add(y);
+  _t5YiudChanged();
+}
+function _t5YiudAll(on){ const v=_t5YiudView(); v.hidden=on?new Set():new Set(_t5YiudList); _t5YiudChanged(); }
+function _t5YiudReset(){ const v=_t5YiudView(); v.order=[]; v.hidden=new Set(); _t5YiudChanged(); }
+function _t5YiudMove(i,d){
+  const j=i+d; if(j<0||j>=_t5YiudList.length) return;
+  const a=_t5YiudList.slice(); [a[i],a[j]]=[a[j],a[i]];
+  _t5YiudView().order=a; _t5YiudChanged();
+}
+function _t5YiudDrag(e,i){ _t5YiudDragFrom=i; try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',String(i)); }catch(x){} }
+function _t5YiudDrop(e,i){
+  e.preventDefault();
+  const f=_t5YiudDragFrom; _t5YiudDragFrom=-1;
+  if(f<0||f===i) return;
+  const a=_t5YiudList.slice(); const [y]=a.splice(f,1); a.splice(i,0,y);
+  _t5YiudView().order=a; _t5YiudChanged();
+}
+document.addEventListener('mousedown',e=>{ // close the menu on an outside click
+  const m=document.getElementById('t5-yiud-menu'), w=document.getElementById('t5-yiud-wrap');
+  if(m&&m.classList.contains('vis')&&w&&!w.contains(e.target)) m.classList.remove('vis');
+});
 
 function _t5Refresh(){
   if(document.getElementById('t5-panel').classList.contains('vis'))
