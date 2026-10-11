@@ -1858,7 +1858,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 // ── App version — bump on EVERY deploy (date + that day's deploy number), so the
 //    user and Claude can confirm they're looking at the same build. Shown in the
 //    map toolbar and the loading-page footer.
-const APP_VERSION='2026.10.07-1';
+const APP_VERSION='2026.10.11-1';
 // Version of the road-network DETECTION ALGORITHM only — bump when _rnDetect's
 // output changes, so a network saved from an older run is flagged as stale
 // (networks are saved per project and are NOT re-detected on load).
@@ -8924,7 +8924,124 @@ const SETTLEMENT_DB = {
   'קרית עקרון':[5,0,0],
   'יקנעם':[4,0,0],
   'בסמה':[5,0,0],
+  // ── יישובים קטנים (מתחת ל-2,000 בלמ"ס) שיש להם כוללנית מאושרת — דגם לפי הצפי; אזור ההפחתה משוער, יש לאמת ──
+  'דריג\'את':[6,0,2],
+  'מולדה':[5,0,2],
+  'מכחול':[6,0,2],
+  'ואדי אל נעם':[5,0,2],
+  'יסוד המעלה':[5,0,1],
+  'עין אל אסד':[7,0,1],
+  'ריחאניה':[7,0,1],
 };
+
+// צפי אוכלוסייה מתוכניות כוללניות מאושרות (לתמ"א 35/4) — נוצר ע"י tools/kolelanit/build_final.py
+// מפתח = שם היישוב כמו ב-SETTLEMENT_DB. pop = צפי (נפש); year = שנת יעד (null אם לא צוינה); nominal = קיבולת נומינלית (אם צוינה).
+// לא כולל מועצות אזוריות. ודאות (conf) 'low'/'medium' — לבדוק ידנית לפני שימוש.
+const COMP_FORECAST = {
+  "אבו גוש":{"pop": 10000, "year": 2030, "plan": "152-0150664", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": null},
+  "אבו סנאן":{"pop": 26500, "year": null, "plan": "252-0411314", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": 59000},
+  "אבו תלול":{"pop": 17000, "year": 2030, "plan": "28/ 02/ 111", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": 17000},
+  "אום אל-פחם":{"pop": 80000, "year": 2030, "plan": "354-0247221", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": 209000},
+  "אום בטין":{"pop": 11100, "year": 2024, "plan": "28/ 02/ 108", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "אור עקיבא":{"pop": 35000, "year": 2030, "plan": "353-0135988", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "אילת":{"pop": 100000, "year": 2030, "plan": "2/ 02/ 270", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "אכסאל":{"pop": 20000, "year": 2020, "plan": "ג/ 16578", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": null},
+  "באקה אל-גרביה":{"pop": 47200, "year": 2040, "plan": "354-0717298", "basis": "טווח — הערך העליון", "conf": "medium", "nominal": null},
+  "באר יעקב":{"pop": 85000, "year": null, "plan": "455-0557835", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": null},
+  "באר שבע":{"pop": 280000, "year": 2030, "plan": "605-0145763", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": 401000},
+  "בוקעאתא":{"pop": 10000, "year": null, "plan": "256-0433664", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": 20000},
+  "ביר אל-מכסור":{"pop": 13500, "year": 2020, "plan": "ג/ 14093", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": null},
+  "ביר הדאג'":{"pop": 8700, "year": 2020, "plan": "28/ 02/ 103", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": 12500},
+  "בית ג'ן":{"pop": 20000, "year": 2040, "plan": "ג/ 20099", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "בית דגן":{"pop": 19000, "year": null, "plan": "455-0685917", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "בית שאן":{"pop": 28000, "year": null, "plan": "203-0293993", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": 37000},
+  "בני ברק":{"pop": 230000, "year": 2035, "plan": "501-0308296", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "בסמת טבעון":{"pop": 13000, "year": 2040, "plan": "257-0458935", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "ג'ולס":{"pop": 9250, "year": null, "plan": "252-0571828", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "ג'לג'וליה":{"pop": 13500, "year": null, "plan": "מח/ 255", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "ג'סר א-זרקא":{"pop": 24000, "year": null, "plan": "353-0191023", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": 24000},
+  "ג'ת":{"pop": 18900, "year": 2040, "plan": "354-0717280", "basis": "טווח — הערך העליון", "conf": "medium", "nominal": null},
+  "גבעת שמואל":{"pop": 55000, "year": 2040, "plan": "427-0419887", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "גדרה":{"pop": 40000, "year": null, "plan": "453-0340554", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": null},
+  "גני תקווה":{"pop": 32000, "year": null, "plan": "429-0479022", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "דאלית אל-כרמל":{"pop": 85300, "year": null, "plan": "356-0327999", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": 129400},
+  "דימונה":{"pop": 80000, "year": 2020, "plan": "25/ 02/ 101/ 33", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "הוד השרון":{"pop": 145000, "year": 2040, "plan": "הר/ 2050", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "זכרון יעקב":{"pop": 42000, "year": null, "plan": "353-0440131", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": 50900},
+  "חדרה":{"pop": 130000, "year": 2030, "plan": "חד/ 2020", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": 185000},
+  "חורפיש":{"pop": 21000, "year": null, "plan": "258-0559989", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": null},
+  "חיפה":{"pop": 330000, "year": 2025, "plan": "חפ/ 2000", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "חצור הגלילית":{"pop": 18000, "year": 2030, "plan": "ג/ 18771", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": 20000},
+  "חריש":{"pop": 65000, "year": null, "plan": "307-1161603", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "טבריה":{"pop": 60000, "year": 2025, "plan": "ג/ 18071", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": 60000},
+  "טורעאן":{"pop": 21800, "year": null, "plan": "251-0588962", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "טייבה":{"pop": 45550, "year": 2020, "plan": "טב/ 3400", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "טירה":{"pop": 38000, "year": 2030, "plan": "מח/ 281", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "טמרה":{"pop": 50000, "year": 2020, "plan": "ג/ 15756", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": null},
+  "יאנוח-ג'ת":{"pop": 7600, "year": 2030, "plan": "ג/ 18234", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "יבנה":{"pop": 105000, "year": 2035, "plan": "404-0273557", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "יפיע":{"pop": 30000, "year": null, "plan": "ג/16465", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": null},
+  "יקנעם עילית":{"pop": 34000, "year": 2030, "plan": "ג/ 20861", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": 36500},
+  "ירוחם":{"pop": 20000, "year": null, "plan": "26/ 02/ 122", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": null},
+  "ירכא":{"pop": 30000, "year": null, "plan": "ג/ 19522", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "כסרא-סמיע":{"pop": 13300, "year": 2040, "plan": "255-0856096", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "כפר ברא":{"pop": 6000, "year": 2030, "plan": "ק/ 1000/ 1", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": null},
+  "כפר יאסיף":{"pop": 19500, "year": null, "plan": "252-0411306", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": 44000},
+  "כפר כנא":{"pop": 76300, "year": null, "plan": "257-0451971", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": 79200},
+  "כפר מנדא":{"pop": 46000, "year": null, "plan": "261-0701052", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": 77000},
+  "כפר קאסם":{"pop": 40000, "year": 2020, "plan": "ק/ 3000/ 2", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "כפר קרע":{"pop": 45000, "year": 2040, "plan": "354-0431924", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": null},
+  "כרמיאל":{"pop": 124000, "year": null, "plan": "208-0773416", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "להבים":{"pop": 10000, "year": null, "plan": "16 /02 /101 /5", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": null},
+  "מבשרת ציון":{"pop": 42000, "year": 2040, "plan": "152-0406082", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": null},
+  "מגאר":{"pop": 20353, "year": 2020, "plan": "ג/ 13365", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "מגדל העמק":{"pop": 50000, "year": null, "plan": "221-0201715", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "מזכרת בתיה":{"pop": 32000, "year": null, "plan": "453-0465849", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "מיתר":{"pop": 27400, "year": null, "plan": "615-0723064", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": 27000},
+  "מצפה רמון":{"pop": 8500, "year": 2030, "plan": "27/ 02/ 101/ 27", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": 17200},
+  "משהד":{"pop": 16000, "year": 2035, "plan": "257-0588475", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "נהריה":{"pop": 75000, "year": null, "plan": "ג/21011", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "נוף הגליל":{"pop": 80000, "year": 2035, "plan": "212-0137604", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": 100000},
+  "נחף":{"pop": 22000, "year": null, "plan": "260-0682690", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "נצרת":{"pop": 97000, "year": 2020, "plan": "ג/ 11810", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": 100000},
+  "עילוט":{"pop": 19500, "year": null, "plan": "257-0708586", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": 42000},
+  "עין מאהל":{"pop": 21000, "year": 2035, "plan": "257-0713719", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": 37300},
+  "עכו":{"pop": 85000, "year": null, "plan": "ג/ 21535", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "עפולה":{"pop": 233000, "year": null, "plan": "215-0898114", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": 233000},
+  "ערערה":{"pop": 34000, "year": 2035, "plan": "354-0207621", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": 68925},
+  "עתלית":{"pop": 17100, "year": 2030, "plan": "303-0161620", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": 24450},
+  "פוריידיס":{"pop": 22000, "year": 2035, "plan": "353-0271387", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "פקיעין (בוקייעה)":{"pop": 9500, "year": 2035, "plan": "258-0466565", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": 12000},
+  "פרדס חנה-כרכור":{"pop": 55000, "year": 2030, "plan": "353-0138586", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": null},
+  "צפת":{"pop": 60000, "year": null, "plan": "ג/ 12617", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "קיסריה":{"pop": 12500, "year": 2035, "plan": "303-0368142", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": 13280},
+  "קלנסווה":{"pop": 25700, "year": 2020, "plan": "מח/ 276", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "קצרין":{"pop": 23000, "year": null, "plan": "ג/ 19968", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "קריית טבעון":{"pop": 26500, "year": 2040, "plan": "306-0465591", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "קרית אונו":{"pop": 81000, "year": 2040, "plan": "508-0643635", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "קרית גת":{"pop": 250200, "year": null, "plan": "606-0670539", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "קרית ים":{"pop": 58500, "year": null, "plan": "352-0203034", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": 85000},
+  "קרית עקרון":{"pop": 30000, "year": null, "plan": "453-0440164", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": 30000},
+  "ראמה":{"pop": 10000, "year": 2035, "plan": "260-0343491", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": 17500},
+  "ריינה":{"pop": 35000, "year": null, "plan": "257-0440123", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": null},
+  "רכסים":{"pop": 35000, "year": 2035, "plan": "355-0449710", "basis": "טווח — הערך העליון", "conf": "high", "nominal": null},
+  "רעננה":{"pop": 120000, "year": 2035, "plan": "רע/ 3000", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "שבלי - אום אל-גנם":{"pop": 8100, "year": 2020, "plan": "ג/ 15656", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "שגב-שלום":{"pop": 50000, "year": 2035, "plan": "7/ 02/ 220/ 25", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": null},
+  "שוהם":{"pop": 35000, "year": null, "plan": "421-0485961", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null},
+  "שלומי":{"pop": 27000, "year": null, "plan": "255-0646158", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": 27000},
+  "שפרעם":{"pop": 90800, "year": null, "plan": "261-0345462", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": 90800},
+  "תל אביב-יפו":{"pop": 500000, "year": 2025, "plan": "תא/ 5000", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": 650000},
+  "תל שבע":{"pop": 30000, "year": 2025, "plan": "7/ 02/ 172/ 15", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": 40000},
+  "דריג'את":{"pop": 2055, "year": 2025, "plan": "28/ 02/ 110", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": 2955, "small": true},
+  "מולדה":{"pop": 7700, "year": 2025, "plan": "28/ 02/ 109", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": 11550, "small": true},
+  "מכחול":{"pop": 4700, "year": 2030, "plan": "28/ 02/ 104/ 1", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": 6300, "small": true},
+  "ואדי אל נעם":{"pop": 14000, "year": null, "plan": "699-0669481", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": null, "small": true},
+  "יסוד המעלה":{"pop": 6500, "year": null, "plan": "259-0394601", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null, "small": true},
+  "עין אל אסד":{"pop": 1650, "year": null, "plan": "209-0226175", "basis": "יעד/צפי מוצהר", "conf": "high", "nominal": null, "small": true},
+  "ריחאניה":{"pop": 1950, "year": null, "plan": "209-0928762", "basis": "יעד/צפי מוצהר", "conf": "medium", "nominal": null, "small": true},
+};
+
 
 // ערכי לוח 1 — שינוי 4 לתמ"א 35 (אומת מול נוסח המשולב יוני 2022)
 // הפחתה 20%: מחוז צפון + נפת באר שבע (ס' 12.2.4ג)
@@ -9160,6 +9277,7 @@ function _renderTamaPanel(){
                  max-height:180px;overflow-y:auto"></div>
           </div>
           ${siteZoneNote?`<div style="font-size:10px;color:#e6a817;margin-top:3px">${siteZoneNote} — בדוק הגדרת הפחתה למטה</div>`:''}
+          ${_tamaCompNote()}
         </div>
         <div class="tama-ig" style="flex:1;min-width:160px;max-width:220px">
           <label>צפי אוכלוסייה ביישוב</label>
@@ -9175,7 +9293,7 @@ function _renderTamaPanel(){
           <div style="font-size:10px;margin-top:3px;line-height:1.4;color:${TAMA.projPop!=null?'#e6a817':'#6688aa'}">
             ${TAMA.projPop!=null
               ? `דגם ${TAMA.model} חושב לפי הצפי שהוזן`
-              : (TAMA.site?'ריק = דגם לפי נתוני למ"ס 2022':'הזן לקביעת דגם לפי צפי')}
+              : (TAMA.site?(_compOf(TAMA.site)?'ריק = דגם לפי הכוללנית המאושרת':'ריק = דגם לפי נתוני למ"ס 2022'):'הזן לקביעת דגם לפי צפי')}
           </div>
         </div>
       </div>
@@ -9673,7 +9791,9 @@ function _tamaSiteFilter(q){
     const s=SETTLEMENT_DB[n];
     const zTag=s[2]===1?'<span style="font-size:9px;color:#6ab0c8;margin-right:4px">צפון</span>'
               :s[2]===2?'<span style="font-size:9px;color:#e6a817;margin-right:4px">דרום</span>':'';
-    const mTag=`<span style="font-size:9px;color:#7899bb">דגם ${s[0]}${s[1]?' · גרעין מטרופוליני':''}</span>`;
+    const cf=_compOf(n);
+    const mTag=`<span style="font-size:9px;color:#7899bb">דגם ${cf?_modelFromPop(cf.pop,s[1]===1):s[0]}${s[1]?' · גרעין מטרופוליני':''}</span>`
+      +(cf?'<span style="font-size:9px;color:#7ecf9a;margin-right:4px">צפי כוללנית</span>':'');
     return `<div data-si="${i}" style="padding:6px 10px;cursor:pointer;font-size:12px;color:#ccd;border-bottom:1px solid #2d4060;display:flex;align-items:center;gap:8px">
       <span style="flex:1">${n}</span>${zTag}${mTag}</div>`;
   }).join('');
@@ -9685,6 +9805,11 @@ function _tamaSiteFilter(q){
     el.addEventListener('mouseout',()=>el.style.background='');
   });
 }
+
+// חיפוש צפי כוללנית לפי שם יישוב, בלי תלות ברווחים/מקפים/גרשיים (תל אביב -יפו = תל אביב-יפו)
+const _compNorm=s=>String(s).replace(/[\s'"׳״\-–]/g,'');
+const _COMP_IDX=(()=>{const m={};for(const k in COMP_FORECAST) m[_compNorm(k)]=COMP_FORECAST[k];return m;})();
+function _compOf(n){ return n?(COMP_FORECAST[n]||_COMP_IDX[_compNorm(n)]||null):null; }
 
 function _modelFromPop(pop, metro){
   if(metro) return 1;
@@ -9715,7 +9840,30 @@ function _tamaApplySite(name){
   TAMA.model=s[0];
   TAMA.intensive=s[1]===1;
   TAMA.deduction=s[2]===0?0:20;
+  // יישוב עם תוכנית כוללנית מאושרת — הדגם נקבע לפי הצפי שבכוללנית ולא לפי למ"ס
+  const c=_compOf(name);
+  if(c) TAMA.model=_modelFromPop(c.pop,s[1]===1);
   _renderTamaPanel();
+}
+
+// הערת "צפי מכוללנית" ליישוב שנבחר: מה הצפי, מאיזו תוכנית, ומה היה הדגם לפי למ"ס
+function _tamaCompNote(){
+  const c=TAMA.site&&_compOf(TAMA.site);
+  if(!c) return '';
+  const s=SETTLEMENT_DB[TAMA.site]||[0,0,0], metro=s[1]===1;
+  const fmt=n=>n.toLocaleString('he-IL');
+  const mComp=_modelFromPop(c.pop,metro);
+  const cbs=c.small?'':` · לפי למ"ס: דגם ${s[0]}`;
+  const yr=c.year?` · שנת יעד ${c.year}${c.year<2026?' (חלפה)':''}`:'';
+  let h=`<div style="font-size:10px;margin-top:4px;line-height:1.5;color:#7ecf9a">
+    ✓ כוללנית מאושרת (${c.plan}): צפי ${fmt(c.pop)} נפש${yr} → <b>דגם ${mComp}</b>${cbs}`;
+  if(c.nominal){
+    const mNom=_modelFromPop(c.nominal,metro);
+    h+=`<br>קיבולת נומינלית ${fmt(c.nominal)} נפש → דגם ${mNom}`+(mNom!==mComp?` <button onclick="_tamaSetProjPop(${c.nominal})" style="background:none;border:1px solid #4a7a5a;color:#7ecf9a;border-radius:4px;cursor:pointer;font-size:10px;padding:1px 6px">חשב לפי הקיבולת</button>`:'');
+  }
+  if(c.conf&&c.conf!=='high') h+=`<br><span style="color:#e6a817">ודאות החילוץ ${c.conf==='medium'?'בינונית':'נמוכה'} — כדאי לוודא מול התקנון</span>`;
+  if(c.small) h+=`<br><span style="color:#e6a817">יישוב קטן שאינו במסד למ"ס — אזור ההפחתה משוער, יש לאמת</span>`;
+  return h+'</div>';
 }
 
 function _tamaSyncFromPR(){
