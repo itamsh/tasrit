@@ -562,7 +562,10 @@ body.theme-light .fv2-cell{border-color:#c8d8ea}
 .fv2-mk-btn.active{background:#1a3a5a;border-color:#4a8acc;color:#88ccff;font-weight:bold}
 .fv2-mixed-btn{background:none;border:1px dashed #2a4a30;color:#4a7a50;border-radius:3px;padding:2px 8px;font-size:10px;cursor:pointer;margin-top:5px;width:100%}
 .fv2-mixed-btn.active{background:#0a1a0a;border-color:#4a8a4a;color:#6acc6a;font-weight:600}
-#grid-angle-strip{position:fixed;z-index:300;background:#141e2e;border:1px solid #2d4060;border-radius:8px;padding:6px 10px 6px 8px;display:none;align-items:center;gap:8px;box-shadow:0 4px 12px rgba(0,0,0,.5);transition:opacity .15s}
+/* Grid tilt: an inline row inside the layers menu, directly under the grid item (shown while the grid is on).
+   It used to be a floating box placed under the grid button — which now lives INSIDE the menu, so the box
+   landed behind it (z-index 300 < 400) and the next click on the map hid it for good. */
+#grid-angle-strip{display:none;align-items:center;gap:8px;padding:3px 14px 7px 12px;direction:rtl}
 #grid-angle-strip.vis{display:flex}
 .gas-track{position:relative;width:80px;height:4px;background:#1e2e44;border-radius:2px;cursor:pointer;flex-shrink:0}
 .gas-track::before{content:'';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:1px;height:8px;background:#2d4060}
@@ -1254,6 +1257,13 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
         <div class="tb-menu" id="tb-layers-menu">
           <button class="tb-btn tb-mi tb-chk active" id="btn-labels" onclick="toggleLabels()" title="הצג/הסתר תגיות תאי שטח">תגיות תאי שטח</button>
           <button class="tb-btn tb-mi tb-chk" id="btn-grid" onclick="toggleGrid()" title="הצג/הסתר רשת 100מ׳">גריד 100 מ׳</button>
+          <div id="grid-angle-strip" title="הטיית הגריד — גרור את העיגול, או לחץ על הפס">
+            <span style="font-size:10.5px;color:#7a92aa;user-select:none;white-space:nowrap">↻ הטיית הגריד</span>
+            <div class="gas-track" id="gas-track">
+              <div class="gas-knob" id="gas-knob"></div>
+            </div>
+            <span class="gas-lbl" id="gas-lbl">0°</span>
+          </div>
           <button class="tb-btn tb-mi tb-chk" id="btn-cadastre" onclick="toggleCadastre()" title="הצג/הסתר גושים וחלקות (המרכז למיפוי ישראל, דרך GovMap)">גושים וחלקות</button>
           <div class="tb-msep"></div>
           <button class="tb-btn tb-mi" id="btn-basemap" onclick="_tbLayersClose();_bmTogglePanel()" title="מפת רקע גאוגרפית (תצלום אוויר / רחובות)">🌍 מפת רקע…</button>
@@ -1394,15 +1404,6 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
         </div>
       </div>
     </div>
-  </div>
-
-  <!-- Grid angle strip -->
-  <div id="grid-angle-strip">
-    <span style="font-size:10px;color:#5a7a9a;user-select:none">זווית</span>
-    <div class="gas-track" id="gas-track">
-      <div class="gas-knob" id="gas-knob"></div>
-    </div>
-    <span class="gas-lbl" id="gas-lbl">0°</span>
   </div>
 
   <!-- Layer opacity strip -->
@@ -1858,7 +1859,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 // ── App version — bump on EVERY deploy (date + that day's deploy number), so the
 //    user and Claude can confirm they're looking at the same build. Shown in the
 //    map toolbar and the loading-page footer.
-const APP_VERSION='2026.10.11-1';
+const APP_VERSION='2026.10.14-1';
 // Version of the road-network DETECTION ALGORITHM only — bump when _rnDetect's
 // output changes, so a network saved from an older run is flagged as stale
 // (networks are saved per project and are NOT re-detected on load).
@@ -3458,10 +3459,18 @@ function _tbSync(){
 function _tbLayersToggle(ev){
   ev&&ev.stopPropagation();
   const m=document.getElementById('tb-layers-menu'), b=document.getElementById('btn-layers');
-  if(m.classList.toggle('vis')){ const r=b.getBoundingClientRect(); m.style.top=(r.bottom+4)+'px'; m.style.left=Math.max(6,r.right-m.offsetWidth)+'px'; }
+  if(m.classList.toggle('vis')){ _gasSync(); _tbPlaceLayersMenu(); }
+}
+// Anchor the menu's right edge to the "שכבות" button. Re-run whenever its width can change
+// (the grid-tilt row appears/disappears with the grid) so it never spills off-screen.
+function _tbPlaceLayersMenu(){
+  const m=document.getElementById('tb-layers-menu'), b=document.getElementById('btn-layers'); if(!m||!b) return;
+  const r=b.getBoundingClientRect();
+  m.style.top=(r.bottom+4)+'px'; m.style.left=Math.max(6,r.right-m.offsetWidth)+'px';
 }
 function _tbLayersClose(){ const m=document.getElementById('tb-layers-menu'); if(m) m.classList.remove('vis'); }
-document.addEventListener('click',e=>{ if(!e.target.closest('#tb-layers')) _tbLayersClose(); });
+let _tbKeepOpenUntil=0;   // set when a knob drag ends outside the menu (its click must not close the menu)
+document.addEventListener('click',e=>{ if(Date.now()<_tbKeepOpenUntil) return; if(!e.target.closest('#tb-layers')) _tbLayersClose(); });
 setInterval(()=>{ try{ if(_mapVisible()) _tbSync(); }catch(e){} },400);
 addEventListener('resize',()=>{ try{ _tbSync(); }catch(e){} });
 
@@ -5712,22 +5721,17 @@ function _drawDensityLegend(){
 function toggleGrid(){
   state.gridVisible=!state.gridVisible;
   document.getElementById('btn-grid').classList.toggle('active',state.gridVisible);
-  const strip=document.getElementById('grid-angle-strip');
-  if(state.gridVisible){
-    strip.classList.add('vis');
-    _positionGridStrip();
-    _updateGasKnob();
-  } else {
-    strip.classList.remove('vis');
-  }
+  _gasSync();
   redraw();
 }
-function _positionGridStrip(){
-  const btn=document.getElementById('btn-grid');
+// Tilt row visible exactly while the grid is on; knob position follows state.gridAngle
+// (which a project load can change while the menu is closed — so also called on menu open)
+function _gasSync(){
   const strip=document.getElementById('grid-angle-strip');
-  const r=btn.getBoundingClientRect();
-  strip.style.top=(r.bottom+6)+'px';
-  strip.style.left=Math.max(4,r.left+r.width/2-90)+'px';
+  if(strip) strip.classList.toggle('vis',!!state.gridVisible);
+  _updateGasKnob();
+  const m=document.getElementById('tb-layers-menu');
+  if(m&&m.classList.contains('vis')) _tbPlaceLayersMenu();   // menu width just changed
 }
 function _updateGasKnob(){
   const angle=state.gridAngle||0;
@@ -5749,7 +5753,7 @@ function _updateGasKnob(){
     _updateGasKnob(); redraw();
   });
   window.addEventListener('mouseup',()=>{
-    if(drag.active){drag.active=false; knob.classList.remove('dragging');}
+    if(drag.active){drag.active=false; knob.classList.remove('dragging'); _tbKeepOpenUntil=Date.now()+300;}
   });
   // Touch support
   knob.addEventListener('touchstart',e=>{
@@ -5771,10 +5775,6 @@ function _updateGasKnob(){
     const pct=Math.max(0,Math.min(1,(e.clientX-r.left)/80));
     state.gridAngle=parseFloat(((pct*90-45)).toFixed(1));
     _updateGasKnob(); redraw();
-  });
-  // Click/drag on map → hide strip only (grid stays on)
-  document.getElementById('c').addEventListener('mousedown',()=>{
-    document.getElementById('grid-angle-strip').classList.remove('vis');
   });
 }());
 function drawGrid(){
