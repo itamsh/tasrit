@@ -301,7 +301,9 @@ canvas{position:absolute;top:0;left:0;display:block}
 #map-page.t5-split #main-area{order:1;min-height:150px}
 #map-page.t5-split.t5-split-top #t5-panel{order:1}
 #map-page.t5-split.t5-split-top #main-area{order:3}
-.t5v-tbl tr.t5v-hl td{box-shadow:inset 0 0 0 9999px rgba(255,214,0,.30)}
+.t5v-tbl tr.t5v-hl td,.t5v-tbl tr.t5v-pin td{box-shadow:inset 0 0 0 9999px rgba(255,214,0,.30)}
+.t5v-tbl tr.t5v-pin td.t5v-num{box-shadow:inset 0 0 0 9999px rgba(255,214,0,.55)}
+.t5v-tbl tr.t5v-pin td:first-child{box-shadow:inset 0 0 0 9999px rgba(255,214,0,.55),inset -4px 0 0 #e0a800}
 .t5v-tbl tr.t5v-hl td.t5v-num{box-shadow:inset 0 0 0 9999px rgba(255,214,0,.45)}
 #t5-hdr .tb-btn.on{background:#3a6090;color:#fff}
 .t5v-gfirst .t5v-calc-cell{border-top:2px solid #6a9acc!important}
@@ -1745,6 +1747,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
       </div>
       <button class="tb-btn" id="t5-calc-btn" onclick="_t5CalcToggle()" title="הצג/הסתר את העמודות שהממשק הוסיף בנוסחאות (אחרי הקו העבה)">➕ עמודות חישוב</button>
       <button class="tb-btn" id="t5-split-btn" onclick="_t5SplitToggle()" title="תצוגה מפוצלת: טבלה 5 + תשריט. ריחוף על שורה ממקד את התשריט בתא, וריחוף על תא בתשריט מקפיץ את השורה">⬒ תצוגה מפוצלת</button>
+      <button class="tb-btn" id="t5-pin-btn" onclick="_t5PinToggle()" style="display:none" title="קיבוע השורה: כשהשורה מקובעת, ריחוף על התשריט לא מזיז את הטבלה — אפשר לגלול אופקית בנחת. לחיצה על תא בתשריט מקבעת את השורה שלו">📌 קיבוע</button>
       <button class="tb-btn" id="t5-splitpos-btn" onclick="_t5SplitPos()" style="display:none" title="החלפת מיקום הטבלה: למעלה / למטה">⇅</button>
       <button class="tb-btn" onclick="closeTable5View()" style="background:#2c3e55">✕ חזרה לתשריט</button>
     </div>
@@ -1891,7 +1894,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 // ── App version — bump on EVERY deploy (date + that day's deploy number), so the
 //    user and Claude can confirm they're looking at the same build. Shown in the
 //    map toolbar and the loading-page footer.
-const APP_VERSION='2026.10.25-1';
+const APP_VERSION='2026.10.25-2';
 // Version of the road-network DETECTION ALGORITHM only — bump when _rnDetect's
 // output changes, so a network saved from an older run is flagged as stale
 // (networks are saved per project and are NOT re-detected on load).
@@ -4805,6 +4808,7 @@ function redraw(){
   _drawRachakLegend();
   _drawDensityLegend();
   _drawCMLegend();
+  _drawT5Flash();
   // Search highlight — blinking cyan border
   if(SRCH.highlightNum&&SRCH.blinkOn){
     const hf=state.layers.plan.features.find(f=>String(f.properties.NUM)===SRCH.highlightNum);
@@ -8529,6 +8533,7 @@ function _t5SetBody(html){
   _t5RowEls=new Map();
   b.querySelectorAll('tr[data-num]').forEach(tr=>{ const k=tr.dataset.num; if(!_t5RowEls.has(k)) _t5RowEls.set(k,[]); _t5RowEls.get(k).push(tr); });
   _t5KeyOf=null;
+  if(_t5PinKey&&_t5RowEls.has(_t5PinKey)) _t5RowEls.get(_t5PinKey).forEach(r=>r.classList.add('t5v-pin'));
 }
 // תא שטח (NUM) -> מפתח השורה בטבלה (שורת טווח "1–296" מכסה כמה תאים)
 function _t5RowKey(num){
@@ -8552,8 +8557,9 @@ function _t5ApplyLayout(){
   document.getElementById('main-area').style.display=on?'':'none';
   document.getElementById('toolbar').classList.toggle('t5-mode',!on);
   const sb=document.getElementById('t5-split-btn'); if(sb) sb.classList.toggle('on',on);
+  const pn=document.getElementById('t5-pin-btn'); if(pn) pn.style.display=on?'':'none';
   const pb=document.getElementById('t5-splitpos-btn'); if(pb){ pb.style.display=on?'':'none'; pb.textContent=T5_SPLIT.pos==='top'?'⇅ טבלה למעלה':'⇅ טבלה למטה'; }
-  if(!on) _t5HoverClear();
+  if(!on){ _t5HoverClear(); _t5Unpin(); }
   try{ resize(); }catch(e){}
 }
 function _t5CalcToggle(){ T5_SPLIT.calc=!T5_SPLIT.calc; _t5SplitSave(); _t5ApplyLayout(); }
@@ -8615,6 +8621,7 @@ function _t5FocusKey(key){
       document.querySelectorAll('#t5-body tr.t5v-hl').forEach(r=>r.classList.remove('t5v-hl'));
       (_t5RowEls.get(key)||[]).forEach(r=>r.classList.add('t5v-hl'));
       _t5FocusKey(key);
+      _t5FlashStart(_t5HoverSet);
     },150);
   });
   body.addEventListener('mouseleave',()=>{
@@ -8629,25 +8636,93 @@ function _t5MapHover(e){
   if(!T5_SPLIT.on||!state.table5||!state.layers.plan) return;
   if(!document.getElementById('t5-panel').classList.contains('vis')) return;
   if(typeof dragging!=='undefined'&&dragging) return;
-  const first=!_t5MapPending; _t5MapPending={x:e.clientX,y:e.clientY};
-  if(first) requestAnimationFrame(()=>{
-    const q=_t5MapPending; _t5MapPending=null; if(!q) return;
-    const rect=canvas.getBoundingClientRect();
-    const f=_hoverTipFeat(...cd(q.x-rect.left,q.y-rect.top));
-    const key=f?_t5RowKey(f.properties.NUM):null;
+  if(_t5PinKey) return; // שורה מקובעת — התשריט לא מזיז את הטבלה
+  _t5MapPending={x:e.clientX,y:e.clientY};
+  // השהיה קצרה: מעבר מהיר של העכבר מעל כמה תאים בדרך לטבלה לא מקפיץ אותה
+  clearTimeout(_t5MapTimer);
+  _t5MapTimer=setTimeout(()=>{
+    const q=_t5MapPending; _t5MapPending=null; if(!q||_t5PinKey) return;
+    const key=_t5KeyAt(q.x,q.y);
     if(key===_t5MapLast) return;
     _t5MapLast=key;
     document.querySelectorAll('#t5-body tr.t5v-hl').forEach(r=>r.classList.remove('t5v-hl'));
-    if(!key) return;
-    const rows=_t5RowEls.get(key); if(!rows||!rows.length) return;
-    rows.forEach(r=>r.classList.add('t5v-hl'));
-    const b=document.getElementById('t5-body'), br=b.getBoundingClientRect(), tr=rows[0].getBoundingClientRect();
-    const hdr=b.querySelector('thead')?b.querySelector('thead').offsetHeight:0;
-    const h=rows[rows.length-1].getBoundingClientRect().bottom-tr.top;
-    _t5SyncUntil=Date.now()+400;
-    b.scrollTop=b.scrollTop+(tr.top-br.top)-hdr-Math.max(0,(b.clientHeight-hdr-h)/2);
-  });
+    if(key) _t5ShowRow(key,'t5v-hl');
+  },180);
 }
+let _t5MapTimer=0, _t5PinKey=null;
+function _t5KeyAt(cx,cy){
+  const rect=canvas.getBoundingClientRect();
+  const f=_hoverTipFeat(...cd(cx-rect.left,cy-rect.top));
+  return f?_t5RowKey(f.properties.NUM):null;
+}
+// הדגשת שורה וגלילה אליה (למרכז אזור הטבלה)
+function _t5ShowRow(key,cls){
+  const rows=_t5RowEls.get(key); if(!rows||!rows.length) return;
+  rows.forEach(r=>r.classList.add(cls));
+  const b=document.getElementById('t5-body'), br=b.getBoundingClientRect(), tr=rows[0].getBoundingClientRect();
+  const hdr=b.querySelector('thead')?b.querySelector('thead').offsetHeight:0;
+  const h=rows[rows.length-1].getBoundingClientRect().bottom-tr.top;
+  _t5SyncUntil=Date.now()+400;
+  b.scrollTop=b.scrollTop+(tr.top-br.top)-hdr-Math.max(0,(b.clientHeight-hdr-h)/2);
+}
+function _t5Unpin(){
+  _t5PinKey=null;
+  document.querySelectorAll('#t5-body tr.t5v-pin').forEach(r=>r.classList.remove('t5v-pin'));
+  const b=document.getElementById('t5-pin-btn'); if(b) b.classList.remove('on');
+}
+function _t5PinKeyTo(key){
+  _t5Unpin(); if(!key) return;
+  document.querySelectorAll('#t5-body tr.t5v-hl').forEach(r=>r.classList.remove('t5v-hl'));
+  _t5PinKey=key; _t5ShowRow(key,'t5v-pin');
+  const b=document.getElementById('t5-pin-btn'); if(b) b.classList.add('on');
+}
+// כפתור הקיבוע: מקבע את השורה האחרונה שהודגשה / משחרר
+function _t5PinToggle(){
+  if(_t5PinKey){ _t5Unpin(); _t5MapLast=null; return; }
+  if(_t5MapLast) _t5PinKeyTo(_t5MapLast);
+  else _showToast('העבר את העכבר מעל תא בתשריט, ואז לחץ על "קיבוע" (או לחץ ישירות על התא)',3500);
+}
+// הבהוב צהוב זוהר סביב התא (נדלק ומתעמעם מעצמו)
+let _t5Flash=null;
+function _t5FlashStart(set){
+  if(!set||!set.size) return;
+  _t5Flash={set:new Set(set),t0:performance.now()};
+  const tick=()=>{ if(!_t5Flash) return; redraw(); if(performance.now()-_t5Flash.t0<1000) requestAnimationFrame(tick); else { _t5Flash=null; redraw(); } };
+  requestAnimationFrame(tick);
+}
+function _drawT5Flash(){
+  if(!_t5Flash||!state.layers.plan) return;
+  const t=performance.now()-_t5Flash.t0, HOLD=350, FADE=600;
+  const a=t<HOLD?1:Math.max(0,1-(t-HOLD)/FADE);
+  if(a<=0) return;
+  ctx.save();
+  ctx.lineJoin='round';
+  for(const f of state.layers.plan.features){
+    if(!f.geometry||!_t5Flash.set.has(String(f.properties.NUM))) continue;
+    const c=f.geometry.coordinates, polys=f.geometry.type==='Polygon'?[c]:c;
+    ctx.beginPath();
+    for(const poly of polys) for(const ring of poly){
+      ring.forEach((pt,i)=>{ const [x,y]=dc(pt[0],pt[1]); if(i) ctx.lineTo(x,y); else ctx.moveTo(x,y); });
+      ctx.closePath();
+    }
+    ctx.globalAlpha=a; ctx.shadowColor='#ffe600'; ctx.shadowBlur=22;
+    ctx.strokeStyle='#ffe600'; ctx.lineWidth=4; ctx.stroke();
+    ctx.shadowBlur=10; ctx.strokeStyle='#fff6a0'; ctx.lineWidth=2; ctx.stroke();
+  }
+  ctx.restore();
+}
+// לחיצה על תא בתשריט (בלי גרירה) מקבעת את השורה שלו בטבלה
+let _t5Down=null;
+wrap.addEventListener('mousedown',e=>{ _t5Down={x:e.clientX,y:e.clientY}; });
+wrap.addEventListener('mouseup',e=>{
+  if(!T5_SPLIT.on||!_t5Down||!state.table5||!state.layers.plan) return;
+  if(!document.getElementById('t5-panel').classList.contains('vis')) return;
+  if(e.target.closest&&e.target.closest('#map-tools,#info-panel,#legend')) return;
+  const d=Math.hypot(e.clientX-_t5Down.x,e.clientY-_t5Down.y); _t5Down=null;
+  if(d>4) return;
+  const key=_t5KeyAt(e.clientX,e.clientY);
+  if(key) _t5PinKeyTo(key); else _t5Unpin();
+});
 wrap.addEventListener('mousemove',_t5MapHover);
 wrap.addEventListener('mouseleave',()=>{ _t5MapLast=null; });
 
