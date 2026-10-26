@@ -400,6 +400,33 @@ body.theme-dark .t5v-env-cell{background:#0a2620!important;color:#8ff0d0!importa
 .det-val{font-weight:700;color:#223;white-space:nowrap;font-size:11px}
 .det-sep{border:none;border-top:1px solid #dde;margin:5px 0}
 .det-formula{color:#2471a3;font-size:10px;text-align:center;margin-top:3px;font-style:italic}
+/* שורה בפירוט תמ"א שלחיצה עליה מציגה את המגרשים בתשריט + חלונית המגרשים */
+.det-click{cursor:pointer;border-radius:4px;padding:1px 3px;margin:0 -3px;transition:background .12s}
+.det-click:hover{background:rgba(255,214,0,.28)}
+.det-click .det-lbl::after{content:" 🗺";font-size:11px}
+#tama-hl-panel{display:none;position:absolute;right:10px;top:10px;z-index:120;width:340px;max-height:calc(100% - 20px);flex-direction:column;background:#101a28;color:#dde;border:2px solid #ffd400;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.5);direction:rtl;font-size:12px;overflow:hidden}
+#tama-hl-panel .thl-hdr{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;background:#1c2a40;font-size:13px;line-height:1.3}
+#tama-hl-panel .thl-x{background:none;border:none;color:#ccd;font-size:22px;line-height:1;cursor:pointer;padding:0 4px}
+#tama-hl-panel .thl-sub{padding:6px 10px;color:#ffd400;font-size:11px;border-bottom:1px solid #2d4060;direction:rtl;unicode-bidi:plaintext}
+#tama-hl-panel .thl-tw{overflow:auto;flex:1;min-height:60px}
+#tama-hl-panel .thl-t{width:100%;border-collapse:collapse}
+#tama-hl-panel .thl-t th{position:sticky;top:0;background:#16233a;color:#9ab;font-weight:600;padding:4px 6px;text-align:right;font-size:11px}
+#tama-hl-panel .thl-t td{padding:3px 6px;border-bottom:1px solid rgba(128,150,180,.18);vertical-align:top}
+#tama-hl-panel .thl-t tbody tr{cursor:pointer}
+#tama-hl-panel .thl-t tbody tr:hover,#tama-hl-panel .thl-t tr.on{background:rgba(255,214,0,.22)}
+#tama-hl-panel .thl-t td.n{font-weight:700;direction:ltr;text-align:left;white-space:nowrap}
+#tama-hl-panel .thl-tag{font-size:9px;background:#8a6d00;color:#fff;border-radius:3px;padding:0 4px;white-space:nowrap}
+#tama-hl-panel .thl-foot{display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;padding:7px 10px;border-top:1px solid #2d4060;background:#16233a}
+#tama-hl-panel .thl-b{background:#24364f;border:1px solid #3a5070;color:#dde;border-radius:5px;padding:3px 7px;font-size:11px;cursor:pointer;margin-inline-start:4px}
+#tama-hl-panel .thl-b:hover{border-color:#ffd400}
+body.theme-light #tama-hl-panel{background:#fff;color:#223;border-color:#d9a900}
+body.theme-light #tama-hl-panel .thl-hdr{background:#f3f6fa}
+body.theme-light #tama-hl-panel .thl-x{color:#456}
+body.theme-light #tama-hl-panel .thl-sub{color:#8a6a00;border-color:#d9e2ee}
+body.theme-light #tama-hl-panel .thl-t th{background:#f3f6fa;color:#567}
+body.theme-light #tama-hl-panel .thl-foot{background:#f3f6fa;border-color:#d9e2ee}
+body.theme-light #tama-hl-panel .thl-b{background:#fff;border-color:#bfccdb;color:#223}
+@media (max-width:700px){#tama-hl-panel{width:auto;left:6px;right:6px;top:auto;bottom:6px;max-height:44%}}
 
 /* ===== PROGRAM PANEL ===== */
 #prog-panel{display:none;flex:1;flex-direction:column;overflow:hidden;background:#141e2c}
@@ -1894,7 +1921,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 // ── App version — bump on EVERY deploy (date + that day's deploy number), so the
 //    user and Claude can confirm they're looking at the same build. Shown in the
 //    map toolbar and the loading-page footer.
-const APP_VERSION='2026.10.26-2';
+const APP_VERSION='2026.10.26-3';
 // Version of the road-network DETECTION ALGORITHM only — bump when _rnDetect's
 // output changes, so a network saved from an older run is flagged as stale
 // (networks are saved per project and are NOT re-detected on load).
@@ -1933,6 +1960,7 @@ try{ const s=JSON.parse(localStorage.getItem('tasrit_t5split')||'null'); if(s){ 
 let _t5HoverSet=null; // תאים להדגשה בתשריט (ריחוף על שורה בטבלה 5)
 const TAMA={model:0,npdReg:3.2,npdSpec:1.5,normM2:null,intensive:false,densMode:1,deduction:0,spreadDenom:'norm',pct80:0,smallMax:80,smallAvg:null,site:'',projPop:null};
 const NORM={incFeat:null,codeOrder:null,showOutline:true,polyRing:null};
+let _tamaLast=null; // ערכי הביניים האחרונים של חישוב תמ"א (לכותרת חלונית המגרשים)
 const RE={
   active:false, finalized:false, visible:true,
   nodesVisible:true, edgesVisible:true, edgeDistVisible:true,
@@ -4847,6 +4875,7 @@ function redraw(){
     ctx.stroke();
     ctx.restore();
   }
+  try{ _drawTamaHL(); }catch(e){ console.error(e); } // מגרשי תמ"א 35/4 שהודגשו
 }
 
 function drawLabel(cx,cy,text,fs,color){
@@ -9567,6 +9596,7 @@ const TAMA_PUB_CODES = new Set([400,650,660,661,670,680,690,700,710,711,712,713,
 
 
 function openTamaView(){
+  try{ _tamaHLClose(); }catch(e){}
   if(document.getElementById('rn-panel').style.display==='flex') closeRoadNetPanel();
   if(document.getElementById('t5-panel').classList.contains('vis')) closeTable5View();
   document.getElementById('main-area').style.display='none';
@@ -9799,34 +9829,50 @@ const _RES_USE_RE=/מגורים|דיור/;
 
 // kind: 'useNotDes' = only cells counted by use although no row's designation is residential
 // (e.g. a "מבנים ומוסדות ציבור" or "תעסוקה" plot that also has a residential use row).
-function _calcNormDenomDunam(modeOverride,specialOnly,kind){
-  // Polygon-drawn area: use its geometric area directly (no zone-type filtering)
-  if(NORM.polyRing) return (specialOnly||kind)?null:_normPolyAreaM2(NORM.polyRing)/1000;
+// The Table 5 cells that count as residential for the given mode, with what made them count.
+// Returns Map(num → {yiud, uses[], units, desRes}).
+function _normResCells(modeOverride,specialOnly,kind){
   const mode=modeOverride!==undefined?modeOverride:TAMA.densMode;
-  if(!state.table5||!state.layers.plan) return null;
-  const resNums=new Set();
+  const out=new Map();
+  if(!state.table5) return out;
+  const isSum=r=>!r.shimush||/סך|סה/.test(r.shimush)||/סך|סה/.test(r.yiud);
   for(const [num,rows] of Object.entries(state.table5)){
-    let reg=false, spec=false, desRes=false;
+    let reg=false, spec=false, desRes=false, units=0;
+    const uses=new Set();
     for(const row of rows){
       const yiud=(row.yiud||'').trim();
       const shim=(row.shimush||'').trim();
+      const u=parseFloat((row.yihud||'').replace(/,/g,''));
       if(yiud.includes('מגורים')) desRes=true;
+      if(!isNaN(u)&&u>0&&(rows.length===1||!isSum(row))) units+=u;
+      let hit=false;
       if(mode===0){
-        if(shim.includes('מגורים')) reg=true;
-        else if(_RES_USE_RE.test(shim)) spec=true;
+        if(shim.includes('מגורים')){ reg=true; hit=true; }
+        else if(_RES_USE_RE.test(shim)){ spec=true; hit=true; }
         // שורה בלי שימוש מפורט, עם יח"ד, בייעוד של מגורים/דיור — עדיין מגורים
-        else if(!shim && parseFloat((row.yihud||'').replace(/,/g,''))>0 && _RES_USE_RE.test(yiud)) reg=true;
+        else if(!shim && u>0 && _RES_USE_RE.test(yiud)){ reg=true; hit=true; }
       }
-      else if(mode===1){ if(yiud.includes('מגורים')) reg=true; }
-      else if(/^מגורים( [א-ה]'?)?$/.test(yiud)||yiud==='דיור מיוחד') reg=true;
+      else if(mode===1){ if(yiud.includes('מגורים')){ reg=true; hit=true; } }
+      else if(/^מגורים( [א-ה]'?)?$/.test(yiud)||yiud==='דיור מיוחד'){ reg=true; hit=true; }
+      if(hit&&shim) uses.add(shim);
     }
     const q=specialOnly?(spec&&!reg):(reg||spec);
-    if(kind==='useNotDes'?(q&&!desRes):q) resNums.add(String(num));
+    if(kind==='useNotDes'?(q&&!desRes):q){
+      out.set(String(num),{yiud:((rows.find(r=>r.yiud)||{}).yiud)||'',uses:[...uses],units,desRes});
+    }
   }
+  return out;
+}
+
+function _calcNormDenomDunam(modeOverride,specialOnly,kind){
+  // Polygon-drawn area: use its geometric area directly (no zone-type filtering)
+  if(NORM.polyRing) return (specialOnly||kind)?null:_normPolyAreaM2(NORM.polyRing)/1000;
+  if(!state.table5||!state.layers.plan) return null;
+  const cells=_normResCells(modeOverride,specialOnly,kind);
   let totalM2=0;
   state.layers.plan.features.forEach((f,i)=>{
     if(NORM.incFeat&&!NORM.incFeat.has(i)) return;
-    if(resNums.has(String(f.properties.NUM||''))) totalM2+=_featureAreaM2(f);
+    if(cells.has(String(f.properties.NUM||''))) totalM2+=_featureAreaM2(f);
   });
   return totalM2>0?totalM2/1000:null;
 }
@@ -9898,6 +9944,7 @@ function _calcTama(){
   const spreadUseOnlyDunam=_calcNormDenomDunam(0,false,'useNotDes');
   const spreadDenomDunam=TAMA.spreadDenom==='plan'?totalPlanM2/1000:(TAMA.normM2!=null?TAMA.normM2/1000:null);
   const spreadPct=spreadDunam!=null&&spreadDenomDunam!=null&&spreadDenomDunam>0?spreadDunam/spreadDenomDunam*100:null;
+  _tamaLast={totalUnits,netDens,resDenomDunam,spreadDunam,spreadDenomDunam,spreadPct,sdName:TAMA.spreadDenom==='plan'?'שטח תוכנית':'שטח נורמטיבי'};
 
   // ── Adjusted thresholds (deduction reduces targets) ──
   const deductFactor=1-TAMA.deduction/100;
@@ -10014,13 +10061,15 @@ function _calcTama(){
 
   // ── Breakdown details per card ──
   const _dr=(lbl,val)=>`<div class="det-row"><span class="det-lbl">${lbl}</span><span class="det-val">${val}</span></div>`;
+  // שורה שלחיצה עליה מציגה את המגרשים שחושבו בתשריט
+  const _drHL=(lbl,val,key)=>`<div class="det-row det-click" onclick="_tamaShowPlots('${key}')" title="לחץ להצגת המגרשים שחושבו בתשריט"><span class="det-lbl">${lbl}</span><span class="det-val">${val}</span></div>`;
   const _dsep=`<hr class="det-sep">`;
 
   // Card 1 — net density
   let det0='';
   if(netDens!=null){
     det0+=_dr('סה"כ יח"ד (טבלה 5)', `${totalUnits.toLocaleString('he-IL')} יח"ד`);
-    det0+=_dr(`שטח מגורים [${modeNames[TAMA.densMode]}]`, `${resDenomDunam.toFixed(1)} ד'`);
+    det0+=_drHL(`שטח מגורים [${modeNames[TAMA.densMode]}]`, `${resDenomDunam.toFixed(1)} ד'`, 'dens');
     det0+=_dsep;
     det0+=`<div class="det-formula">${totalUnits.toLocaleString('he-IL')} ÷ ${resDenomDunam.toFixed(1)} ד' = ${netDens.toFixed(2)} יח"ד/ד'</div>`;
     if(TAMA.deduction>0&&effMinNet!=null)
@@ -10050,11 +10099,11 @@ function _calcTama(){
   let det2='';
   if(spreadPct!=null){
     const sdName=TAMA.spreadDenom==='plan'?'שטח תוכנית':'שטח נורמטיבי';
-    det2+=_dr('שטח מגורים (לפי שימוש — כל מגרש שיש בו שימוש מגורים/דיור)', `${spreadDunam.toFixed(1)} ד'`);
+    det2+=_drHL('שטח מגורים (לפי שימוש — כל מגרש שיש בו שימוש מגורים/דיור)', `${spreadDunam.toFixed(1)} ד'`, 'spread');
     if(spreadUseOnlyDunam!=null)
-      det2+=_dr('↳ מתוכו מגרשים שהייעוד שלהם אינו מגורים (ציבורי / מסחר / תעסוקה…) ויש בהם שימוש מגורים', `${spreadUseOnlyDunam.toFixed(1)} ד'`);
+      det2+=_drHL('↳ מתוכו מגרשים שהייעוד שלהם אינו מגורים (ציבורי / מסחר / תעסוקה…) ויש בהם שימוש מגורים', `${spreadUseOnlyDunam.toFixed(1)} ד'`, 'spreadUse');
     if(spreadSpecDunam!=null)
-      det2+=_dr('↳ מתוכו מגרשים עם דיור מיוחד/מוגן/להשכרה בלבד (בלי "מגורים")', `${spreadSpecDunam.toFixed(1)} ד'`);
+      det2+=_drHL('↳ מתוכו מגרשים עם דיור מיוחד/מוגן/להשכרה בלבד (בלי "מגורים")', `${spreadSpecDunam.toFixed(1)} ד'`, 'spreadSpec');
     det2+=_dr(`מכנה — ${sdName}`, `${spreadDenomDunam.toFixed(1)} ד'`);
     det2+=_dsep;
     det2+=`<div class="det-formula">${spreadDunam.toFixed(1)} ÷ ${spreadDenomDunam.toFixed(1)} × 100 = ${spreadPct.toFixed(2)}%</div>`;
@@ -10273,6 +10322,154 @@ function _tamaCompNote(){
   if(c.conf&&c.conf!=='high') h+=`<br><span style="color:#e6a817">ודאות החילוץ ${c.conf==='medium'?'בינונית':'נמוכה'} — כדאי לוודא מול התקנון</span>`;
   if(c.small) h+=`<br><span style="color:#e6a817">יישוב קטן שאינו במסד למ"ס — אזור ההפחתה משוער, יש לאמת</span>`;
   return h+'</div>';
+}
+
+// ── הצגת המגרשים שחושבו בתשריט: מסגרת צהובה + שטח לכל מגרש + חלונית סיכום ──
+const TAMA_HL={on:false,key:'',title:'',sub:'',items:[],total:0,nums:new Set(),hover:null,sortArea:false};
+
+function _tamaShowPlots(key){
+  if(!state.layers.plan||!state.table5){ _showToast('צריך תשריט וטבלה 5 טעונים',3000); return; }
+  if(NORM.polyRing){ _showToast('השטח הנורמטיבי הוגדר בציור — אין רשימת מגרשים להצגה',4000); return; }
+  const L=_tamaLast||{}, f1=v=>v!=null?v.toFixed(1):'—';
+  let mode=0, sp=false, kind, title, sub='';
+  const spreadSub=`${f1(L.spreadDunam)} ÷ ${f1(L.spreadDenomDunam)} ד' (${L.sdName||''}) × 100 = ${L.spreadPct!=null?L.spreadPct.toFixed(1):'—'}%`;
+  if(key==='dens'){
+    mode=TAMA.densMode;
+    title='מגרשי המגורים בצפיפות נטו — לפי '+['שימוש','ייעוד','ייעוד טהור'][mode];
+    sub=`${Math.round(L.totalUnits||0).toLocaleString('he-IL')} יח"ד ÷ ${f1(L.resDenomDunam)} ד' = ${L.netDens!=null?L.netDens.toFixed(2):'—'} יח"ד/ד'`;
+  } else if(key==='spread'){
+    title='פרישה מרחבית — כל מגרש שיש בו שימוש מגורים/דיור'; sub=spreadSub;
+  } else if(key==='spreadUse'){
+    kind='useNotDes'; title='מגרשים שהייעוד שלהם אינו מגורים אך יש בהם שימוש מגורים'; sub='חלק משטח המגורים בפרישה המרחבית: '+spreadSub;
+  } else if(key==='spreadSpec'){
+    sp=true; title='מגרשי דיור מיוחד / מוגן / להשכרה בלבד'; sub='חלק משטח המגורים בפרישה המרחבית: '+spreadSub;
+  } else return;
+  const cells=_normResCells(mode,sp,kind);
+  const byNum=new Map();
+  state.layers.plan.features.forEach((f,i)=>{
+    if(!f.geometry) return;
+    if(NORM.incFeat&&!NORM.incFeat.has(i)) return;
+    const n=String(f.properties.NUM||''), c=cells.get(n); if(!c) return;
+    let it=byNum.get(n);
+    if(!it){ it={num:n,yiud:c.yiud,uses:c.uses.join(' · '),units:c.units,desRes:c.desRes,area:0}; byNum.set(n,it); }
+    it.area+=_featureAreaM2(f)/1000;
+  });
+  const items=[...byNum.values()];
+  if(!items.length){ _showToast('לא נמצאו מגרשים להצגה',3000); return; }
+  Object.assign(TAMA_HL,{on:true,key,title,sub,items,total:items.reduce((s,x)=>s+x.area,0),nums:new Set(byNum.keys()),hover:null});
+  try{ closeTamaView(); }catch(e){}
+  try{ _tbSync(); }catch(e){}
+  _tamaHLRender();
+  requestAnimationFrame(()=>{ try{ resize(); }catch(e){} _tamaHLFit(); });
+}
+
+function _tamaHLRender(){
+  const wrapEl=document.getElementById('canvas-wrap'); if(!wrapEl) return;
+  let p=document.getElementById('tama-hl-panel');
+  if(!p){
+    p=document.createElement('div'); p.id='tama-hl-panel'; wrapEl.appendChild(p);
+    p.addEventListener('mouseover',e=>{ const tr=e.target.closest&&e.target.closest('tr[data-n]'); _tamaHLHover(tr?tr.dataset.n:null); });
+    p.addEventListener('mouseleave',()=>_tamaHLHover(null));
+    p.addEventListener('click',e=>{ const tr=e.target.closest&&e.target.closest('tr[data-n]'); if(tr) _tamaHLFit(tr.dataset.n); });
+    ['mousedown','mouseup','wheel','dblclick'].forEach(ev=>p.addEventListener(ev,e=>e.stopPropagation()));
+  }
+  const H=TAMA_HL, showUnits=H.key==='dens';
+  const items=[...H.items].sort(H.sortArea?(a,b)=>b.area-a.area:(a,b)=>String(a.num).localeCompare(String(b.num),'he',{numeric:true}));
+  p.innerHTML=`
+    <div class="thl-hdr"><b>${_esc(H.title)}</b><button class="thl-x" onclick="_tamaHLClose()" title="סגור והסר את ההדגשה">×</button></div>
+    <div class="thl-sub">${_esc(H.sub)}</div>
+    <div class="thl-tw"><table class="thl-t"><thead><tr><th>תא</th><th>ייעוד</th><th>שימוש</th>${showUnits?'<th>יח"ד</th>':''}<th>שטח (ד')</th></tr></thead><tbody>
+      ${items.map(it=>`<tr data-n="${_esc(it.num)}"><td>${_esc(it.num)}</td><td>${_esc(it.yiud)}${it.desRes?'':' <span class="thl-tag" title="הייעוד אינו מגורים — המגרש נכלל בזכות שימוש מגורים">שימוש</span>'}</td><td>${_esc(it.uses||'—')}</td>${showUnits?`<td>${it.units?Math.round(it.units).toLocaleString('he-IL'):''}</td>`:''}<td class="n">${it.area.toFixed(2)}</td></tr>`).join('')}
+    </tbody></table></div>
+    <div class="thl-foot"><span>${items.length} מגרשים · סה"כ <b>${H.total.toFixed(1)} ד'</b></span>
+      <span><button class="thl-b" onclick="_tamaHLSort()">מיון: ${H.sortArea?'לפי שטח':'לפי מספר'}</button><button class="thl-b" onclick="_tamaHLFit()" title="התאם את התצוגה לכל המגרשים">⤢ הכול</button><button class="thl-b" onclick="_tamaHLBack()">↩ לתמ"א 35/4</button></span></div>`;
+  p.style.display='flex';
+}
+function _tamaHLSort(){ TAMA_HL.sortArea=!TAMA_HL.sortArea; _tamaHLRender(); }
+function _tamaHLHover(n){
+  if(TAMA_HL.hover===n) return;
+  TAMA_HL.hover=n;
+  const p=document.getElementById('tama-hl-panel');
+  if(p){ p.querySelectorAll('tr.on').forEach(r=>r.classList.remove('on')); if(n!=null){ const r=p.querySelector('tr[data-n="'+String(n).replace(/"/g,'')+'"]'); if(r) r.classList.add('on'); } }
+  scheduleRedraw();
+}
+function _tamaHLClose(){
+  const was=TAMA_HL.on;
+  TAMA_HL.on=false; TAMA_HL.nums=new Set(); TAMA_HL.items=[]; TAMA_HL.hover=null;
+  const p=document.getElementById('tama-hl-panel'); if(p) p.style.display='none';
+  if(was){ try{ redraw(); }catch(e){} }
+}
+function _tamaHLBack(){ _tamaHLClose(); _tbTab('tama'); }
+// התאמת התצוגה למגרשים המודגשים (או למגרש אחד); החלונית תופסת את הצד הימני
+function _tamaHLFit(num){
+  if(!TAMA_HL.on||!state.layers.plan) return;
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9,any=false;
+  state.layers.plan.features.forEach((f,i)=>{
+    if(!f.geometry) return;
+    if(NORM.incFeat&&!NORM.incFeat.has(i)) return;
+    const n=String(f.properties.NUM||''); if(!TAMA_HL.nums.has(n)||(num&&n!==String(num))) return;
+    const g=f.geometry, P=g.type==='Polygon'?[g.coordinates]:g.coordinates;
+    for(const poly of P) for(const [x,y] of poly[0]){ x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y); any=true; }
+  });
+  if(!any) return;
+  const W=wrap.clientWidth, Ht=wrap.clientHeight, mpu=state.spanMeters?state.spanMeters/DATA_SIZE:1;
+  const Weff=Math.max(220,W-(window.innerWidth>700?360:0));
+  const span=Math.max((x1-x0)*1.3,(y1-y0)*1.3*Weff/Ht,(num?60:120)/mpu);
+  scale=Weff/span;
+  viewX=Weff/2-((x0+x1)/2)*scale; viewY=Ht/2-(DATA_SIZE-(y0+y1)/2)*scale;
+  if(num) TAMA_HL.hover=String(num);
+  redraw();
+}
+// גאומטריה של מגרש לתווית: מרכז כובד, תיבה ושטח (דונם) — נשמר על ה-feature
+function _hlGeom(f){
+  const g=f.geometry, P=g.type==='Polygon'?[g.coordinates]:g.coordinates;
+  let best=null,ba=-1;
+  for(const poly of P){ const r=poly[0]; if(!r||r.length<3) continue; let a=0; for(let i=0,j=r.length-1;i<r.length;j=i++) a+=r[j][0]*r[i][1]-r[i][0]*r[j][1]; if(Math.abs(a)>ba){ ba=Math.abs(a); best=r; } }
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9,A=0,cx=0,cy=0;
+  if(best){
+    for(let i=0,j=best.length-1;i<best.length;j=i++){
+      const cr=best[j][0]*best[i][1]-best[i][0]*best[j][1];
+      A+=cr; cx+=(best[j][0]+best[i][0])*cr; cy+=(best[j][1]+best[i][1])*cr;
+      x0=Math.min(x0,best[i][0]);x1=Math.max(x1,best[i][0]);y0=Math.min(y0,best[i][1]);y1=Math.max(y1,best[i][1]);
+    }
+  }
+  if(Math.abs(A)>1e-9){ cx/=(3*A); cy/=(3*A); } else { cx=(x0+x1)/2; cy=(y0+y1)/2; }
+  return {cx,cy,x0,y0,x1,y1,area:_featureAreaM2(f)/1000};
+}
+function _drawTamaHL(){
+  if(!TAMA_HL.on||!state.layers.plan) return;
+  const feats=state.layers.plan.features, labels=[];
+  ctx.save(); ctx.lineJoin='round';
+  for(let i=0;i<feats.length;i++){
+    const f=feats[i]; if(!f.geometry) continue;
+    const n=String(f.properties.NUM||''); if(!TAMA_HL.nums.has(n)) continue;
+    if(NORM.incFeat&&!NORM.incFeat.has(i)) continue;
+    const c=f.geometry.coordinates, polys=f.geometry.type==='Polygon'?[c]:c;
+    if(f.geometry.type==='Polygon'&&!_bboxOnScreen(c)) continue;
+    const hov=TAMA_HL.hover===n;
+    ctx.beginPath();
+    for(const poly of polys) for(const ring of poly){
+      ring.forEach((pt,k)=>{ const [x,y]=dc(pt[0],pt[1]); if(k) ctx.lineTo(x,y); else ctx.moveTo(x,y); });
+      ctx.closePath();
+    }
+    ctx.fillStyle=hov?'rgba(255,230,0,0.40)':'rgba(255,230,0,0.20)'; ctx.fill('evenodd');
+    ctx.shadowColor='#ffe600'; ctx.shadowBlur=hov?22:12; ctx.strokeStyle='#ffd400'; ctx.lineWidth=hov?5.5:3.5; ctx.stroke();
+    ctx.shadowBlur=0; ctx.strokeStyle='#fff3a0'; ctx.lineWidth=1.2; ctx.stroke();
+    labels.push([f,n]);
+  }
+  ctx.shadowBlur=0; ctx.textAlign='center'; ctx.textBaseline='middle';
+  for(const [f,n] of labels){
+    if(!f._hl) f._hl=_hlGeom(f);
+    const g=f._hl, [sx,sy]=dc(g.cx,g.cy), [ax,ay]=dc(g.x0,g.y0), [bx,by]=dc(g.x1,g.y1);
+    const m=Math.min(Math.abs(bx-ax),Math.abs(by-ay));
+    if(m<24) continue; // מגרש קטן מדי לתווית — רואים אותו ברשימה
+    const fs=Math.max(10,Math.min(18,m/5));
+    const t1='תא '+n, t2=g.area.toFixed(g.area<10?2:1)+" ד'";
+    ctx.lineWidth=3.5; ctx.strokeStyle='#fff'; ctx.fillStyle='#111';
+    ctx.font=Math.round(fs*0.8)+'px Arial'; ctx.strokeText(t1,sx,sy-fs*0.6); ctx.fillText(t1,sx,sy-fs*0.6);
+    ctx.font='bold '+Math.round(fs)+'px Arial'; ctx.strokeText(t2,sx,sy+fs*0.55); ctx.fillText(t2,sx,sy+fs*0.55);
+  }
+  ctx.restore();
 }
 
 function _tamaSyncFromPR(){
@@ -13635,6 +13832,7 @@ function _projClearAllInputs(){
   CALC.savedPoly=null;CALC.polyMode=false;CALC.polyPts=[];
   try{closeRoadNetPanel();}catch(e){}
   const rnb=document.getElementById('btn-road-net'); if(rnb) rnb.classList.remove('active','loaded');
+  try{ _tamaHLClose(); }catch(e){}
   // TAMA + NORM → defaults
   TAMA.model=0;TAMA.npdReg=3.2;TAMA.npdSpec=1.5;TAMA.normM2=null;TAMA.intensive=false;
   TAMA.densMode=1;TAMA.deduction=0;TAMA.spreadDenom='norm';TAMA.pct80=0;TAMA.smallMax=80;TAMA.smallAvg=null;
