@@ -676,6 +676,17 @@ body.theme-light .bm-opt.on{background:#d8ebfb;border-color:#5a9adc;color:#154a7
 .ov-item-name{color:#7c93ac;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
 .ov-rm{background:none;border:none;color:#c66;cursor:pointer;font-size:13px;flex-shrink:0}
 .ov-empty{font-size:11px;color:#5a7288;padding:4px;text-align:center}
+.ov-item-wrap{border-bottom:1px solid #1f2e42}
+.ov-item-wrap .ov-item{border-bottom:none;padding-bottom:2px}
+.ov-ctl{display:flex;align-items:center;gap:6px;padding:0 4px 6px 4px;font-size:10.5px;color:#7c93ac}
+.ov-ctl input[type=range]{flex:1;min-width:0;height:14px;accent-color:#4a8acc}
+.ov-leg-btn{background:none;border:1px solid #2a4058;color:#9cc;border-radius:5px;font-size:10.5px;padding:1px 6px;cursor:pointer;flex-shrink:0}
+.ov-leg{padding:0 6px 8px 6px;display:flex;flex-direction:column;gap:3px}
+.ov-leg-row{display:flex;align-items:center;gap:6px;font-size:11px;color:#cfe0f0}
+.ov-leg-row .leg-swatch{flex-shrink:0}
+.ht-ov{font-size:10.5px;opacity:.75;margin-bottom:2px}
+body.theme-light .ov-item-wrap{border-bottom-color:#e2e9f2}
+body.theme-light .ov-leg-row{color:#25405c}
 .ov-sub-hdr{display:flex;justify-content:space-between;align-items:center;font-size:11.5px;font-weight:700;color:#7ecfff;margin-top:10px;padding-top:8px;border-top:1px solid #1f2e42}
 .ov-refresh{background:none;border:1px solid #3a5070;color:#9bd;border-radius:5px;padding:1px 7px;font-size:12px;cursor:pointer}
 .ov-refresh:hover{background:#22354a}
@@ -1927,7 +1938,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 // ── App version — bump on EVERY deploy (date + that day's deploy number), so the
 //    user and Claude can confirm they're looking at the same build. Shown in the
 //    map toolbar and the loading-page footer.
-const APP_VERSION='2026.10.28-1';
+const APP_VERSION='2026.10.28-2';
 // Version of the road-network DETECTION ALGORITHM only — bump when _rnDetect's
 // output changes, so a network saved from an older run is flagged as stale
 // (networks are saved per project and are NOT re-detected on load).
@@ -2740,6 +2751,60 @@ async function _ovAdd(){
   }catch(e){ alert(e.message||'שגיאה בהוספת התוכנית'); }
   _ovRenderList();
 }
+// ייעוד (סגנון + שם) של פוליגון בשכבת-על — אותו lookup כמו התוכנית הראשית
+function _ovFeatStyle(f){
+  const p=f.properties||{};
+  const st=getStyle(p.MAVAT_CODE)||getStyleByName(fixHebrew(p.MAVAT_NAME))||DEFAULT_POLY;
+  const name=st.name&&st.name!=='אחר'?st.name:(fixHebrew(p.MAVAT_NAME)||String(p.MAVAT_CODE||''));
+  return {st,name};
+}
+// מקרא של שכבת-על: ייעודים ייחודיים בתוכנית (DOM calls — שמות מגיעים מקבצים/שירות חיצוני)
+function _ovLegendEl(ov){
+  const box=document.createElement('div'); box.className='ov-leg';
+  const seen=new Set();
+  const feats=(ov.layers.plan&&ov.layers.plan.features)||[];
+  for(const f of feats){
+    const code=(f.properties||{}).MAVAT_CODE;
+    if(seen.has(code)) continue; seen.add(code);
+    const {st,name}=_ovFeatStyle(f);
+    const r=document.createElement('div'); r.className='ov-leg-row';
+    const sw=document.createElement('div'); sw.className='leg-swatch'; sw.style.cssText=swatchCSS(st);
+    const l=document.createElement('span'); l.textContent=name;
+    r.append(sw,l); box.appendChild(r);
+  }
+  if(!seen.size){ const e=document.createElement('div'); e.className='ov-empty'; e.textContent='אין ייעודים בשכבה'; box.appendChild(e); }
+  return box;
+}
+// ריחוף: הפוליגון העליון (האחרון שצויר) מבין שכבות-העל הנראות שמתחת לנקודה
+function _ovHoverHit(dx,dy){
+  for(let k=state.overlayPlans.length-1;k>=0;k--){
+    const ov=state.overlayPlans[k]; if(!ov.visible||!ov.layers.plan) continue;
+    const fs=ov.layers.plan.features;
+    for(let i=fs.length-1;i>=0;i--){
+      const f=fs[i]; if(!f.geometry) continue;
+      const c=f.geometry.coordinates, polys=f.geometry.type==='Polygon'?[c]:c;
+      for(const poly of polys) if(ptInRing(dx,dy,poly[0])) return {ov,f,poly};
+    }
+  }
+  return null;
+}
+function _ovAnyVisible(){ return !!(state.overlayPlans&&state.overlayPlans.some(o=>o.visible)); }
+function _ovHoverHtml(h){
+  const pr=h.f.properties||{}, {st,name}=_ovFeatStyle(h.f);
+  const sw=st.stripes?`repeating-linear-gradient(45deg,${st.stripes[0]} 0 3px,${st.stripes[1]||'#fff'} 3px 6px)`:(st.f&&st.f!=='none'?st.f:'transparent');
+  let area=+pr.SHAPE_AREA>0?+pr.SHAPE_AREA:(+pr.LEGAL_AREA>0?+pr.LEGAL_AREA:0);
+  if(!area&&state.geoAnchor){ // חישוב מהגיאומטריה (טבעת חיצונית פחות חורים), במ"ר
+    let a=0; h.poly.forEach((r,ri)=>{ let s=0; for(let i=0,j=r.length-1;i<r.length;j=i++) s+=(r[j][0]*r[i][1]-r[i][0]*r[j][1]); a+=(ri===0?1:-1)*Math.abs(s/2); });
+    const m=state.geoAnchor.span/DATA_SIZE; area=a*m*m;
+  }
+  const sub=[];
+  if(pr.NUM!=null&&pr.NUM!=='') sub.push('תא שטח '+esc(pr.NUM));
+  if(area>0) sub.push((area/1000).toFixed(1)+' ד׳');
+  const label=h.ov.num+(h.ov.name&&h.ov.name!==h.ov.num?' · '+h.ov.name:'');
+  return `<div class="ht-ov" style="color:${h.ov.color}">🗂 ${esc(label)}</div>`+
+    `<div class="ht-name"><span class="ht-sw" style="background:${sw};border-color:${st.s||'#888'}"></span>${esc(name)}</div>`+
+    (sub.length?`<div class="ht-sub">${sub.join(' · ')}</div>`:'');
+}
 // Built with DOM calls (not innerHTML) — pl_name comes from an external service, treat as untrusted.
 function _ovRenderList(){
   const list=document.getElementById('ov-list'); if(!list) return;
@@ -2750,6 +2815,7 @@ function _ovRenderList(){
     list.appendChild(empty);
   } else {
     for(const ov of state.overlayPlans){
+      const wrapEl=document.createElement('div'); wrapEl.className='ov-item-wrap';
       const row=document.createElement('div'); row.className='ov-item';
       const chk=document.createElement('input'); chk.type='checkbox'; chk.checked=ov.visible;
       chk.title='הצג/הסתר'; chk.onchange=()=>toggleOverlayPlanVisible(ov.num);
@@ -2760,10 +2826,22 @@ function _ovRenderList(){
       txt.append(numEl,document.createElement('br'),nameEl);
       const rm=document.createElement('button'); rm.className='ov-rm'; rm.title='הסר תוכנית';
       rm.textContent='✕'; rm.onclick=()=>{ removeOverlayPlan(ov.num); _ovRenderList(); };
-      row.append(chk,sw,txt,rm);
+      const legBtn=document.createElement('button'); legBtn.className='ov-leg-btn'; legBtn.textContent='מקרא '+(ov.legendOpen?'▴':'▾');
+      legBtn.title='מקרא ייעודי הקרקע של התוכנית'; legBtn.onclick=()=>{ ov.legendOpen=!ov.legendOpen; _ovRenderList(); };
+      row.append(chk,sw,txt,legBtn,rm);
       row.addEventListener('mouseenter',()=>_ovSetHover(_ovAddedHoverRings(ov.num)));
       row.addEventListener('mouseleave',_ovClearHover);
-      list.appendChild(row);
+      // שקיפות לכל תוכנית (מכפיל על השקיפות הרגילה של שכבת-העל)
+      const ctl=document.createElement('div'); ctl.className='ov-ctl';
+      const rng=document.createElement('input'); rng.type='range'; rng.min='10'; rng.max='100'; rng.step='5';
+      rng.value=String(Math.round((ov.opacity==null?1:ov.opacity)*100));
+      const pct=document.createElement('span'); pct.textContent=rng.value+'%';
+      rng.oninput=()=>{ ov.opacity=(+rng.value)/100; pct.textContent=rng.value+'%'; scheduleRedraw(); };
+      const lb=document.createElement('span'); lb.textContent='שקיפות';
+      ctl.append(lb,rng,pct);
+      wrapEl.append(row,ctl);
+      if(ov.legendOpen) wrapEl.appendChild(_ovLegendEl(ov));
+      list.appendChild(wrapEl);
     }
   }
   const btn=document.getElementById('btn-overlay');
@@ -4723,11 +4801,11 @@ function redraw(){
         // to mark "this belongs to plan X" without hiding what the zone type is.
         const code=f.properties.MAVAT_CODE;
         let st=f._style; if(st===undefined){ st=getStyle(code)||getStyleByName(fixHebrew(f.properties.MAVAT_NAME))||DEFAULT_POLY; f._style=st; }
-        drawPolygon(f.geometry.coordinates,effectiveFill(st),ov.color,1,.45*OG);
+        drawPolygon(f.geometry.coordinates,effectiveFill(st),ov.color,1,.45*OG*(ov.opacity==null?1:ov.opacity));
       }
       if(ov.layers.gvul) for(const f of ov.layers.gvul.features){
         if(!f.geometry) continue;
-        drawPolygon(f.geometry.coordinates,'none',ov.color,2,.9*OG,[6,4]);
+        drawPolygon(f.geometry.coordinates,'none',ov.color,2,.9*OG*(ov.opacity==null?1:ov.opacity),[6,4]);
       }
     }
   }
@@ -8160,7 +8238,7 @@ function _hoverTipHide(){
 }
 function _hoverTipMove(e){
   // פעיל כשהמשתמש הדליק "ייעוד ליד הסמן", וגם כשקורא הפרוגרמה פתוח (מידע פרוגרמטי על התא)
-  if(!(state.hoverTip||(window.PR&&PR.open))||!state.layers.plan||e.target.closest('#info-panel,#mavat-status,#re-node-ctx')){ _hoverTipHide(); return; }
+  if(!(state.hoverTip||(window.PR&&PR.open)||_ovAnyVisible())||!state.layers.plan||e.target.closest('#info-panel,#mavat-status,#re-node-ctx')){ _hoverTipHide(); return; }
   const first=!_htPending;
   _htPending={x:e.clientX,y:e.clientY};
   if(first) requestAnimationFrame(_hoverTipUpdate);
@@ -8183,7 +8261,15 @@ function _hoverTipUpdate(){
   const sx=p.x-rect.left, sy=p.y-rect.top;
   const t=_hoverTipEl();
   const f=(state.planVisible||state.planBordersVisible)?_hoverTipFeat(...cd(sx,sy)):null;
-  if(!f){ t.style.display='none'; _htLastNum=null; return; }
+  if(!f){
+    // מחוץ לתוכנית הראשית — בודקים שכבות-על (מידע: ייעוד, תא, שטח)
+    const h=_ovAnyVisible()?_ovHoverHit(...cd(sx,sy)):null;
+    if(!h){ t.style.display='none'; _htLastNum=null; return; }
+    const key='ov|'+h.ov.num+'|'+h.f.properties.NUM+'|'+h.f.properties.MAVAT_CODE;
+    if(key!==_htLastNum){ _htLastNum=key; t.innerHTML=_ovHoverHtml(h); }
+    _hoverTipPlace(t,sx,sy);
+    return;
+  }
   const pr=f.properties, num=pr.NUM;
   const prog=(window.PR&&PR.open&&PR.hoverInfo)?PR.hoverInfo(num):'';
   if(!state.hoverTip&&!prog){ t.style.display='none'; _htLastNum=null; return; } // פרוגרמה בלבד — רק על תאים שיש בהם משהו
@@ -8209,6 +8295,9 @@ function _hoverTipUpdate(){
     t.innerHTML=`<div class="ht-name"><span class="ht-sw" style="background:${sw};border-color:${st.s||'#888'}"></span>${esc(name)}</div>`+
       (sub.length?`<div class="ht-sub">${sub.join(' · ')}</div>`:'')+extra+prog;
   }
+  _hoverTipPlace(t,sx,sy);
+}
+function _hoverTipPlace(t,sx,sy){
   t.style.display='block';
   // ליד הסמן; הופכים צד כשמתקרבים לשולי המפה
   const W=wrap.clientWidth, H=wrap.clientHeight, tw=t.offsetWidth, th=t.offsetHeight, off=16;
