@@ -1938,7 +1938,7 @@ body.theme-light .guide-sec-lbl{color:#1a3560;border-bottom-color:#dde5ef}
 // ── App version — bump on EVERY deploy (date + that day's deploy number), so the
 //    user and Claude can confirm they're looking at the same build. Shown in the
 //    map toolbar and the loading-page footer.
-const APP_VERSION='2026.11.12-1';
+const APP_VERSION='2026.11.16-1';
 // Version of the road-network DETECTION ALGORITHM only — bump when _rnDetect's
 // output changes, so a network saved from an older run is flagged as stale
 // (networks are saved per project and are NOT re-detected on load).
@@ -2126,30 +2126,33 @@ function getStyleByName(n){return n?NAME_STYLES[n.trim()]||null:null;}
 
 // Canvas stripe pattern — cached per color pair, created lazily against main ctx
 const _patCache={};
-function stripePattern(c1,c2){
-  const k=c1+'|'+c2;
+function stripePattern(colors){
+  const k=colors.join('|');
   if(_patCache[k]) return _patCache[k];
-  const sz=12,tmp=document.createElement('canvas');
+  const n=colors.length,bw=6,sz=n*bw,tmp=document.createElement('canvas');
   tmp.width=sz;tmp.height=sz;
   const t=tmp.getContext('2d');
-  t.fillStyle=c1;t.fillRect(0,0,sz,sz);
-  t.strokeStyle=c2;t.lineWidth=5;t.lineCap='square';
-  t.beginPath();
-  t.moveTo(0,sz);   t.lineTo(sz,0);     // main "/" diagonal (x+y=sz)
-  t.moveTo(-sz,sz); t.lineTo(0,0);      // top-left corner seam (x+y=0)
-  t.moveTo(sz,sz*2);t.lineTo(sz*2,sz);  // bottom-right corner seam (x+y=2*sz)
-  t.stroke();
+  // "/" bands: colour index by (x+y) mod sz, equal width per colour
+  for(let y=0;y<sz;y++)for(let x=0;x<sz;x++){
+    t.fillStyle=colors[Math.floor(((x+y)%sz)/bw)];t.fillRect(x,y,1,1);
+  }
   return (_patCache[k]=ctx.createPattern(tmp,'repeat'));
+}
+// CSS hard-stop gradient for N colours (legend / hover swatches)
+function bandsCss(colors,w){
+  w=w||4;let s=[],p=0;
+  colors.forEach(c=>{s.push(c+' '+p+'px',c+' '+(p+w)+'px');p+=w;});
+  return 'repeating-linear-gradient(45deg,'+s.join(',')+')';
 }
 // Returns either a color string or a canvas Pattern object
 function effectiveFill(st){
   if(!st||st.f==='none') return 'none';
-  if(st.stripes) return stripePattern(st.stripes[0],st.stripes[1]);
+  if(st.stripes) return stripePattern(st.stripes);
   return st.f;
 }
 // CSS gradient string for legend swatches (no canvas needed)
 function swatchCSS(st){
-  if(st.stripes) return `background:repeating-linear-gradient(45deg,${st.stripes[0]} 0,${st.stripes[0]} 4px,${st.stripes[1]} 4px,${st.stripes[1]} 9px);border-color:${st.s}`;
+  if(st.stripes) return `background:${bandsCss(st.stripes,4)};border-color:${st.s}`;
   if(st.f==='none') return `background:transparent;border:${Math.max(st.sw||1,2)}px solid ${st.s}`;
   return `background:${st.f};border-color:${st.s}`;
 }
@@ -2791,7 +2794,7 @@ function _ovHoverHit(dx,dy){
 function _ovAnyVisible(){ return !!(state.overlayPlans&&state.overlayPlans.some(o=>o.visible)); }
 function _ovHoverHtml(h){
   const pr=h.f.properties||{}, {st,name}=_ovFeatStyle(h.f);
-  const sw=st.stripes?`repeating-linear-gradient(45deg,${st.stripes[0]} 0 3px,${st.stripes[1]||'#fff'} 3px 6px)`:(st.f&&st.f!=='none'?st.f:'transparent');
+  const sw=st.stripes?`${bandsCss(st.stripes,3)}`:(st.f&&st.f!=='none'?st.f:'transparent');
   let area=+pr.SHAPE_AREA>0?+pr.SHAPE_AREA:(+pr.LEGAL_AREA>0?+pr.LEGAL_AREA:0);
   if(!area&&state.geoAnchor){ // חישוב מהגיאומטריה (טבעת חיצונית פחות חורים), במ"ר
     let a=0; h.poly.forEach((r,ri)=>{ let s=0; for(let i=0,j=r.length-1;i<r.length;j=i++) s+=(r[j][0]*r[i][1]-r[i][0]*r[j][1]); a+=(ri===0?1:-1)*Math.abs(s/2); });
@@ -4742,8 +4745,88 @@ document.addEventListener('mousedown',(e)=>{
 // ============================================================
 // 11. RENDERING
 // ============================================================
+// פסי "פיג'מה" לייעודים מעורבים — נגזר מ-mavat_2024.dxf (עותק של gis_viewer/mavat-bands.js; לא לערוך ידנית)
+const MAVAT_BANDS = {
+  170: ["#ffdf80", "#80ff80"] /* משק עזר */,
+  300: ["#939598", "#80ff80"] /* מבני משק */,
+  800: ["#ff0040", "#505050"] /* תחבורה */,
+  840: ["#bfff00", "#ff0040"] /* דרך משולבת */,
+  850: ["#00a629", "#ff0040"] /* דרך ו/או טיפול נופי */,
+  855: ["#00a629", "#828282"] /* מסילה ו/או טיפול נופי */,
+  930: ["#ff0040", "#505050"] /* מפגש דרך-מסילה */,
+  931: ["#ff0040", "#80ffff"] /* מעגנה תחום יבשתי */,
+  932: ["#ff0040", "#0040ff"] /* מעגנה תחום ימי */,
+  997: ["#7f9fff", null, "#e64c00"] /* מגבלות בניה ופיתוח ב' */,
+  1000: ["#ffdf80", "#828282"] /* מגורים ומסחר */,
+  1001: ["#ffdf80", "#828282"] /* דיור מיוחד ומסחר */,
+  1003: ["#ffdf80", "#ff0aff"] /* דיור מיוחד ותעסוקה */,
+  1050: ["#828282", "#ffdf80", "#ff0aff"] /* מגורים' מסחר ותעסוקה */,
+  1100: ["#ff0aff", "#ffdf80"] /* מגורים ותעסוקה */,
+  1200: ["#ffdf80", "#bf80ff"] /* מגורים ומשרדים */,
+  1211: ["#ffdf80", "#a653a6"] /* מגורים ותעשיה עתירת ידע */,
+  1221: ["#ffdf80", "#8080ff"] /* מגורים ומתקנים הנדסיים */,
+  1250: ["#ffdf80", "#a67c53"] /* מגורים ומבנים ומוסדות ציבור */,
+  1300: ["#ffdf80", "#a67c53"] /* דיור מיוחד ומבנים ומוסדות ציבור */,
+  1311: ["#ffdf80", "#ff809f"] /* מגורים ותיירות */,
+  1321: ["#ffdf80", "#ff0040"] /* מגורים ותחבורה */,
+  1352: ["#ff809f", "#ffdf80", "#80ff80"] /* מגורים ואירוח כפרי */,
+  1410: ["#828282", "#ffdf80", "#a67c53"] /* מגורים מסחר מבנים ומוסדות ציבור */,
+  1420: ["#828282", "#ffdf80", "#ff809f"] /* מגורים' מסחר ותיירות */,
+  1430: ["#828282", "#ffdf80", "#8080ff"] /* מגורים' מסחר ומתקנים הנדסיים */,
+  1440: ["#828282", "#ffdf80", "#ff0040"] /* מגורים ומסחר ותחבורה */,
+  1460: ["#828282", "#ffdf80", "#80ffff"] /* מגורים' מסחר ומעגנה */,
+  1470: ["#ff0aff", "#ffdf80", "#ff809f"] /* מגורים תעסוקה ותיירות */,
+  1480: ["#ff0aff", "#ffdf80", "#a67c53"] /* מגורים' תעסוקה מבנים ומוסדות ציבור */,
+  1482: ["#ff0aff", "#ffdf80", "#8080ff"] /* מגורים' תעסוקה ומתקנים הנדסיים */,
+  1484: ["#ff0aff", "#ffdf80", "#ff0040"] /* מגורים' תעסוקה ותחבורה */,
+  1488: ["#ff0aff", "#ffdf80", "#80ffff"] /* מגורים' תעסוקה ומעגנה */,
+  1490: ["#ff809f", "#ffdf80", "#8080ff"] /* מגורים' תיירות ומתקנים הנדסיים */,
+  1492: ["#ff809f", "#ffdf80", "#a67c53"] /* מגורים' תיירות מבנים ומוסדות ציבור */,
+  1494: ["#ff809f", "#ffdf80", "#ff0040"] /* מגורים' תיירות ותחבורה */,
+  1500: ["#828282", "#a653a6"] /* מסחר ותעשיה */,
+  1502: ["#828282", "#ff0aff"] /* מסחר ותעסוקה */,
+  1504: ["#828282", "#8080ff"] /* מסחר ומתקנים הנדסיים */,
+  1510: ["#828282", "#ff0040"] /* מסחר ותחבורה */,
+  1520: ["#828282", "#bf80ff"] /* מסחר ומשרדים */,
+  1530: ["#828282", "#a653a6"] /* מסחר ותעשיה עתירת ידע */,
+  1540: ["#828282", "#a653a6"] /* מסחר' תעשיה קלה ומלאכה */,
+  1550: ["#828282", "#a67c53"] /* מסחר ומבני ומוסדות ציבור */,
+  1560: ["#828282", "#ff809f"] /* מסחר ותיירות */,
+  1562: ["#ff0aff", "#828282", "#ff809f"] /* מסחר' תעסוקה ותיירות */,
+  1563: ["#ff0040", "#828282", "#ff809f"] /* מסחר' תתחבורה ותיירות */,
+  1564: ["#828282", "#ff809f"] /* מסחר ואירוח כפרי */,
+  1565: ["#828282", "#bfff00"] /* מסחר' ספורט ונופש */,
+  1570: ["#828282", "#a653a6"] /* מסחר ואחסנה */,
+  1572: ["#ff0aff", "#828282", "#8080ff"] /* מסחר תעסוקה ומתקנים הנדסיים */,
+  1574: ["#ff0aff", "#828282", "#ff0040"] /* מסחר' תעסוקה ותחבורה */,
+  1576: ["#ff0aff", "#828282", "#a67c53"] /* מסחר' תעסוקה מבנים ומוסדות ציבור */,
+  1578: ["#ff809f", "#828282", "#a67c53"] /* מסחר' תיירות מבנים ומוסדות ציבור */,
+  1579: ["#ff0040", "#828282", "#a67c53"] /* מסחר תחבורה מבנים ומוסדות ציבור */,
+  1580: ["#4c004c", "#a653a6"] /* תעשיה' תעשיה קלה ומלאכה */,
+  1590: ["#ff0aff", "#ff0040"] /* תעסוקה ותחבורה */,
+  1600: ["#ff0aff", "#a67c53"] /* תעסוקה ומבנים ומוסדות ציבור */,
+  1602: ["#a67c53", "#8080ff"] /* מבנים ומוסדות ציבור ומתקנים הנדסיים */,
+  1604: ["#ff0040", "#a67c53"] /* מבנים ומוסדות ציבור ותחבורה */,
+  1610: ["#a67c53", "#bf80ff"] /* מבנים ומוסדות ציבור ומשרדים */,
+  1620: ["#a67c53", "#4c004c", "#ff809f"] /* תעסוקה ומבנים ומוסדות ציבור ותיירות */,
+  1630: ["#a653a6", "#bf80ff"] /* תעשיה ומשרדים */,
+  1640: ["#4c004c", "#a653a6"] /* תעשיה ואחסנה */,
+  1650: ["#a67c53", "#ff809f"] /* מבנים ומוסדות ציבור ותיירות */,
+  1660: ["#bfff00", "#8080ff"] /* שטחים פתוחים ומתקנים הנדסיים */,
+  1670: ["#80ff80", "#a67c53"] /* שטחים פתוחים מבנים ומוסדות ציבור */,
+  1680: ["#80ff80", "#8080ff"] /* קרקע חקלאית ומתקנים הנדסיים */,
+  1681: ["#80ff80", null, "#ff809f"] /* קרקע חקלאית ונופש כפרי */,
+  1690: ["#8080ff", "#800000"] /* כריה' חציבה ופסולת */
+};
+const _bandStyleCache=new Map(); // לפי קוד — לא נשמר על אובייקט הצורה
 function getStyle(code){
   const c=MS[code]||MS[String(code)];
+  const b=MAVAT_BANDS[+code];
+  if(b){
+    let s=_bandStyleCache.get(+code);
+    if(!s){ s=Object.assign({s:'#555555',name:'אחר'},c||{},{stripes:b}); _bandStyleCache.set(+code,s); }
+    return s;
+  }
   return c||null;
 }
 
@@ -8278,7 +8361,7 @@ function _hoverTipUpdate(){
     _htLastNum=key;
     const st=getStyle(pr.MAVAT_CODE)||getStyleByName(fixHebrew(pr.MAVAT_NAME))||DEFAULT_POLY;
     const name=st.name&&st.name!=='אחר'?st.name:(fixHebrew(pr.MAVAT_NAME)||String(pr.MAVAT_CODE||''));
-    const sw=st.stripes?`repeating-linear-gradient(45deg,${st.stripes[0]} 0 3px,${st.stripes[1]||'#fff'} 3px 6px)`:(st.f&&st.f!=='none'?st.f:'transparent');
+    const sw=st.stripes?`${bandsCss(st.stripes,3)}`:(st.f&&st.f!=='none'?st.f:'transparent');
     const area=+pr.SHAPE_AREA>0?+pr.SHAPE_AREA:(+pr.LEGAL_AREA>0?+pr.LEGAL_AREA:0);
     const sub=[];
     if(num!=null&&num!=='') sub.push('תא שטח '+esc(num));
@@ -10855,7 +10938,7 @@ function _normDrawBg(){
     const f=features[i];
     const inc=NORM.polyRing?true:NORM.incFeat.has(i);
     const code=+f.properties.MAVAT_CODE;
-    const st=MS[code]||DEFAULT_POLY;
+    const st=getStyle(code)||DEFAULT_POLY;
     const fill=st.stripes?st.stripes[0]:(st.f==='none'?'#cccccc':st.f);
     const geom=f.geometry;
     if(!geom) continue;
@@ -11085,7 +11168,7 @@ function _normPopList(){
   for(const code of codes){
     const g=byCode[code];
     const allInc=g.indices.every(i=>NORM.incFeat.has(i));
-    const st=MS[+code]||DEFAULT_POLY;
+    const st=getStyle(+code)||DEFAULT_POLY;
     const sw=st.stripes?st.stripes[0]:(st.f==='none'?'transparent':st.f);
     const d=(g.area/1000).toFixed(0);
     html+=`<div class="norm-z-row${allInc?'':' off'}" onclick="_normToggleCode(${code})">
