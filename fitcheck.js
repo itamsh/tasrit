@@ -34,7 +34,7 @@ const TV={
   fhOther:{l:'גובה קומה למחסנים, מתקנים, תעשייה',v:'אין ערך',st:'arch'},
   tower:{l:'סף "מגדל"',v:'מעל 10 קומות, או רצפת הקומה העליונה מעל 29 מ\'',st:'prop'},
   towerCov:{l:'כיסוי קומת מגדל מהמעטפת',v:'עד 85%',st:'arch'},
-  depth:{l:'עומק בניין מגורים',v:'עד 20 מ\' רגיל, 20–22 בקצה',st:'arch'},
+  depth:{l:'עומק בניין מגורים',v:'עד 20 מ\' רגיל, 20–22 בקצה (רק כשרוחב המעטפת 22–35 מ\'; מעל 35 — שני אגפים)',st:'arch'},
   officePlate:{l:'שטח קומה מרבי למגדל משרדים',v:'כ-1,500 מ"ר',st:'arch'},
   unitBig:{l:'"שטח לדירה גדול מהמקובל"',v:'160 מ"ר ברוטו ליח"ד',st:'arch'},
   unitFit:{l:'"יח"ד נכנסות": שטח מינימלי ליח"ד',v:'110 מ"ר ברוטו',st:'prop'},
@@ -42,7 +42,7 @@ const TV={
   parapet:{l:'הגובה המרבי לא כולל מעקה גג',v:'לא כולל (מקל)',st:'arch'}
 };
 const TVST={arch:'ממתין לאישור אדריכל',prop:'הצעה של המפרט — ממתין לאישור'};
-const K={towerFloors:10,towerH:29,towerCov:0.85,depthOk:20,depthMax:22,widthLo:22,widthHi:40,officePlate:1500,unitBig:160,unitFit:110,coreLo:0.12,coreHi:0.18,dense:0.8,eps:0.01,outlier:0.03,apuOut:0.15};
+const K={towerFloors:10,towerH:29,towerCov:0.85,depthOk:20,depthMax:22,widthLo:22,widthHi:35,officePlate:1500,unitBig:160,unitFit:110,coreLo:0.12,coreHi:0.18,dense:0.8,eps:0.01,outlier:0.03,apuOut:0.15};
 
 const CLS=['fit','cond','excess','plan','mat'];                 // מהקל לחמור
 const SEV={fit:0,cond:1,excess:2,plan:3,mat:4};
