@@ -52,11 +52,11 @@ const worst=(a,b)=>SEV[a]>=SEV[b]?a:b;
 const USE_L={res:'מגורים',pub:'ציבור',off:'משרדים / תעסוקה',com:'מסחר',other:'אחר'};
 
 function defaultAnswers(){ return {
-  q1:{status:'bg',topic:''},
+  q1:{status:'bg',topic:'',manual:[]},  // manual: {cells,H,ref:'abs'|'rel',z,ground,floors} — הוקלד ידנית מהנספח
   q2:{res:{lo:3.2,hi:3.3,tk:false},pub:{lo:4.0,hi:4.5,tk:false},off:{lo:3.8,hi:4.0,tk:false},com:{lo:6,hi:7,tk:false}},
   q3:{mode:'auto',z:{}},
   q4:{list:[]},          // {kind:'transfer'|'floors', val, exposed, approval, yiud:null|[], src}
-  q5:{list:[],parapet:'no'}, // {kind:'basementCov'|'freeAbove'|'freeAll'|'floorCap'|'openSpace', val, yiud:null|[], minCell, src}
+  q5:{list:[],parapet:'no',balc:false,alt:[]},  // balc: מרפסות בתוך התכסית; alt: ייעודים שבהם השימושים הם חלופות // {kind:'basementCov'|'freeAbove'|'freeAll'|'floorCap'|'openSpace', val, yiud:null|[], minCell, src}
   q6:{mand:[]},          // ייעודים שבהם יש חובה לממש
   q7:{avgMin:null,avgMax:null}
 }; }
@@ -89,19 +89,37 @@ function useClass(use,yiud){
 function cellsFromT5(t5,geomOf){
   const grpOf={}, groups=(t5&&t5.__groups)||{};
   for(const g of Object.values(groups)) for(const n of g.nums||[]) grpOf[n]=g.label;
-  const out={};
+  const out={}, pctMode=!!(t5&&t5.__units&&t5.__units.rightsPct);
   for(const cn of Object.keys(t5||{})){
     const all=t5[cn]||[], rows=all.length===1?all:all.filter(r=>!isSum(r)); if(!rows.length) continue;
     const g=geomOf?geomOf(cn):{}; if(!g) continue;
     const yiud=(rows[0].yiud||'').trim();
     const x=Object.assign({cn,yiud,grp:grpOf[cn]||null,rows:[],floors:0,floorsB:0,H:null,cov:null,sb:null,magras:null,mirp:0},g);
+    x.notesIn=[]; x.moved=[];
+    const pctK=pctMode&&x.A>0?x.A/100:1;   // זכויות ב"% מתא שטח" → מ"ר לפי שטח הפוליגון
+    const ab=r=>pctK*((r.ikariMal||r.sherutMal)?num(r.ikariMal)+num(r.sherutMal):num(r.kollMal));
+    const bl=r=>pctK*((r.ikariMitahat||r.sherutMitahat)?num(r.ikariMitahat)+num(r.sherutMitahat):num(r.kollMitahat));
+    const unitsOf=r=>num(r.yihud)||(num(r.tsfifut)&&x.A>0?num(r.tsfifut)*x.A/1000:0);   // צפיפות ליח"ד לדונם → יח"ד
     for(const r of rows){
-      const above=(r.ikariMal||r.sherutMal)?num(r.ikariMal)+num(r.sherutMal):num(r.kollMal);
-      const below=(r.ikariMitahat||r.sherutMitahat)?num(r.ikariMitahat)+num(r.sherutMitahat):num(r.kollMitahat);
+      let above=ab(r), below=bl(r);
       const use=(r.shimush||'').trim()||yiud;
-      x.rows.push({use,cls:useClass(use,yiud),above,below,units:num(r.yihud)});
+      // שורה שיש לה קומות מתחת לכניסה ואין לה קומות מעל: השטח שלה נספר מתחת לכניסה (בית שמש 1100: "עיקרי" כולל גם מתחת)
+      if(above>0&&!num(r.komMal)&&num(r.komMitahat)>0){ x.moved.push({use,area:above,fl:num(r.komMitahat)}); below+=above; above=0; }
+      x.rows.push({use,cls:useClass(use,yiud),above,below,units:unitsOf(r),fB:num(r.komMitahat),fA:num(r.komMal),gova:num(r.gova),mirp:above>0?num(r.mirpasot):0});
       x.mirp+=num(r.mirpasot);
     }
+    if(pctMode) x._pct=true;
+    if(x.moved.length) x.notesIn.push(x.moved.map(m=>`${m.use} ${fmt(m.area)} מ"ר רשום בעמודת "מעל הכניסה", אבל לשורה יש רק ${m.fl} קומות מתחת לכניסה — נספר מתחת לכניסה`).join('; ')+'.');
+    // זכויות שרשומות רק בשורת "סך הכל" (קריית שמונה 104: מתחת לכניסה)
+    const sums=all.filter(r=>isSum(r)&&r!==rows[0]);
+    if(sums.length&&rows.length&&all.length>1){
+      const sA=Math.max(...sums.map(ab)), sB=Math.max(...sums.map(bl));
+      const rA=x.rows.reduce((t,r)=>t+r.above,0), rB=x.rows.reduce((t,r)=>t+r.below,0);
+      if(!rA&&sA>0){ x.rows.push({use:yiud,cls:useClass(yiud,yiud),above:sA,below:0,units:0}); x.notesIn.push(`השטח מעל הכניסה (${fmt(sA)} מ"ר) רשום רק בשורת "סך הכל".`); }
+      if(!rB&&sB>0){ x.rows.push({use:yiud,cls:useClass(yiud,yiud),above:0,below:sB,units:0,fB:Math.max(...sums.map(r=>num(r.komMitahat)))}); x.notesIn.push(`השטח מתחת לכניסה (${fmt(sB)} מ"ר) רשום רק בשורת "סך הכל".`); }
+    }
+    // legal_area מ-Xplan לפעמים בדונם (קריית שמונה), לפעמים במ"ר (בית שמש)
+    if(x.LA>0&&x.A>0&&x.LA<x.A/100) x.LA*=1000;
     for(const r of all){   // נתוני בינוי — לפעמים רק בשורת הסיכום
       x.floors=Math.max(x.floors,num(r.komMal)); x.floorsB=Math.max(x.floorsB,num(r.komMitahat));
       const h=num(r.gova); if(h) x.H=Math.max(x.H||0,h);
@@ -124,7 +142,19 @@ function regime(x){
 }
 const appliesTo=(item,x)=>(!item.yiud||!item.yiud.length||item.yiud.includes(x.yiud))&&(!item.minCell||x.A>=+item.minCell);
 function rectDims(A,P){ if(!(A>0)) return null; if(!(P>0)) P=4*Math.sqrt(A); const h=P/2, d=Math.max(0,h*h/4-A), a=h/2+Math.sqrt(d); return {a,b:Math.max(0.1,h-a)}; }
+// "504, 509, 1101-1116" → Set
+function parseCells(s){ const out=new Set(); for(const p of String(s||'').split(/[,;\s]+/)){ const m=p.match(/^(\d+)[-–—](\d+)$/);
+  if(m){ let a=+m[1],b=+m[2]; if(a>b)[a,b]=[b,a]; if(b-a<=5000) for(let i=a;i<=b;i++) out.add(String(i)); } else if(/^\d+$/.test(p)) out.add(p); } return out; }
+function manualFor(x,ans){ if(!ans.q1||ans.q1.status!=='bind') return null; let hit=null;
+  for(const m of ans.q1.manual||[]) if((m.H||m.floors||m.z!=null||m.ground!=null)&&parseCells(m.cells).has(String(x.cn))) hit=m; return hit; }
 function heightOf(x,ans){
+  const m=x._man;
+  if(m&&m.H){   // גובה שהוקלד ידנית מנספח מחייב
+    if(m.ref==='rel') return {Hrel:+m.H,abs:false,manual:true,Hraw:+m.H};
+    if(m.z!=null&&m.z!==''&&isFinite(+m.z)) return {Hrel:m.H-(+m.z),abs:true,z:+m.z,manual:true,Hraw:+m.H};
+    if(m.ground!=null&&m.ground!==''&&isFinite(+m.ground)) return {Hrel:m.H-(+m.ground),abs:true,ground:+m.ground,manual:true,Hraw:+m.H};
+    return {Hrel:null,abs:true,missing:true,manual:true,Hraw:+m.H};
+  }
   if(x.H==null) return {Hrel:null,abs:false};
   const mode=ans.q3.mode, auto=x.floors>0?x.H>x.floors*6+12:x.H>60;
   const abs=mode==='abs'?true:mode==='rel'?false:auto;
@@ -184,7 +214,7 @@ function envelope(x,ans){
     if(r.kind==='freeAbove'||r.kind==='freeAll') caps.push({v:A*(1-r.val/100),w:`${r.val}% מהתא ללא בינוי${r.src?' ('+r.src+')':''}`,q5:true});
     if(r.kind==='floorCap') caps.push({v:+r.val,w:`תקרת שטח לקומה ${fmt(r.val)} מ"ר${r.src?' ('+r.src+')':''}`,q5:true});
   }
-  if(x.lines&&x.lines.env>0){ const d=rectDims(x.lines.env,x.lines.per); geoms.push({v:x.lines.env,w:'קווי הבניין בתשריט',d}); }
+  if(x.lines&&x.lines.env>0){ const d=x.lines.w>0?{b:Math.min(x.lines.w,Math.sqrt(x.lines.env)),a:x.lines.env/Math.min(x.lines.w,Math.sqrt(x.lines.env))}:rectDims(x.lines.env,x.lines.per); /* רוחב = פעמיים הנקודה העמוקה במעטפת */ geoms.push({v:x.lines.env,w:'קווי הבניין בתשריט',d}); }
   else if(x.sb&&A>0){
     const d=rectDims(A,x.per0), {q,h,y,l}=x.sb, P=v=>Math.max(0,v);
     const rd=[{a:P(d.a-q-h),b:P(d.b-y-l)},{a:P(d.a-y-l),b:P(d.b-q-h)},{a:P(d.a-q-h),b:P(d.b-q-l)}].map(o=>({v:o.a*o.b,d:{a:Math.max(o.a,o.b),b:Math.min(o.a,o.b)}}));
@@ -205,6 +235,8 @@ function envelope(x,ans){
 
 // התא כולו
 function evalCell(x,ans,conf,ctx){
+  const man=manualFor(x,ans); if(man) x=Object.assign({},x,{_man:man,floors:+man.floors||x.floors});
+  if(ans.q5.balc&&x.rows.some(r=>r.mirp>0)) x=Object.assign({},x,{rows:x.rows.map(r=>r.mirp>0?Object.assign({},r,{above:r.above+r.mirp}):r),_balc:x.rows.reduce((t,r)=>t+(r.mirp||0),0)});
   const g=regime(x), R={cn:x.cn,yiud:x.yiud,grp:x.grp,A:x.A,LA:x.LA,units:g.units,above:g.tot,below:g.below,floors:x.floors,floorsB:x.floorsB,H:x.H,
     cls:'fit',aCls:'fit',bCls:'fit',why:'',bWhy:'',notes:[...(ctx.notes[x.cn]||[])],deps:new Set(),steps:[],ratio:null,ratioS:null,mainUse:g.main};
   const step=(t,lines)=>R.steps.push({t,l:lines.filter(Boolean)});
@@ -213,7 +245,9 @@ function evalCell(x,ans,conf,ctx){
   step('הנתונים',[`שטח התא (פוליגון): ${fmt(x.A)} מ"ר${x.LA>0?` · legal_area: ${fmt(x.LA)} מ"ר`:''}`,
     `זכויות מעל הכניסה: ${fmt(g.tot)} מ"ר${g.below?` · מתחת לכניסה: ${fmt(g.below)} מ"ר`:''}${g.units?` · ${fmt(g.units)} יח"ד`:''}`,
     `קומות בטבלה: ${x.floors||'—'} מעל${x.floorsB?`, ${x.floorsB} מתחת`:''}${x.H!=null?` · גובה: ${f1(x.H)} מ'`:''}${x.cov?` · תכסית: ${x.cov}%`:''}`,
-    `שימושים: ${x.rows.filter(r=>r.above||r.below).map(r=>`${r.use} (${USE_L[r.cls]})`).join(', ')}`]);
+    `שימושים: ${x.rows.filter(r=>r.above||r.below).map(r=>`${r.use} (${USE_L[r.cls]})`).join(', ')}`,
+    x._balc?`כולל מרפסות: ${fmt(x._balc)} מ"ר (כרטיס 5)`:null]);
+  if(x._balc) dep('q5');
 
   // ── מעל הכניסה ──
   if(g.tot>0){
@@ -227,13 +261,15 @@ function evalCell(x,ans,conf,ctx){
       const hr=heightOf(x,ans), fh=g.main&&g.main!=='other'?ans.q2[g.main]:null, gCom=+ans.q2.com.lo||6;
       const hLow=fh?+fh.lo:null, hNorm=fh?(fh.tk?+fh.lo:(g.main==='pub'?+fh.hi:+fh.lo)):null;
       const fhKey={res:'fhRes',pub:'fhPub',off:'fhOff',other:'fhOther'}[g.main]||'fhOff';
-      if(hr.missing){ dep('q3'); R.notes.push(`פרמטר חסר: הגובה (${f1(x.H)}) נראה מעל פני הים, ואין מפלס 0.00 לייעוד ${x.yiud} (כרטיס 3). הגובה לא נבדק — החישוב לפי מספר הקומות בטבלה.`); }
+      if(hr.manual){ dep('q1'); R.notes.push(`הוקלד ידנית (נספח מחייב): גובה ${f2(hr.Hraw)} מ'${hr.abs?' מעל פני הים':' מעל הכניסה'}${hr.z!=null?`, מפלס 0.00 ${f2(hr.z)}`:''}${hr.ground!=null?`, קרקע גבוהה בתא ${f2(hr.ground)}`:''}${x._man.floors?`, ${x._man.floors} קומות`:''}.`); }
+      if(hr.missing){ dep(hr.manual?'q1':'q3'); R.notes.push(hr.manual?`פרמטר חסר: הגובה שהוקלד (${f1(hr.Hraw)}) מעל פני הים, בלי מפלס 0.00 ובלי קרקע (כרטיס 1). הגובה לא נבדק.`:`פרמטר חסר: הגובה (${f1(x.H)}) נראה מעל פני הים, ואין מפלס 0.00 לייעוד ${x.yiud} (כרטיס 3). הגובה לא נבדק — החישוב לפי מספר הקומות בטבלה.`); }
       const P=(ans.q4.list||[]).filter(p=>appliesTo(p,x)&&+p.val>0);
       const U=P.filter(p=>!p.exposed&&!p.approval), C=P.filter(p=>!p.exposed&&p.approval), X=P.filter(p=>p.exposed);
-      const test=(env,h,provs)=>{
+      const DROP=1;   // ירידה סבירה של 0.00 מתחת לקרקע הקיימת בשטח שטוח (ערך זמני, החלטה ק3)
+      const test=(env,h,provs,dH=0)=>{
         const tp=Math.min(0.9,provs.filter(p=>p.kind==='transfer').reduce((s,p)=>s+(+p.val),0)/100);
         const xf=provs.filter(p=>p.kind==='floors').reduce((s,p)=>s+Math.round(+p.val),0);
-        const fl=x.floors+xf, fit=fh?floorsFit(hr.Hrel,h,g.hasCom,gCom):null;
+        const fl=x.floors+xf, fit=fh?floorsFit(hr.Hrel==null?null:hr.Hrel+dH,h,g.hasCom,gCom):null;
         const fs=fit==null?fl:Math.min(fl,fit), area=g.tot*(1-tp);
         return {fs,fit,area,ratio:fs>0&&env>0?area/fs/env:Infinity,tp,xf};
       };
@@ -241,7 +277,9 @@ function evalCell(x,ans,conf,ctx){
         const L=[{k:0,t:test(env,hNorm,[])}];
         if(U.length) L.push({k:1,t:test(env,hNorm,U)});
         if(fh&&hLow<hNorm-1e-9) L.push({k:2,t:test(env,hLow,U)});
-        if(C.length) L.push({k:4,t:test(env,hLow||hNorm,[...U,...C])});
+        const dG=hr.ground!=null?DROP:0;
+        if(dG) L.push({k:3,t:test(env,hLow||hNorm,U,dG)});
+        if(C.length) L.push({k:4,t:test(env,hLow||hNorm,[...U,...C],dG)});
         const hit=L.find(o=>o.t.ratio<=1+1e-9);
         return {lev:hit?hit.k:9,hit,last:L[L.length-1],L};
       };
@@ -251,7 +289,7 @@ function evalCell(x,ans,conf,ctx){
       const H=hr.Hrel;
       step('שלב 4 — כמה קומות נכנסות בגובה',[
         H==null?(x.H==null?'אין גובה מרבי בטבלה — לפי מספר הקומות בטבלה.':'אין מפלס 0.00 — לפי מספר הקומות בטבלה.'):
-          `גובה זמין: ${f1(H)} מ'${hr.abs?` (${f1(x.H)} פחות מפלס 0.00 ${f1(hr.z)})`:''}`,
+          `גובה זמין: ${f1(H)} מ'${hr.abs&&hr.z!=null?` (${f1(hr.Hraw||x.H)} פחות מפלס 0.00 ${f1(hr.z)})`:''}${hr.ground!=null?` (${f1(hr.Hraw)} פחות הקרקע הגבוהה בתא ${f1(hr.ground)} — מפלס 0.00 לא ידוע, מחמיר)`:''}`,
         fh?`גובה קומה (${USE_L[g.main]}): ${f2(hLow)}${hNorm!==hLow?`–${f2(hNorm)}`:''} מ'${fh.tk?' (לפי התקנון)':' — ערך מקובל, ממתין לאדריכל'}${g.hasCom?` · קומת קרקע מסחרית ${f1(gCom)} מ'`:''}`:
           `אין ערך מקובל לגובה קומה לשימוש "${USE_L[g.main]||'—'}" — לפי מספר הקומות בטבלה.`,
         sortT.fit!=null?`קומות שנכנסות: ${g.hasCom?`(${f1(H)} − ${f1(gCom)}) ÷ ${f2(hLow)} + 1`:`${f1(H)} ÷ ${f2(hLow)}`} = ${sortT.fit} (מעוגל למטה). בטבלה: ${x.floors}.`:null,
@@ -261,7 +299,7 @@ function evalCell(x,ans,conf,ctx){
       if(sortT.fit!=null&&sortT.fit<x.floors) dep(fhKey);
       if(g.hasCom&&sortT.fit!=null&&sortT.fit<x.floors) dep('fhCom');
       // Q2 חלק ב — הגובה שהטבלה משתמעת ממנו
-      if(H!=null&&fh&&H/x.floors<hLow-0.005){ dep('q2');
+      if(H!=null&&!hr.manual&&fh&&H/x.floors<hLow-0.005){ dep('q2');
         const tt=x.floors>0&&ev.str.env>0?g.tot/x.floors/ev.str.env:Infinity;
         R.notes.push(`לפי הטבלה (${f2(H/x.floors)} מ' לקומה, ${x.floors} קומות): ${tt<=1?'נכנס':'לא נכנס'} (יחס ${f2(tt)}). הסיווג לפי הערך המקובל (${f2(hLow)} מ').`); }
       const lines8=[];
@@ -280,6 +318,14 @@ function evalCell(x,ans,conf,ctx){
         const need=Math.ceil(hit.area/ev.len.env-1e-9);
         const hMax=g.hasCom?(H-gCom)/Math.max(1,need-1):H/Math.max(1,need);
         R.aCls='cond'; R.why=`נכנס בתנאי — ממתין לטווח מאושר: גובה קומה ${f2(Math.floor(hMax*20)/20)} מ' (נכנס ב-${f2(hLow)}, לא ב-${f2(hNorm)})`; dep(fhKey); if(U.length) dep('q4');
+      } else if(lev===3){
+        const tN=test(ev.len.env,hNorm,U,DROP), useH=tN.ratio<=1+1e-9?hNorm:hLow;
+        const need=Math.min(x.floors,Math.ceil(hit.area/ev.len.env-1e-9)), reqH=g.hasCom?gCom+(need-1)*useH:need*useH, drop=Math.max(0,reqH-H);
+        const zReq=hr.ground-drop;
+        if(tN.ratio<=1+1e-9){ R.aCls='fit'; R.why='נכנס, אם מפלס 0.00 יורד עד 1 מ׳ מתחת לקרקע'; }
+        else { const hMax=g.hasCom?(H+DROP-gCom)/Math.max(1,need-1):(H+DROP)/Math.max(1,need);
+          R.aCls='cond'; R.why=`נכנס בתנאי — ממתין לטווח מאושר: גובה קומה ${f2(Math.floor(hMax*20)/20)} מ' (נכנס ב-${f2(hLow)}, לא ב-${f2(hNorm)})`; dep(fhKey); }
+        R.notes.push(`פרמטר חסר: נדרש 0.00 ≤ ${f2(zReq)} (ירידה של ${f2(drop)} מ' מתחת לקרקע הגבוהה בתא; בשטח שטוח עד 1 מ' סביר)`); dep('q1'); if(U.length) dep('q4');
       } else if(lev===4){
         R.aCls='cond'; R.why=`נכנס בתנאי: ${C.map(nm).join(', ')} — באישור`; dep('q4');
       } else if(lev===-1){
@@ -340,8 +386,8 @@ function evalCell(x,ans,conf,ctx){
           if(left<+r.val&&R.aCls!=='plan'){ R.aCls='plan'; R.why=`התקנון מחייב ${fmt(r.val)} מ"ר פתוחים. אחרי התכסית הנדרשת נשארים ${fmt(left)} מ"ר.`; } }
         step('שלב 6 — טיפולוגיה (שלושה מספרים, בלי העמדה)',l6);
       }
-      step('שלב 8–9 — סיווג מעל הכניסה',[...Ll.L.map(o=>`${['בלי הוראות, גובה קומה רגיל','עם הוראות מתירות בלי תנאי','+ קצה נמוך של גובה הקומה','','+ הוראות באישור ועדה/מהנדס'][o.k]}: ${o.t.fs} קומות, יחס ${f2(o.t.ratio)}${o.t.ratio<=1+1e-9?' ✓':''}`),
-        ...lines8, `→ ${CL[R.aCls]}: ${R.why}`]);
+      step('שלב 8–9 — סיווג מעל הכניסה',[...Ll.L.map(o=>`${['בלי הוראות, גובה קומה רגיל','עם הוראות מתירות בלי תנאי','+ קצה נמוך של גובה הקומה','+ ירידת 0.00 עד 1 מ׳ מתחת לקרקע','+ הוראות באישור ועדה/מהנדס'][o.k]}: ${o.t.fs} קומות, יחס ${f2(o.t.ratio)}${o.t.ratio<=1+1e-9?' ✓':''}`),
+        ...lines8, R.why.startsWith(CL[R.aCls])?`→ ${R.why}`:`→ ${CL[R.aCls]}: ${R.why}`]);
     }
   }
   // ── מתחת לכניסה (שלב 5.4, הכרעה ד) ──
@@ -350,14 +396,19 @@ function evalCell(x,ans,conf,ctx){
     for(const r of rest){ if(r.kind==='basementCov') parts.push({v:x.A*r.val/100,w:`תכסית מרתף ${r.val}%`}); if(r.kind==='freeAll') parts.push({v:x.A*(1-r.val/100),w:`${r.val}% ללא בינוי מעל ומתחת`}); }
     if(parts.length>1) dep('q5');
     const envB=Math.min(...parts.map(p=>p.v));
-    if(!x.floorsB){ R.notes.push('מתחת לכניסה: אין מספר קומות בטבלה — לא נבדק.'); R.bWhy='לא נבדק'; }
-    else{
-      const cap=envB*x.floorsB, rb=g.below/cap; R.ratioB=rb;
-      if(rb>1+1e-9){ R.bCls='excess'; R.bMiss=g.below-cap; R.bWhy=`מתחת לכניסה: זכויות עודפות + פרמטר חסר (תקן חניה). חסרים ${fmt(R.bMiss)} מ"ר.`; }
-      else R.bWhy=rb>=1-K.eps?'מתחת לכניסה: נכנס (ללא מרווח)':'מתחת לכניסה: נכנס';
+    // לכל שורה בטבלה 5 בנפרד, מול הקומות שלה (מקל: שורות שונות לא נספרות כחולקות את אותן קומות)
+    const bl=[]; let miss=0, rbMax=0, unk=false;
+    for(const r of x.rows.filter(r=>r.below>0)){
+      const fl=r.fB||x.floorsB; if(!fl){ unk=true; bl.push(`${r.use}: ${fmt(r.below)} מ"ר — אין מספר קומות, לא נבדק`); continue; }
+      const cap=envB*fl, rb=r.below/cap; rbMax=Math.max(rbMax,rb); if(rb>1+1e-9) miss+=r.below-cap;
+      bl.push(`${r.use}: ${fmt(r.below)} ÷ (${fmt(envB)} × ${fl} קומות) = ${f2(rb)}${rb>1+1e-9?' ✗':' ✓'}`);
     }
-    step('שלב 5 — מתחת לכניסה (מרתף)',[...parts.map(p=>`${p.w}: ${fmt(p.v)} מ"ר`),
-      x.floorsB?`${fmt(g.below)} ÷ (${fmt(envB)} × ${x.floorsB} קומות) = ${f2(R.ratioB)} → ${R.bWhy}`:R.bWhy]);
+    R.ratioB=rbMax||null;
+    if(miss>0){ R.bCls='excess'; R.bMiss=miss; R.bWhy=`מתחת לכניסה: זכויות עודפות + פרמטר חסר (תקן חניה). חסרים ${fmt(miss)} מ"ר.`; }
+    else if(rbMax) R.bWhy=rbMax>=1-K.eps?'מתחת לכניסה: נכנס (ללא מרווח)':'מתחת לכניסה: נכנס';
+    else R.bWhy='מתחת לכניסה: לא נבדק';
+    if(unk) R.notes.push('מתחת לכניסה: לשורה בלי מספר קומות — לא נבדקה.');
+    step('שלב 5 — מתחת לכניסה (מרתף), לכל שורה',[...parts.map(p=>`${p.w}: ${fmt(p.v)} מ"ר`),...bl,`→ ${R.bWhy}`]);
   }
   R.cls=worst(R.aCls,R.bCls);
   if(!R.why) R.why=g.tot>0?'נכנס':'';
@@ -369,19 +420,32 @@ function evalCell(x,ans,conf,ctx){
 function run(cells,spec,ctx){
   ctx=ctx||{}; const ans=spec.ans, conf=spec.conf||{};
   const rev=reverse(cells,ans);
-  const rows=Object.values(cells).map(x=>evalCell(x,ans,conf,{notes:rev.notes}));
+  for(const x of Object.values(cells)) if(x.notesIn&&x.notesIn.length) (rev.notes[x.cn]=rev.notes[x.cn]||[]).unshift(...x.notesIn);
+  const one=x=>{
+    const g=regime(x);
+    if(!(ans.q5.alt||[]).includes(x.yiud)||!(g.by.res>0&&g.by.pub>0)) return evalCell(x,ans,conf,{notes:rev.notes});
+    // שימושים חלופיים (מגורים או ציבור): כל חלופה נבדקת לבד, עם הקומות והגובה של השורות שלה; הקובעת — החמורה
+    const mk=(drop,lbl)=>{ const rs=x.rows.filter(r=>r.cls!==drop), up=rs.filter(r=>r.above>0);
+      const fl=Math.max(0,...up.map(r=>r.fA||0))||x.floors, h=Math.max(0,...up.map(r=>r.gova||0))||x.H;
+      const R=evalCell(Object.assign({},x,{rows:rs,floors:fl,H:h}),ans,conf,{notes:rev.notes}); R._alt=lbl; return R; };
+    const a=mk('pub','מגורים'), b=mk('res','ציבור');
+    const w=SEV[b.cls]>SEV[a.cls]||(SEV[b.cls]===SEV[a.cls]&&(b.ratio||0)>(a.ratio||0))?b:a, o=w===a?b:a;
+    w.notes.unshift(`שימושים חלופיים (כרטיס 5): כל חלופה נבדקה לבד. הקובעת: ${w._alt}. החלופה השנייה (${o._alt}): ${CL[o.cls]}${o.ratio!=null&&isFinite(o.ratio)?', יחס '+f2(o.ratio):''}.`);
+    w.deps=[...new Set([...w.deps,'q5'])]; w.units=regime(x).units; return w; };
+  const rows=Object.values(cells).map(one);
   const cnt={}; for(const c of CLS) cnt[c]=0; for(const r of rows) cnt[r.cls]++;
   rows.sort((a,b)=>SEV[b.cls]-SEV[a.cls]||(b.ratio||0)-(a.ratio||0));
   const depCnt={}; for(const r of rows) for(const d of r.deps) depCnt[d]=(depCnt[d]||0)+1;
   // הערות לתוכנית ולשורה
   const plan=[], rowNotes=[];
+  if(Object.values(cells).some(x=>x._pct)) plan.push('הזכויות בטבלה 5 רשומות באחוזים משטח התא ("% מתא שטח") — הומרו למ"ר לפי שטח הפוליגון. מספר יח"ד מחושב מהצפיפות, כשאין עמודת יח"ד.');
   if(ctx.noLinesLayer) plan.push('אין קווי בניין בתשריט: המעטפת נבנית מהמספרים בטבלה 5. בלי לדעת איזו צלע פונה לדרך, מחושבות שתי קריאות של כיוון הקווים.');
   const bx={}; for(const r of rows) if(r.bCls==='excess'){ const k=r.grp||r.yiud; (bx[k]=bx[k]||[]).push(r); }
   for(const [k,list] of Object.entries(bx)) rowNotes.push({t:`מרתף, ${k} (${list.length} תאים): זכויות עודפות + פרמטר חסר (תקן חניה). חסרים בסך הכל ${fmt(list.reduce((s,r)=>s+r.bMiss,0))} מ"ר.`,cells:list.map(r=>r.cn)});
   if(Object.keys(bx).length) plan.push('תקן חניה לא נבדק (פרמטר חסר): זכויות מרתף שלא נכנסות מסומנות "זכויות עודפות", לא ממצא.');
   plan.push('מפלסים, שיפוע, ערימה אנכית, חזית מסחרית ותא עם כמה אזורי גובה לא נבדקים בכלי: הוא עובד רק על התשריט וטבלה 5.');
   const mirp=Object.values(cells).reduce((s,x)=>s+(x.mirp||0),0);
-  if(mirp>0) plan.push(`מרפסות (${fmt(mirp)} מ"ר בטבלה) לא נכללו בשטח שנבדק.`);
+  if(mirp>0) plan.push(ans.q5.balc?`מרפסות (${fmt(mirp)} מ"ר בטבלה) נכללו בשטח מעל הכניסה (כרטיס 5).`:`מרפסות (${fmt(mirp)} מ"ר בטבלה) לא נכללו בשטח שנבדק. אם הן בתוך התכסית — לסמן בכרטיס 5.`);
   if(ans.q1.status==='bind') plan.push(`נספח הבינוי מחייב${ans.q1.topic?' ב'+ans.q1.topic:''}. הכלי לא קורא אותו: נתוני התאים לפי טבלה 5 בלבד — כדאי לבדוק את התאים הרלוונטיים מול הנספח.`);
   const missZ=new Set(rows.filter(r=>r.deps.includes('q3')).map(r=>r.yiud));
   if(missZ.size) plan.push(`הגובה בטבלה נראה מעל פני הים ב: ${[...missZ].join(', ')}. בלי מפלס 0.00 (כרטיס 3) הגובה לא נבדק.`);
@@ -507,14 +571,16 @@ FC.toggle=function(){ FC.open?FC.close():FC.openPanel(); };
 // ── נתונים מהממשק ──
 function featIndex(){ const idx={}; const L=state.layers&&state.layers.plan; if(!L) return idx;
   for(const f of L.features){ const n=String(f.properties.NUM??'').trim(); if(n) (idx[n]=idx[n]||[]).push(f); } return idx; }
-function perim(f){ const g=f.geometry; const P=g.type==='Polygon'?[g.coordinates]:g.coordinates; let s=0;
+function perim(f,mpuIn){ const g=f.geometry; const P=g.type==='Polygon'?[g.coordinates]:g.coordinates; let s=0;
   for(const p of P){ const r=p[0]; for(let i=1;i<r.length;i++) s+=Math.hypot(r[i][0]-r[i-1][0],r[i][1]-r[i-1][1]); }
-  const mpu=(typeof state!=='undefined'&&state.spanMeters&&typeof DATA_SIZE!=='undefined')?state.spanMeters/DATA_SIZE:1; return s*mpu; }
-function geomOf(idx){ return cn=>{ const fs=idx[cn]; if(!fs||!fs.length) return null;
-  let A=0; try{ for(const f of fs) A+=_featureAreaM2(f); }catch(e){ return null; }
+  const mpu=mpuIn||((typeof state!=='undefined'&&state.spanMeters&&typeof DATA_SIZE!=='undefined')?state.spanMeters/DATA_SIZE:1); return s*mpu; }
+// L (בדיקות): {area, buildGeom, mpu} — ברירת מחדל: הפונקציות של הממשק
+function geomOf(idx,L){ L=L||{}; const area=L.area||(f=>_featureAreaM2(f)), bgeom=L.buildGeom||(f=>_calcBuildGeom(f));
+  return cn=>{ const fs=idx[cn]; if(!fs||!fs.length) return null;
+  let A=0; try{ for(const f of fs) A+=area(f); }catch(e){ return null; }
   const LA=fs.reduce((s,f)=>s+(+f.properties.LEGAL_AREA||0),0);
-  let lines=null; try{ const g=_calcBuildGeom(fs[0]); if(g&&!g.noLines&&g.env>0) lines={env:g.env,per:g.per}; }catch(e){}
-  let per0=null; try{ per0=perim(fs[0]); }catch(e){}
+  let lines=null; try{ const g=bgeom(fs[0]); if(g&&!g.noLines&&g.env>0) lines={env:g.env,per:g.per,w:g.w}; }catch(e){}
+  let per0=null; try{ per0=perim(fs[0],L.mpu); }catch(e){}
   return {A,LA,lines,per0}; }; }
 function _noLinesLayer(){ const arc=state.layers&&state.layers.arc; return !arc||!arc.features.some(f=>typeof _isBuildLine==='function'&&_isBuildLine(f.properties.MAVAT_CODE)); }
 FC.ensure=function(force){
@@ -538,11 +604,15 @@ FC.set=function(path,el){ const ks=path.split('.'); let o=A_(); for(let i=0;i<ks
 FC.setZ=function(yi,el){ A_().q3.z[FC._yiuds[yi]]=el.value===''?null:+el.value; _upd(); };
 FC.conf=function(q){ FC.spec.conf[q]=!FC.spec.conf[q]; _upd(); };
 FC.addItem=function(q){ const L=A_()[q].list; L.push(q==='q4'?{kind:'transfer',val:null,exposed:false,approval:false,yiud:null,src:''}:{kind:'basementCov',val:null,yiud:null,minCell:null,src:''}); FC.spec.conf[q]=false; _upd(); };
+FC.addMan=function(){ const q=A_().q1; (q.manual=q.manual||[]).push({cells:'',H:null,ref:'abs',z:null,ground:null,floors:null}); _upd(); };
+FC.delMan=function(i){ A_().q1.manual.splice(i,1); _upd(); };
+FC.setMan=function(i,k,el){ A_().q1.manual[i][k]=val(el); _upd(); };
 FC.delItem=function(q,i){ A_()[q].list.splice(i,1); _upd(); };
 FC.setItem=function(q,i,k,el){ A_()[q].list[i][k]=val(el); _upd(); };
 FC.itemYiud=function(q,i,yi,el){ const it=A_()[q].list[i], y=FC._yiuds[yi];
   let s=it.yiud&&it.yiud.length?[...it.yiud]:[...FC._yiuds]; s=el.checked?[...new Set([...s,y])]:s.filter(v=>v!==y);
   it.yiud=s.length===FC._yiuds.length?null:s; _upd(); };
+FC.alt=function(yi,el){ const y=FC._yiuds[yi], m=A_().q5.alt||[]; A_().q5.alt=el.checked?[...new Set([...m,y])]:m.filter(v=>v!==y); _upd(); };
 FC.mand=function(yi,el){ const y=FC._yiuds[yi], m=A_().q6.mand; const s=el.checked?[...new Set([...m,y])]:m.filter(v=>v!==y); A_().q6.mand=s; _upd(); };
 FC.setFilter=function(k,v){ FC[k]=FC[k]===v&&k==='filter'?'all':v; FC.render(); };
 FC.focus=function(cn){
@@ -581,12 +651,21 @@ function cardsDef(R){
     מקור: <input type="text" style="width:140px" value="${E(it.src)}" onchange="FC.setItem('q5',${i},'src',this)"><br>
     <span class="fc-small">חל על:</span> ${_yiudBoxes('q5',i,it)}</div>`;
   const potB=Object.values(FC._cells).filter(x=>regime(x).below>0).length;
+  const altY=FC._yiuds.filter(y=>Object.values(FC._cells).some(x=>x.yiud===y&&regime(x).by.res>0&&regime(x).by.pub>0));
   return [
-    {q:'q1',t:'מעמד נספח הבינוי',n:a.q1.status==='bind'?1:0,nTxt:a.q1.status==='bind'?'הערה לכל התוכנית':null,
+    {q:'q1',t:'מעמד נספח הבינוי',n:a.q1.status==='bind'?Math.max(1,dc('q1')):0,nTxt:a.q1.status==='bind'&&!dc('q1')?'הערה לכל התוכנית':null,
       h:`<div>לפי טבלה 1.7 בתקנון ("מסמכי התכנית"), נספח הבינוי:
         <select onchange="FC.set('q1.status',this)"><option value="bg"${a.q1.status==='bg'?' selected':''}>רקע / מנחה</option><option value="bind"${a.q1.status==='bind'?' selected':''}>מחייב (חלקית) בנושא מסוים</option></select>
         ${a.q1.status==='bind'?`בנושא: <input type="text" style="width:160px" placeholder="למשל: גובה וקומות" value="${E(a.q1.topic)}" onchange="FC.set('q1.topic',this)">`:''}</div>
-        <div class="fc-small">הכלי לא קורא את הנספח. אם הוא מחייב בגובה או במפלסים, הנתון של כל תא לא נכנס לחישוב, ותופיע הערה לכל התוכנית.</div>`},
+        <div class="fc-small">הכלי לא קורא את הנספח. אם הוא מחייב בגובה או במפלסים — אפשר להקליד כאן את הנתון מהנספח לתא או לקבוצת תאים. נתון שלא הוקלד לא נכנס לחישוב.</div>
+        ${a.q1.status==='bind'?`${(a.q1.manual||[]).map((m,i)=>`<div class="fc-li">תאים: <input type="text" style="width:130px" placeholder="504, 1101-1116" value="${E(m.cells)}" onchange="FC.setMan(${i},'cells',this)">
+          גובה מרבי: <input type="number" step="0.01" value="${m.H??''}" onchange="FC.setMan(${i},'H',this)"> מ'
+          <select onchange="FC.setMan(${i},'ref',this)"><option value="abs"${m.ref!=='rel'?' selected':''}>מעל פני הים</option><option value="rel"${m.ref==='rel'?' selected':''}>מעל הכניסה</option></select>
+          <button class="fc-btn" onclick="FC.delMan(${i})">✕</button><br>
+          ${m.ref!=='rel'?`מפלס 0.00: <input type="number" step="0.01" value="${m.z??''}" onchange="FC.setMan(${i},'z',this)"> · או קרקע גבוהה בתא: <input type="number" step="0.01" value="${m.ground??''}" onchange="FC.setMan(${i},'ground',this)"> · `:''}
+          קומות (אם הנספח קובע): <input type="number" value="${m.floors??''}" onchange="FC.setMan(${i},'floors',this)"></div>`).join('')}
+          <button class="fc-btn" onclick="FC.addMan()">＋ הקלדת נתון מהנספח</button>
+          <div class="fc-small">בלי מפלס 0.00, הגובה הזמין מחושב מהקרקע הגבוהה בתא (מחמיר). אם התא נכנס רק בירידה של עד 1 מ' מתחת לקרקע — "פרמטר חסר: נדרש 0.00 ≤ ___". הערכים מסומנים "הוקלד ידנית" ונשמרים לתוכנית הזו.</div>`:''}`},
     {q:'q2',t:'גובה קומה',n:dc('q2')+dc('fhRes')+dc('fhPub')+dc('fhOff')+dc('fhCom'),
       h:`<div>התקנון לא קובע גובה קומה? הכלי מחשב לפי הערכים המקובלים. אם התקנון קובע — מתקנים כאן ומסמנים "נקבע בתקנון".</div>
         ${fhRow('res','מגורים','fhRes')}${fhRow('pub','ציבור','fhPub')}${fhRow('off','משרדים / תעסוקה','fhOff')}${fhRow('com','קומת קרקע מסחרית','fhCom')}
@@ -610,7 +689,10 @@ function cardsDef(R){
       h:`<div>מגבלה שמקטינה את המעטפת. ברירת המחדל לכל מגבלה: חלה רק על הייעוד של הפרק שבו היא כתובה (לא מחילים באנלוגיה).</div>
         ${(a.q5.list||[]).map(q5i).join('')}<button class="fc-btn" onclick="FC.addItem('q5')">＋ הוספת מגבלה</button>
         <div>הגובה המרבי: <select onchange="FC.set('q5.parapet',this)"><option value="no"${a.q5.parapet!=='yes'?' selected':''}>לא כולל מעקה גג (ברירת מחדל)</option><option value="yes"${a.q5.parapet==='yes'?' selected':''}>כולל מעקה גג וחדר יציאה</option></select>
-        ${a.q5.parapet!=='yes'?tvTag('parapet'):''}</div>`},
+        ${a.q5.parapet!=='yes'?tvTag('parapet'):''}</div>
+        <div><label class="fc-yi"><input type="checkbox" ${a.q5.balc?'checked':''} onchange="FC.set('q5.balc',this)">המרפסות בטבלה 5 בתוך התכסית / קווי הבניין (נספרות בשטח הקומה)</label></div>
+        ${altY.length?`<div>ייעודים שבהם השימושים בטבלה הם <b>חלופות</b> (מגורים <b>או</b> ציבור), לא תוספת: ${altY.map(y=>`<label class="fc-yi"><input type="checkbox" ${(a.q5.alt||[]).includes(y)?'checked':''} onchange="FC.alt(${FC._yiuds.indexOf(y)},this)">${E(y)}</label>`).join('')}
+          <div class="fc-small">כל חלופה נבדקת לבד, עם הקומות והגובה שלה, והחמורה קובעת. בלי סימון — השימושים מתחברים.</div></div>`:''}`},
     {q:'q6',t:'חובה לממש שטחי ציבור',n:dc('q6'),
       h:`<div>נוסח כמו "תראה את מיצוי" = הזכויות <b>חובה</b>: מה שלא נכנס הוא ממצא. בלי נוסח כזה הן מקסימום, ומה שלא נכנס = זכויות עודפות. לסמן רק ייעוד שהנוסח כתוב בפרק שלו:</div>
         ${FC._yiuds.filter(y=>Object.values(FC._cells).some(x=>x.yiud===y&&regime(x).main==='pub')).map(y=>`<label class="fc-yi"><input type="checkbox" ${(a.q6.mand||[]).includes(y)?'checked':''} onchange="FC.mand(${FC._yiuds.indexOf(y)},this)">${E(y)}</label>`).join('')||'<span class="fc-small">אין בתוכנית ייעודי ציבור עם זכויות.</span>'}`},
@@ -782,7 +864,7 @@ FC.hasUser=function(s){ s=s||FC.spec; if(!s) return false;
   if(Object.values(s.conf||{}).some(Boolean)) return true;
   return JSON.stringify(normalizeSpec({v:2,ans:s.ans}).ans)!==JSON.stringify(defaultAnswers()); };
 
-FC.Engine={run,cellsFromT5,evalCell,reverse,envelope,heightOf,useClass,regime,defaultAnswers,emptySpec,normalizeSpec,TV,K,CL};
+FC.Engine={geomOf,featIndexOf:feats=>{ const idx={}; for(const f of feats){ const n=String(f.properties.NUM??'').trim(); if(n) (idx[n]=idx[n]||[]).push(f); } return idx; },run,cellsFromT5,evalCell,reverse,envelope,heightOf,useClass,regime,defaultAnswers,emptySpec,normalizeSpec,TV,K,CL};
 FC.spec=emptySpec('');
 if(typeof document!=='undefined'){ if(document.head) _css(); else document.addEventListener('DOMContentLoaded',_css); }
 root.FC=FC;
