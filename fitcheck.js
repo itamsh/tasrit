@@ -285,7 +285,8 @@ function evalCell(x,ans,conf,ctx){
       };
       const Ll=ladder(ev.len.env), Ls=ev.two?ladder(ev.str.env):Ll;
       const sortT=test(ev.len.env,hLow||hNorm,[]);
-      R.ratio=sortT.ratio; R.fs=sortT.fs; R.fit=sortT.fit; if(ev.two) R.ratioS=test(ev.str.env,hLow||hNorm,[]).ratio;
+      R.ratio=sortT.ratio; R.fs=sortT.fs; R.fit=sortT.fit;
+      R.env=ev.len.env; R.hUse=hLow||hNorm||3.2; R.floorA=sortT.fs>0?sortT.area/sortT.fs:null; R.envFloors=sortT.fit!=null?sortT.fit:x.floors; R.hasCom=g.hasCom; R.gCom=gCom;   // למציג התלת-ממד if(ev.two) R.ratioS=test(ev.str.env,hLow||hNorm,[]).ratio;
       const H=hr.Hrel;
       step('שלב 4 — כמה קומות נכנסות בגובה',[
         H==null?(x.H==null?'אין גובה מרבי בטבלה — לפי מספר הקומות בטבלה.':'אין מפלס 0.00 — לפי מספר הקומות בטבלה.'):
@@ -403,7 +404,7 @@ function evalCell(x,ans,conf,ctx){
       const cap=envB*fl, rb=r.below/cap; rbMax=Math.max(rbMax,rb); if(rb>1+1e-9) miss+=r.below-cap;
       bl.push(`${r.use}: ${fmt(r.below)} ÷ (${fmt(envB)} × ${fl} קומות) = ${f2(rb)}${rb>1+1e-9?' ✗':' ✓'}`);
     }
-    R.ratioB=rbMax||null;
+    R.ratioB=rbMax||null; R.envB=envB; R.floorsBmax=Math.max(0,...x.rows.filter(r=>r.below>0).map(r=>r.fB||x.floorsB||0));
     if(miss>0){ R.bCls='excess'; R.bMiss=miss; R.bWhy=`מתחת לכניסה: זכויות עודפות + פרמטר חסר (תקן חניה). חסרים ${fmt(miss)} מ"ר.`; }
     else if(rbMax) R.bWhy=rbMax>=1-K.eps?'מתחת לכניסה: נכנס (ללא מרווח)':'מתחת לכניסה: נכנס';
     else R.bWhy='מתחת לכניסה: לא נבדק';
@@ -417,6 +418,22 @@ function evalCell(x,ans,conf,ctx){
   return R;
 }
 
+// מציג תלת-ממד: מצולע בסיס (יחידות ציור) → שני נפחים במטרים. הגוש = הבסיס מוקטן/מוגדל סביב המרכז לשטח הקומה הנדרש.
+function polyArea(p){ let a=0; for(let i=0;i<p.length;i++){ const q=p[(i+1)%p.length]; a+=p[i][0]*q[1]-q[0]*p[i][1]; } return a/2; }
+function massOf(r,base,mpu){
+  if(!r||!base||base.length<3) return null;
+  let ring=base.slice(); const l=ring[ring.length-1]; if(l[0]===ring[0][0]&&l[1]===ring[0][1]) ring.pop();
+  const m=ring.map(p=>[p[0]*mpu,p[1]*mpu]), A0=polyArea(m), A=Math.abs(A0); if(!(A>1)) return null;
+  let cx=0,cy=0; for(let i=0;i<m.length;i++){ const p=m[i],q=m[(i+1)%m.length],c=p[0]*q[1]-q[0]*p[1]; cx+=(p[0]+q[0])*c; cy+=(p[1]+q[1])*c; } cx/=6*A0; cy/=6*A0;
+  const sc=k=>m.map(p=>[cx+(p[0]-cx)*k,cy+(p[1]-cy)*k]);
+  const hh=n=>!(n>0)?0:r.hasCom?r.gCom+(n-1)*r.hUse:n*r.hUse;
+  const o={baseA:A,c:[cx,cy]};
+  if(r.env>0&&r.hUse) o.env={poly:sc(Math.sqrt(Math.min(1,r.env/A))),h:hh(r.envFloors),area:Math.min(r.env,A)};
+  if(r.floorA>0&&r.hUse) o.req={poly:sc(Math.sqrt(r.floorA/A)),h:hh(r.fs),area:r.floorA};
+  if(r.below>0&&r.floorsBmax>0) o.below={poly:sc(Math.sqrt(r.below/r.floorsBmax/A)),depth:r.floorsBmax*3.2};
+  o.out=!!(o.req&&o.env&&r.floorA>r.env*(1+1e-6));
+  return o;
+}
 function run(cells,spec,ctx){
   ctx=ctx||{}; const ans=spec.ans, conf=spec.conf||{};
   const rev=reverse(cells,ans);
@@ -564,7 +581,7 @@ FC.close=function(){
   const p=$('fc-panel'); if(p) p.classList.remove('vis');
   if($('legend')) $('legend').style.display='';
   const b=$('btn-fc'); if(b) b.classList.remove('active');
-  FC.open=false; _resize(); _redraw();
+  FC.open=false; try{ if(root.M3D) M3D.close(); }catch(e){} _resize(); _redraw();
 };
 FC.toggle=function(){ FC.open?FC.close():FC.openPanel(); };
 
@@ -579,7 +596,7 @@ function geomOf(idx,L){ L=L||{}; const area=L.area||(f=>_featureAreaM2(f)), bgeo
   return cn=>{ const fs=idx[cn]; if(!fs||!fs.length) return null;
   let A=0; try{ for(const f of fs) A+=area(f); }catch(e){ return null; }
   const LA=fs.reduce((s,f)=>s+(+f.properties.LEGAL_AREA||0),0);
-  let lines=null; try{ const g=bgeom(fs[0]); if(g&&!g.noLines&&g.env>0) lines={env:g.env,per:g.per,w:g.w}; }catch(e){}
+  let lines=null; try{ const g=bgeom(fs[0]); if(g&&!g.noLines&&g.env>0) lines={env:g.env,per:g.per,w:g.w,poly:g.poly||null}; }catch(e){}
   let per0=null; try{ per0=perim(fs[0],L.mpu); }catch(e){}
   return {A,LA,lines,per0}; }; }
 function _noLinesLayer(){ const arc=state.layers&&state.layers.arc; return !arc||!arc.features.some(f=>typeof _isBuildLine==='function'&&_isBuildLine(f.properties.MAVAT_CODE)); }
@@ -598,7 +615,8 @@ FC.resultFor=function(cn){ try{ if(!FC.spec) FC.spec=emptySpec(curPlan()); if(!F
 
 // ── עדכוני כרטיסים (בכל handler רק מזהים/אינדקסים — בלי טקסט עברי בתוך onclick) ──
 const A_=()=>FC.spec.ans;
-const _upd=()=>{ FC.ensure(true); FC.render(); _redraw(); };
+const _m3=()=>{ try{ if(root.M3D&&M3D.open) M3D.refresh(); }catch(e){} };
+const _upd=()=>{ FC.ensure(true); FC.render(); _redraw(); _m3(); };
 const val=el=>el.type==='checkbox'?el.checked:(el.type==='number'?(el.value===''?null:+el.value):el.value);
 FC.set=function(path,el){ const ks=path.split('.'); let o=A_(); for(let i=0;i<ks.length-1;i++) o=o[ks[i]]; o[ks[ks.length-1]]=val(el); _upd(); };
 FC.setZ=function(yi,el){ A_().q3.z[FC._yiuds[yi]]=el.value===''?null:+el.value; _upd(); };
@@ -614,7 +632,12 @@ FC.itemYiud=function(q,i,yi,el){ const it=A_()[q].list[i], y=FC._yiuds[yi];
   it.yiud=s.length===FC._yiuds.length?null:s; _upd(); };
 FC.alt=function(yi,el){ const y=FC._yiuds[yi], m=A_().q5.alt||[]; A_().q5.alt=el.checked?[...new Set([...m,y])]:m.filter(v=>v!==y); _upd(); };
 FC.mand=function(yi,el){ const y=FC._yiuds[yi], m=A_().q6.mand; const s=el.checked?[...new Set([...m,y])]:m.filter(v=>v!==y); A_().q6.mand=s; _upd(); };
-FC.setFilter=function(k,v){ FC[k]=FC[k]===v&&k==='filter'?'all':v; FC.render(); };
+FC.setFilter=function(k,v){ FC[k]=FC[k]===v&&k==='filter'?'all':v; FC.render(); _redraw(); _m3(); };
+// 🧊 תלת-ממד — massing3d.js נטען רק בלחיצה הראשונה
+FC.toggle3d=function(){
+  if(root.M3D){ M3D.toggle(); return; }
+  const s=document.createElement('script'); s.src='massing3d.js'; s.onload=()=>{ if(root.M3D) M3D.openView(); }; s.onerror=()=>alert('לא הצלחתי לטעון את המציג התלת-ממדי'); document.head.appendChild(s);
+};
 FC.focus=function(cn){
   FC.sel=String(cn); _redraw();
   const fs=FC._idx&&FC._idx[cn]; if(!fs||typeof dc!=='function'||typeof zoomAt!=='function') return;
@@ -744,7 +767,7 @@ function _cellsHtml(R){
     <td class="fc-why">${r.notes.map(E).join('<br>')}</td><td class="fc-small">${r.deps.filter(d=>DEP_L[d]||TV[d]).map(depLabel).map(E).join(', ')}</td></tr>`; }).join('')}
   </tbody></table></div>`;
 }
-FC.pick=function(cn){ FC.focus(cn); FC.explain(cn); };
+FC.pick=function(cn){ FC.focus(cn); FC.explain(cn); _m3(); };
 function _openQ(R){
   const arch=Object.keys(TV).filter(k=>R.depCnt[k]).map(k=>`• ${E(TV[k].l)} (${E(TV[k].v)}): ${R.depCnt[k]} תאים`);
   const pl=R.rows.filter(r=>r.cls==='plan').map(r=>`• תא ${E(r.cn)} (${E(r.yiud)}): ${E(r.whyMain)}`);
@@ -761,7 +784,7 @@ FC.render=function(){
   const cnts=CLS.slice().reverse().map(k=>`<span class="fc-cnt${FC.filter!=='all'&&FC.filter!==k?' off':''}" style="background:${COL[k]}" onclick="FC.setFilter('filter','${k}')">${CL[k]} ${R.cnt[k]}</span>`).join('');
   const nConf=Object.values(FC.spec.conf).filter(Boolean).length;
   B.innerHTML=`<div class="fc-sum"><b>תוכנית ${E(FC.spec.plan||curPlan()||'—')}</b> · נקראו: טבלה 5 (${nCells} תאים) · תשריט (${nGeo} תאים נבדקו) · ${nl?'אין קווי בניין בתשריט':'קווי בניין מהתשריט'}<br>${cnts}
-      <div class="fc-small">${nConf}/7 כרטיסים אושרו. תוצאה שתלויה בכרטיס שלא אושר — לפי ברירת המחדל. <button class="fc-btn" onclick="FC.exportFile()">⬇ ייצוא לקובץ</button></div></div>
+      <div class="fc-small">${nConf}/7 כרטיסים אושרו. תוצאה שתלויה בכרטיס שלא אושר — לפי ברירת המחדל. <button class="fc-btn" onclick="FC.exportFile()">⬇ ייצוא לקובץ</button> <button class="fc-btn ok" id="btn-m3d" onclick="FC.toggle3d()">🧊 תלת-ממד</button></div></div>
     ${det('cards',true,'שאלות לתוכנית — 7 כרטיסים (מסודרים לפי מספר התאים שכל אחד משנה)',_cardsHtml(R))}
     ${det('tv',true,'ערכים זמניים שהתוצאה נשענת עליהם',_tvHtml(R))}
     ${det('notes',true,'הערות לתוכנית ולשורות',R.plan.map(t=>`<div class="fc-note">• ${E(t)}</div>`).join('')+R.rowNotes.map(n=>`<div class="fc-note">• ${E(n.t)} <span class="fc-small">(${n.cells.map(E).join(', ')})</span></div>`).join(''))}
@@ -771,6 +794,18 @@ FC.render=function(){
   B.scrollTop=scroll;
 };
 
+// ── נתונים למציג התלת-ממד (massing3d.js) ──
+FC.massItems=function(){
+  const R=FC.ensure(); if(!R) return [];
+  const mpu=(typeof state!=='undefined'&&state.spanMeters&&typeof DATA_SIZE!=='undefined')?state.spanMeters/DATA_SIZE:1;
+  const out=[];
+  for(const r of R.rows){ const x=FC._cells[r.cn], fs=FC._idx[r.cn]; if(!x||!fs) continue;
+    const g=fs[0].geometry, ring=(g.type==='Polygon'?g.coordinates[0]:g.coordinates[0][0]);
+    const base=(x.lines&&x.lines.poly)||ring, M=massOf(r,base,mpu); if(!M) continue;
+    out.push(Object.assign(M,{cn:r.cn,cls:r.cls,bCls:r.bCls,col:COL[r.cls],colB:COL[r.bCls],fromLines:!!(x.lines&&x.lines.poly),r})); }
+  return out;
+};
+FC.COL=COL; FC.CL=CL;
 // ── מפה ──
 FC.drawLayer=function(ctx){
   if(!FC.open||!FC.res||!FC._idx||typeof dc!=='function') return;
@@ -857,14 +892,14 @@ FC.setSpec=function(s){
   if(s&&s.v===2&&s.plan&&p&&s.plan!==p) s=null;     // תשובות של תוכנית אחרת — לא נטענות
   FC.spec=normalizeSpec(s,p); FC.res=null; if(FC.open){ FC.ensure(true); FC.render(); }
 };
-FC.reset=function(){ FC.spec=emptySpec(''); FC.res=null; FC.sel=null; FC.filter='all'; FC.rowF=''; FC.depF=''; if(FC.open) FC.close(); };
+FC.reset=function(){ try{ if(root.M3D) M3D.reset(); }catch(e){} FC.spec=emptySpec(''); FC.res=null; FC.sel=null; FC.filter='all'; FC.rowF=''; FC.depF=''; if(FC.open) FC.close(); };
 FC.hasUser=function(s){ s=s||FC.spec; if(!s) return false;
   if(s.v!==2) return !!(s.conf&&Object.keys(s.conf).length||s.g);
   if(s.legacy) return true;
   if(Object.values(s.conf||{}).some(Boolean)) return true;
   return JSON.stringify(normalizeSpec({v:2,ans:s.ans}).ans)!==JSON.stringify(defaultAnswers()); };
 
-FC.Engine={geomOf,featIndexOf:feats=>{ const idx={}; for(const f of feats){ const n=String(f.properties.NUM??'').trim(); if(n) (idx[n]=idx[n]||[]).push(f); } return idx; },run,cellsFromT5,evalCell,reverse,envelope,heightOf,useClass,regime,defaultAnswers,emptySpec,normalizeSpec,TV,K,CL};
+FC.Engine={massOf,polyArea,geomOf,featIndexOf:feats=>{ const idx={}; for(const f of feats){ const n=String(f.properties.NUM??'').trim(); if(n) (idx[n]=idx[n]||[]).push(f); } return idx; },run,cellsFromT5,evalCell,reverse,envelope,heightOf,useClass,regime,defaultAnswers,emptySpec,normalizeSpec,TV,K,CL};
 FC.spec=emptySpec('');
 if(typeof document!=='undefined'){ if(document.head) _css(); else document.addEventListener('DOMContentLoaded',_css); }
 root.FC=FC;
